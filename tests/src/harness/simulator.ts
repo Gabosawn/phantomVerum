@@ -119,7 +119,7 @@ export class SimulatorHarness implements TestigoHarness {
     );
 
     this.contractState = initial.currentContractState.data;
-    this.zswap = initial.currentZswapLocalState;
+    this.zswap = initial.currentZswapLocalState as CircuitContext<PS>["currentZswapLocalState"];
     this.privateState = initial.currentPrivateState;
   }
 

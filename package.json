@@ -12,13 +12,20 @@
     "tests"
   ],
   "scripts": {
-    "compile": "npm run compile --workspace=contracts",
+    "compile": "npm run compile --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run build --workspace=@phantomtrace/shared && npm run test --workspaces --if-present",
     "simulate": "npm run build --workspace=@phantomtrace/shared && npm run simulate --workspace=tests",
+    "postinstall": "node scripts/fix-noexec-bins.mjs",
     "clean": "rm -rf node_modules contracts/node_modules app/node_modules ui/node_modules tests/node_modules"
   },
   "engines": {
     "node": ">=22"
+  },
+  "overrides": {
+    "rollup": "npm:@rollup/wasm-node"
+  },
+  "devDependencies": {
+    "@rollup/wasm-node": "^4.62.4"
   }
 }

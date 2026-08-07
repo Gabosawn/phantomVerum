@@ -5,7 +5,7 @@
   "type": "module",
   "description": "TypeScript wiring — witnesses, deploy, CLI scripts (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "tsc -p .",
+    "build": "node ../node_modules/typescript/lib/tsc.js -p .",
     "test": "npm run build && node dist/witnesses/selftest.js && node dist/witnesses/selftest-simulator.js && node dist/api/selftest-simulator.js",
     "register-org": "node dist/scripts/register-org.js",
     "issue-credential": "node dist/scripts/issue-credential.js",

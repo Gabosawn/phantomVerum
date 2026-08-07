@@ -217,27 +217,25 @@ The blocks **don't block each other**: each works against the spec in
 names, ledger state and types) and against mocks of neighboring layers.
 Integration happens at the end of each block.
 
-### Block A — Compact Contracts (`contracts/`)
+### Block A — Compact Contracts (`contracts/`) ✅
 
-- [ ] Official template compiling untouched (validate toolchain and current syntax)
-- [ ] `registerOrganization` — insert org, fail if already exists
-- [ ] `report` — credential verification (Option A Merkle, fallback B), `reportId` + nullifier
-- [ ] `revealAuthorship` — preimage + designated verifier (`prosecutorPk`)
+- [x] Option A (`testigo.compact`) compiles with keys; Option B frozen in `fallback/`
+- [x] `registrarOrganizacion` / `emitirCredencial` / `denunciar` / `revelarAutoria`
+- [x] Domain separation, epoch tied to `blockTime`, Merkle membership (HistoricMerkleTree)
 
 **Deliverable:** `compact compile` green. Derived values and ledger
 match the spec *exactly* (§3–§4).
 
-### Block B — TypeScript Wiring (`app/`)
+### Block B — TypeScript Wiring (`app/`) 🟡
 
-- [ ] Network config (Preview), local proof server, indexer
-- [ ] Witness providers for the 3 circuits + local persistence of secrets/credentials (file)
-- [ ] Local evidence hash (the file never leaves the machine)
-- [ ] CLI scripts: `register-org`, `report`, `reveal-authorship`, `verify-authorship`
-- [ ] Contract deploy
+- [x] Network config (Preview/local), proof server, indexer providers
+- [x] Witness providers for the circuits + local persistence of secrets/credentials (file)
+- [x] Local evidence hash (the file never leaves the machine)
+- [x] Core API (§3.1) + CLI scripts (`register-org`, `issue-credential`, `report`, …)
+- [ ] Contract deploy to Preview (`deployment.json` still null)
 
-**Can start without Block A** by mocking the compiled contract
-module with the spec signatures. **Deliverable:** one command runs the 4
-stages E2E; the "wrong secret" case fails at proof time without emitting a tx.
+**Deliverable:** one command runs the 4 stages E2E against Preview; the
+"wrong secret" case fails at proof time without emitting a tx.
 
 ### Block C — UI (`ui/`) ✅
 
@@ -251,16 +249,16 @@ stages E2E; the "wrong secret" case fails at proof time without emitting a tx.
 - [x] 42 tests, including one verifying the Explorer **cannot** import
       anything private from the Client
 
-**Integration pending:** connect the real client when Block B is wired in.
+**Integration pending:** connect the real client when Block B is deployed to Preview.
 
 ### Block D — Tests (`tests/`) ✅
 
-- [x] Per-circuit suite — 48 cases, each run against both backends (see [Tests](#tests))
+- [x] Per-circuit suite — each case run against both backends (see [Tests](#tests))
 - [x] E2E simulation of the 4 stages printing ledger state at each step
 - [x] Two-backend seam: spec model + the real compiled contract, differentially compared
-- [x] Mutation-tested: 13 injected defects, 13 killed
 - [x] Reconciled against Block A's contract: names, domain tags, assert strings, and the
       nullifier secret
+- [x] Harness + npm scripts compatible with `noexec` mounts (this machine)
 
 **Deliverable:** `npm test` green + `npm run simulate` in one command, both against the real
 compiled `testigo.compact`.
