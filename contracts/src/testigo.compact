@@ -1,0 +1,102 @@
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+export ledger organizations: Map<Bytes<32>, Bytes<32>>;
+export ledger credentials: HistoricMerkleTree<8, Bytes<32>>;
+export ledger reports: Set<Bytes<32>>;
+export ledger nullifiers: Set<Bytes<32>>;
+export ledger authorships: Set<Bytes<32>>;
+
+witness credentialSecret(): Bytes<32>;
+witness credentialPath(): Vector<8, MerkleTreePathEntry>;
+witness personalSecret(): Bytes<32>;
+witness evidenceHash(): Bytes<32>;
+
+circuit domCred(): Bytes<32> {
+  return pad(32, "phantomtrace:cred:v1");
+}
+
+circuit domReport(): Bytes<32> {
+  return pad(32, "phantomtrace:report:v1");
+}
+
+circuit domNullifier(): Bytes<32> {
+  return pad(32, "phantomtrace:nullifier:v1");
+}
+
+circuit domAuthorship(): Bytes<32> {
+  return pad(32, "phantomtrace:authorship:v1");
+}
+
+export pure circuit leafOf(orgId: Bytes<32>, credSecret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domCred(), orgId, credSecret]);
+}
+
+export pure circuit reportIdOf(ev: Bytes<32>, sec: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domReport(), ev, sec]);
+}
+
+export pure circuit nullifierOf(
+  sec: Bytes<32>,
+  orgId: Bytes<32>,
+  period: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([domNullifier(), sec, orgId, period]);
+}
+
+export pure circuit authorshipOf(
+  sec: Bytes<32>,
+  reportId: Bytes<32>,
+  prosecutorPk: Bytes<32>
+): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([domAuthorship(), sec, reportId, prosecutorPk]);
+}
+
+export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
+  assert(!organizations.member(disclose(orgId)), "organization already registered");
+  organizations.insert(disclose(orgId), disclose(anchor));
+}
+
+export circuit issueCredential(orgId: Bytes<32>, leaf: Bytes<32>): [] {
+  assert(organizations.member(disclose(orgId)), "organization not registered");
+  credentials.insert(disclose(leaf));
+}
+
+export circuit report(orgId: Bytes<32>, period: Bytes<32>): [] {
+  const cred = credentialSecret();
+  const siblings = credentialPath();
+  const secret = personalSecret();
+  const ev = evidenceHash();
+
+  const merklePath = MerkleTreePath<8, Bytes<32>> {
+    leaf: leafOf(orgId, cred),
+    path: siblings
+  };
+  const root = merkleTreePathRoot<8, Bytes<32>>(merklePath);
+  assert(
+    credentials.checkRoot(disclose(root)),
+    "credential does not belong to the organization"
+  );
+
+  const nullifier = nullifierOf(cred, orgId, period);
+  assert(!nullifiers.member(disclose(nullifier)), "already reported this period");
+
+  const id = reportIdOf(ev, secret);
+  assert(!reports.member(disclose(id)), "report already sealed");
+
+  reports.insert(disclose(id));
+  nullifiers.insert(disclose(nullifier));
+}
+
+export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [] {
+  const secret = personalSecret();
+  const ev = evidenceHash();
+
+  assert(reportIdOf(ev, secret) == reportId, "not the author");
+  assert(reports.member(disclose(reportId)), "report does not exist");
+
+  const authorship = authorshipOf(secret, reportId, prosecutorPk);
+  assert(!authorships.member(disclose(authorship)), "authorship already revealed to this prosecutor");
+  authorships.insert(disclose(authorship));
+}
