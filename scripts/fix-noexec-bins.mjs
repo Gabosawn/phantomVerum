@@ -92,5 +92,28 @@ function fixNativeBins() {
   console.log(`(postinstall) relocated ${moved}/${bins.length} native bin(s) → ${cacheRoot}`);
 }
 
+/**
+ * testkit-js 4.1.1's `syncWallet` hardcodes a 90 s timeout. A fresh wallet on
+ * Preview must replay ~50k Zswap events and takes 3–5 min to sync the first
+ * time, so `waitForFunds` always dies with "Wallet sync timeout after 90000ms".
+ * Bump the default to 10 min. A one-line patch, re-applied on every install.
+ */
+function fixTestkitSyncTimeout() {
+  const target = join(root, "node_modules", "@midnight-ntwrk", "testkit-js", "dist", "index.mjs");
+  if (!existsSync(target)) return;
+  const src = readFileSync(target, "utf8");
+  const patched = src.replace(
+    "const syncWallet = (wallet, throttleTime = 2_000, timeout = 90_000)",
+    "const syncWallet = (wallet, throttleTime = 2_000, timeout = 600_000)",
+  );
+  if (patched === src) {
+    console.log("(postinstall) testkit sync timeout already patched");
+    return;
+  }
+  writeFileSync(target, patched);
+  console.log("(postinstall) patched testkit-js syncWallet timeout 90s → 600s");
+}
+
 fixRollup();
 fixNativeBins();
+fixTestkitSyncTimeout();
