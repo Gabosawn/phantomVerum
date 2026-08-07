@@ -145,7 +145,7 @@ function Terminal() {
       <div
         style={{
           background: "var(--pv-term)",
-          borderTop: "2px solid var(--pv-violeta)",
+          borderTop: "2px solid var(--pv-pulse)",
           padding: "8px 20px",
           display: "flex",
           justifyContent: "space-between",
@@ -172,7 +172,7 @@ function Terminal() {
     <div
       style={{
         background: "var(--pv-term)",
-        borderTop: "2px solid var(--pv-violeta)",
+        borderTop: "2px solid var(--pv-pulse)",
         color: "var(--pv-muted)",
         flex: "none",
       }}
@@ -211,7 +211,7 @@ function Terminal() {
           <Boton
             tamano="chico"
             onClick={e.demoT4}
-            style={{ border: "1px solid var(--pv-violeta)" }}
+            style={{ border: "1px solid var(--pv-pulse)" }}
           >
             T4 revelar
           </Boton>

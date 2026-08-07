@@ -6,16 +6,17 @@
 - After installing: **`compact update` is MANDATORY** — downloads compactc and sets it as default.
   `compact --version` works even if it's missing — ALWAYS verify `compact compile --version`
 - Compile: `compact compile contract.compact output/` → generates JS/TS + zkir/
-- Proof server: `docker run -p 6300:6300 midnightntwrk/proof-server:latest midnight-proof-server -v`
-  (docker = podman alias, works the same)
-- Target network: **Preview** (no devnet/testnet)
+- Proof server: `docker run -d -p 6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server -v`
+  (pin the tag to 8.1.0. This machine runs real Docker 29.6.2, not a podman alias)
+- Target network: **Preview**. A local devnet is the rehearsal step before it —
+  see `docs/05-deploy-local.md`.
 
 ## Quick verification
 
 ```bash
 which compact && compact --version && compact compile --version
 ss -tlnp | grep 6300          # proof server listening
-curl -s http://localhost:6300/health
+curl -s http://localhost:6300/     # → {"status":"ok","timestamp":...}
 ```
 
 ## Services
@@ -53,11 +54,24 @@ curl -s http://localhost:6300/health
 - **Dual-ledger:** `ledger` = public on-chain state; `witness` = private
   state that never leaves your machine. Designing = deciding which goes on
   each side.
-- **Compact:** TypeScript-like, compiles to ZK circuits. Version 0.5.1.
+- **Compact:** TypeScript-like, compiles to ZK circuits. Compiler 0.31.1
+  (language 0.23.0, runtime 0.16.0).
 - **`disclose()`:** everything private by default; only marked items are published.
 - **`assert`:** fails locally at proof time — nothing invalid reaches the chain.
 - **midnight-js:** TypeScript SDK connecting frontend with contract.
 - **Proof server:** local process that generates proofs; witnesses travel
   only to it. **Never receives seed or signing keys.**
 - **Indexer (GraphQL):** sole path to read on-chain state (`queryContractState`,
-  balances). No direct reads without indexer.
+  balances). No direct reads without indexer. **Preview/Preprod hosted indexers
+  have an `offset: null` bug** — always query with an explicit offset or a raw
+  GraphQL query that omits the offset field. `app/src/config/providers.ts` wraps
+  the SDK provider to avoid this.
+
+## Dependency versions (verified against the support matrix)
+
+| Package | Version | Source |
+|---|---|---|
+| `@midnight-ntwrk/wallet-sdk` | `1.1.0` | `app/package.json` — pinned; verify against https://docs.midnight.network/relnotes/support-matrix for the Preview row. `npm view @midnight-ntwrk/wallet-sdk latest` returns `1.1.0` even though `1.2.0` is published — use `npm view … versions --json` and the matrix, not `latest`. |
+| `@midnight-ntwrk/compact-runtime` | `0.16.0` | Matches ledger-v8 8.1.0 |
+| `@midnight-ntwrk/ledger-v8` | `8.1.0` | Preview network target |
+| All `midnight-js-*` packages | `4.1.1` | SDK stack, consistent across `app/`, `tests/`, `ui/` |

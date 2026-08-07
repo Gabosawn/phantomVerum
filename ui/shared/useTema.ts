@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 /**
- * Cada app arranca en su registro nativo — Cliente oscuro, Explorer claro —
- * porque eso ES el mensaje. El toggle existe para condiciones de proyección
- * malas, no para preferencia estética, así que la etiqueta dice a qué se pasa
- * y no en cuál estás.
+ * Ambas apps arrancan en su registro nativo — oscuro (Void), alineadas con la
+ * marca. El toggle existe para condiciones de proyección malas, no para
+ * preferencia estética, así que la etiqueta dice a qué se pasa y no en cuál
+ * estás.
  */
 export function useTema(namespace: string, nativo: "oscuro" | "claro") {
   const clave = `pv:tema:${namespace}`;

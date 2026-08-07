@@ -86,7 +86,7 @@ describe("reporting epochs — mirror of the contract's C0 arithmetic", () => {
 describe("hash de la evidencia", () => {
   it("es el SHA-256 real del archivo — comprobable con sha256sum", async () => {
     expect(await hashDeArchivo(muestra("contrato-obra-4471.pdf"))).toBe(
-      "121cfefb8d7d8d3c7b0ef110254a32278ffb655e2fad41aab796b976451dbef7",
+      "e37283ce42443bc73eb3a9277e66ca213e4d0335b5bb119d5aceb7221f4889fd",
     );
   });
 
@@ -94,7 +94,7 @@ describe("hash de la evidencia", () => {
     const a = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
     const b = await hashDeArchivo(muestra("contrato-obra-4471-rev-legal.pdf"));
     expect(b).not.toBe(a);
-    expect(b).toBe("eee932eaca02c09bb059542dc08456d7dda6466c9064941603e088176474eadd");
+    expect(b).toBe("344b902cc3ac3d938672421c116804ea2f2b22ba06716e2ba4809f6a9f6d3435");
   });
 });
 

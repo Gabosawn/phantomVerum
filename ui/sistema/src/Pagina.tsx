@@ -3,15 +3,28 @@ import type { ReactNode } from "react";
 import { SelloZK } from "@shared/componentes/base";
 import { URL_CLIENTE, URL_EXPLORER } from "@shared/demo";
 
-const MONO = "IBM Plex Mono, ui-monospace, monospace";
+const MONO = "JetBrains Mono, ui-monospace, monospace";
 const SG = "Space Grotesk, system-ui, sans-serif";
+const INTER = "Inter, system-ui, sans-serif";
+
+const PULSE = "#2E6BFF";
+const PULSEHI = "#7AA2FF";
+const VOID = "#07090F";
+const GRAPHITE = "#0E1219";
+const PANEL = "#12161F";
+const NAVY = "#0A1226";
+const LINE = "#1E2430";
+const STEEL = "#5A6478";
+const BONE = "#EDEAE6";
+const PROBADO = "#12876E";
+const RECHAZO = "#C4453A";
 
 /**
  * Hoja de referencia del sistema visual — para el deck y para que un juez vea
  * que hay sistema atrás y no decisiones sueltas.
  *
- * Deliberadamente NO usa los tokens temáticos: es una hoja impresa, siempre en
- * el mismo registro, y muestra los colores de las dos apps al mismo tiempo.
+ * Deliberadamente NO usa los tokens temáticos: es una hoja de referencia en el
+ * registro oscuro de la marca, fiel al manual de branding de Phantom Trace.
  */
 export function Pagina() {
   return (
@@ -20,14 +33,14 @@ export function Pagina() {
         maxWidth: 1180,
         margin: "0 auto",
         padding: "0 0 100px",
-        background: "#F1F2F7",
-        boxShadow: "0 0 0 1px rgba(69, 74, 117, .14)",
+        background: GRAPHITE,
+        boxShadow: `0 0 0 1px rgba(237, 234, 230, .12)`,
       }}
     >
       <div
         style={{
           padding: "44px 60px 36px",
-          borderBottom: "2px solid #171A28",
+          borderBottom: "2px solid " + PULSE,
           display: "flex",
           justifyContent: "space-between",
           alignItems: "flex-end",
@@ -41,59 +54,65 @@ export function Pagina() {
               font: `500 11px/1 ${MONO}`,
               letterSpacing: ".16em",
               textTransform: "uppercase",
-              color: "#5B44C9",
+              color: PULSE,
               marginBottom: 16,
             }}
           >
             Sistema visual · Midnight Hack BA 2026
           </div>
-          <h1 style={{ font: `700 74px/.94 ${SG}`, margin: 0, letterSpacing: "-.05em" }}>
-            Phantom<span style={{ color: "#8B6DF0" }}>Verum</span>
+          <h1 style={{ font: `700 64px/.94 ${SG}`, margin: 0, letterSpacing: "-.05em", color: BONE }}>
+            Phantom <span style={{ color: PULSE }}>Trace</span>
           </h1>
           <p
             style={{
-              font: `400 18px/1.5 ${SG}`,
-              color: "#6E7490",
+              font: `300 18px/1.5 ${INTER}`,
+              color: PULSEHI,
               margin: "14px 0 0",
               maxWidth: "54ch",
               textWrap: "pretty",
             }}
           >
-            Paleta Ethereum, tipografía y recursos gráficos. Referencia para las dos aplicaciones y
-            para el deck.
+            Deja un rastro que solo vos podés revelar.
           </p>
         </div>
-        <img src="/marca.svg" alt="" style={{ flex: "none", width: 132, display: "block" }} />
+        <img
+          src="/logo-stacked.png"
+          alt="Phantom Trace"
+          style={{ flex: "none", width: 200, display: "block" }}
+        />
       </div>
 
       <div
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
-          borderBottom: "1px solid rgba(69, 74, 117, .16)",
+          borderBottom: "1px solid rgba(237, 234, 230, .14)",
         }}
       >
-        <div style={{ padding: "30px 36px 30px 60px", borderRight: "1px solid rgba(69,74,117,.16)" }}>
+        <div style={{ padding: "30px 36px 30px 60px", borderRight: "1px solid rgba(237,234,230,.14)" }}>
           <Rotulito>De dónde sale</Rotulito>
           <ul
             style={{
               margin: 0,
               paddingLeft: 18,
-              font: `400 15px/1.65 ${SG}`,
-              color: "#454A75",
+              font: `400 15px/1.65 ${INTER}`,
+              color: BONE,
               display: "flex",
               flexDirection: "column",
               gap: 8,
             }}
           >
-            <li>El logo define la paleta: violeta neón sobre gunmetal y navy profundo.</li>
             <li>
-              Los neutros y el lila son los de la marca Ethereum — <Cod>#454A75</Cod>,{" "}
-              <Cod>#8A92B2</Cod>, <Cod>#C9B3F5</Cod>.
+              El manual de marca define la paleta: <Fuerte c={PULSE}>Pulse</Fuerte> como único acento
+              sobre fondos oscuros Void / Graphite / Panel / Navy.
             </li>
             <li>
-              El sistema se definió acá porque <Cod>ui/</Cod> arrancó vacío: no había UI previa que
-              copiar.
+              Los neutros son <Cod>{BONE}</Cod> (texto e isotipo), <Cod>{STEEL}</Cod> (texto
+              secundario) y <Cod>{LINE}</Cod> (bordes y separadores).
+            </li>
+            <li>
+              Regla del manual: si una composición tiene más de 5% de Pulse, hay demasiado azul.
+              El acento nunca decora, siempre significa detección o dato vivo.
             </li>
           </ul>
         </div>
@@ -101,92 +120,108 @@ export function Pagina() {
           <Rotulito>La regla que ordena todo</Rotulito>
           <p
             style={{
-              font: `400 15px/1.65 ${SG}`,
-              color: "#454A75",
+              font: `400 15px/1.65 ${INTER}`,
+              color: BONE,
               margin: "0 0 12px",
               textWrap: "pretty",
             }}
           >
-            El dual-ledger de Midnight se traduce en <strong>dos aplicaciones separadas</strong>,
-            cada una con su propio registro visual.
+            El dual-ledger de Midnight se traduce en <strong>dos aplicaciones separadas</strong>.
+            Ambas arrancan oscuras, alineadas con la marca; cada una puede invertirse para proyectar.
           </p>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
               gap: 8,
-              font: `400 14px/1.5 ${SG}`,
-              color: "#454A75",
+              font: `400 14px/1.5 ${INTER}`,
+              color: BONE,
             }}
           >
             <div style={{ display: "flex", gap: 11 }}>
-              <span style={{ width: 14, height: 14, background: "#14161F", flex: "none", marginTop: 3 }} />
+              <span style={{ width: 14, height: 14, background: VOID, flex: "none", marginTop: 3 }} />
               <span>
                 <strong>Cliente</strong> — oscuro. Corre en tu máquina, tiene proof server, guarda
                 witnesses.
               </span>
             </div>
             <div style={{ display: "flex", gap: 11 }}>
-              <span
-                style={{
-                  width: 14,
-                  height: 14,
-                  background: "#F1F2F7",
-                  border: "1.5px solid #171A28",
-                  flex: "none",
-                  marginTop: 3,
-                }}
-              />
+              <span style={{ width: 14, height: 14, background: NAVY, flex: "none", marginTop: 3 }} />
               <span>
-                <strong>Explorer</strong> — claro. Lee la cadena, no tiene proof server, no recibe
+                <strong>Explorer</strong> — oscuro. Lee la cadena, no tiene proof server, no recibe
                 nada privado.
               </span>
             </div>
           </div>
+          <p
+            style={{
+              font: `400 13.5px/1.6 ${INTER}`,
+              color: STEEL,
+              margin: "16px 0 0",
+              textWrap: "pretty",
+            }}
+          >
+            Verde sólo para autoría probada, rojo sólo para el caso no designado. Nada más lleva
+            color.
+          </p>
         </div>
       </div>
 
       <div style={{ padding: "44px 60px 0" }}>
         <Titulo>Color</Titulo>
+        <Rotulito>Fondos</Rotulito>
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
-            border: "1.5px solid #171A28",
+            border: "1.5px solid " + LINE,
             marginBottom: 10,
           }}
         >
-          <Muestra nombre="papel" hex="#F1F2F7" texto="#171A28" />
-          <Muestra nombre="campo" hex="#E5E7F0" texto="#171A28" borde />
-          <Muestra nombre="tinta" hex="#14161F" texto="#EDEEF5" borde />
-          <Muestra nombre="panel" hex="#1D2030" texto="#EDEEF5" borde />
+          <Muestra nombre="void" hex={VOID} texto={BONE} />
+          <Muestra nombre="graphite" hex={GRAPHITE} texto={BONE} borde />
+          <Muestra nombre="panel" hex={PANEL} texto={BONE} borde />
+          <Muestra nombre="navy" hex={NAVY} texto={BONE} borde />
         </div>
+        <Rotulito style={{ marginTop: 28 }}>Texto y acento</Rotulito>
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(6, 1fr)",
-            border: "1.5px solid #171A28",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            border: "1.5px solid " + LINE,
+            marginBottom: 10,
+          }}
+        >
+          <Muestra nombre="bone" hex={BONE} texto={VOID} />
+          <Muestra nombre="steel" hex={STEEL} texto={BONE} borde />
+          <Muestra nombre="pulse" hex={PULSE} texto={VOID} borde />
+          <Muestra nombre="pulse hi" hex={PULSEHI} texto={VOID} borde />
+        </div>
+        <Rotulito style={{ marginTop: 28 }}>Soporte y semántica</Rotulito>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+            border: "1.5px solid " + LINE,
             marginBottom: 12,
           }}
         >
-          <Muestra nombre="violeta" hex="#8B6DF0" texto="#14161F" chica />
-          <Muestra nombre="profundo" hex="#5B44C9" texto="#F1F2F7" borde chica />
-          <Muestra nombre="lila ETH" hex="#C9B3F5" texto="#14161F" borde chica />
-          <Muestra nombre="slate ETH" hex="#454A75" texto="#F1F2F7" borde chica />
-          <Muestra nombre="probado" hex="#12876E" texto="#F1F2F7" borde chica />
-          <Muestra nombre="rechazo" hex="#C4453A" texto="#F1F2F7" borde chica />
+          <Muestra nombre="line" hex={LINE} texto={BONE} />
+          <Muestra nombre="probado" hex={PROBADO} texto={VOID} borde />
+          <Muestra nombre="rechazo" hex={RECHAZO} texto={VOID} borde />
         </div>
         <p
           style={{
-            font: `400 14px/1.55 ${SG}`,
-            color: "#6E7490",
+            font: `400 14px/1.55 ${INTER}`,
+            color: STEEL,
             margin: "0 0 40px",
             maxWidth: "78ch",
           }}
         >
-          Dos fondos como máximo. El <Fuerte c="#5B44C9">violeta</Fuerte> sólo para acción y sellado;
-          el <Fuerte c="#12876E">verde</Fuerte> sólo para autoría probada; el{" "}
-          <Fuerte c="#C4453A">rojo</Fuerte> sólo para el caso no designado. Nada más lleva color.
+          El <Fuerte c={PULSE}>azul Pulse</Fuerte> sólo para acción y sellado; el{" "}
+          <Fuerte c={PROBADO}>verde</Fuerte> sólo para autoría probada; el{" "}
+          <Fuerte c={RECHAZO}>rojo</Fuerte> sólo para el caso no designado. Nada más lleva color, y
+          Pulse nunca pasa del 5% de la composición.
         </p>
 
         <Titulo>Tipografía</Titulo>
@@ -195,110 +230,121 @@ export function Pagina() {
             display: "grid",
             gridTemplateColumns: "1.2fr 1fr",
             gap: 32,
-            borderTop: "1px solid rgba(69,74,117,.18)",
+            borderTop: "1px solid rgba(237,234,230,.18)",
             paddingTop: 24,
             marginBottom: 44,
           }}
         >
           <div>
-            <Rotulito>Space Grotesk · display y UI</Rotulito>
-            <div style={{ font: `700 56px/1 ${SG}`, letterSpacing: "-.045em" }}>Autoría probada</div>
-            <div style={{ font: `500 24px/1.3 ${SG}`, marginTop: 12, letterSpacing: "-.02em" }}>
+            <Rotulito>Space Grotesk · display y wordmark</Rotulito>
+            <div style={{ font: `700 56px/1 ${SG}`, letterSpacing: "-.045em", color: BONE }}>
+              Autoría probada
+            </div>
+            <div style={{ font: `500 24px/1.3 ${SG}`, marginTop: 12, letterSpacing: "-.02em", color: BONE }}>
               Sellar y denunciar
             </div>
-            <p style={{ font: `400 14px/1.55 ${SG}`, color: "#6E7490", marginTop: 12 }}>
+            <p style={{ font: `400 14px/1.55 ${INTER}`, color: STEEL, marginTop: 12 }}>
               700 para veredictos y portada, 600 para títulos de pantalla, 500 para botones y
-              labels, 400 para párrafos. Tracking negativo en todo lo grande.
+              labels. Tracking negativo en todo lo grande.
             </p>
           </div>
           <div>
-            <Rotulito>IBM Plex Mono · datos</Rotulito>
-            <div style={{ font: `500 20px/1.4 ${MONO}`, wordBreak: "break-all" }}>
-              0x8f3c9d1e
-              <br />
-              a41d02b7
-            </div>
-            <p style={{ font: `400 14px/1.55 ${SG}`, color: "#6E7490", marginTop: 12 }}>
-              Todo hash, clave, nullifier y label de sistema. Siempre partible, nunca truncado sin
-              elipsis. Mínimo 12 px proyectado.
+            <Rotulito>Inter · cuerpo de interfaz</Rotulito>
+            <p
+              style={{
+                font: `400 15px/1.65 ${INTER}`,
+                color: BONE,
+                margin: 0,
+                maxWidth: "46ch",
+                textWrap: "pretty",
+              }}
+            >
+              El cuerpo de la interfaz. Light 300 para taglines, Regular 400 para párrafos y
+              controles. Interlineado 1.65.
             </p>
+            <div style={{ marginTop: 18 }}>
+              <Rotulito>JetBrains Mono · datos y etiquetas</Rotulito>
+              <div style={{ font: `500 18px/1.4 ${MONO}`, color: PULSEHI, wordBreak: "break-all" }}>
+                0x8f3c9d1e
+                <br />
+                a41d02b7
+              </div>
+              <p style={{ font: `400 14px/1.55 ${INTER}`, color: STEEL, marginTop: 12 }}>
+                Todo hash, clave, nullifier y label de sistema. Tracking amplio en las etiquetas,
+                siempre partible. Mínimo 12 px proyectado.
+              </p>
+            </div>
           </div>
         </div>
 
         <Titulo>Recursos</Titulo>
         <p
           style={{
-            font: `400 15px/1.55 ${SG}`,
-            color: "#6E7490",
+            font: `400 15px/1.55 ${INTER}`,
+            color: STEEL,
             margin: "0 0 22px",
             maxWidth: "72ch",
           }}
         >
-          Tres piezas hacen todo el trabajo semántico del producto.
+          Cuatro piezas hacen todo el trabajo semántico del producto.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
-          <div style={{ border: "1.5px solid #171A28", background: "#14161F", padding: 20 }}>
-            <Rotulito color="#C9B3F5">Barra de censura</Rotulito>
+          <div style={{ border: `1.5px solid ${LINE}`, background: PANEL, padding: 20 }}>
+            <Rotulito color={PULSEHI}>Barra de censura</Rotulito>
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
               {["secret", "evidencia"].map((n) => (
                 <div key={n} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ font: `500 11px ${MONO}`, color: "#8A92B2", width: 62, flex: "none" }}>
+                  <span style={{ font: `500 11px ${MONO}`, color: STEEL, width: 62, flex: "none" }}>
                     {n}
                   </span>
-                  <span style={{ flex: 1, height: 15, background: "#C9B3F5" }} />
+                  <span style={{ flex: 1, height: 15, background: PULSE }} />
                 </div>
               ))}
             </div>
-            <p style={{ font: `400 13px/1.5 ${SG}`, color: "#8A92B2", marginTop: 15, marginBottom: 0 }}>
-              Lo privado se muestra <em style={{ color: "#EDEEF5" }}>existiendo</em>, sin mostrarse.
-              Lila sobre oscuro, tinta sobre claro.
+            <p style={{ font: `400 13px/1.5 ${INTER}`, color: STEEL, marginTop: 15, marginBottom: 0 }}>
+              Lo privado se muestra <em style={{ color: BONE }}>existiendo</em>, sin mostrarse.
+              Pulse sobre oscuro.
             </p>
           </div>
 
           <div
             style={{
-              border: "1.5px solid #171A28",
-              background: "#FBFBFE",
+              border: `1.5px solid ${LINE}`,
+              background: VOID,
               padding: 20,
               display: "flex",
               flexDirection: "column",
             }}
           >
-            <Rotulito color="#5B44C9">Sello octogonal</Rotulito>
+            <Rotulito color={PULSEHI}>Sello · isotipo</Rotulito>
             <div style={{ display: "flex", justifyContent: "center", padding: "6px 0 10px" }}>
-              <SelloZK tamano={92} />
+              <SelloZK tamano={84} />
             </div>
-            <p style={{ font: `400 13px/1.5 ${SG}`, color: "#6E7490", marginTop: "auto", marginBottom: 0 }}>
-              La silueta del logo. Aparece una sola vez por pantalla, cuando algo queda sellado
-              on-chain.
+            <p style={{ font: `400 13px/1.5 ${INTER}`, color: STEEL, marginTop: "auto", marginBottom: 0 }}>
+              El isotipo: tres barras — dos grandes (el flujo, el ruido) y una corta en Pulse (la
+              señal). Aparece una sola vez por pantalla, cuando algo quedó sellado on-chain.
             </p>
           </div>
 
           <div
             style={{
-              border: "1.5px solid #171A28",
-              background: "#FBFBFE",
+              border: `1.5px solid ${LINE}`,
+              background: PANEL,
               padding: 20,
               display: "flex",
               flexDirection: "column",
             }}
           >
-            <Rotulito color="#5B44C9">La línea violeta</Rotulito>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                height: 92,
-                border: "1px solid rgba(69,74,117,.2)",
-              }}
-            >
-              <div style={{ flex: 1, background: "#14161F" }} />
-              <div style={{ height: 3, background: "#8B6DF0", flex: "none" }} />
-              <div style={{ flex: 1, background: "#F1F2F7" }} />
+            <Rotulito color={PULSEHI}>La línea de marca y el trace</Rotulito>
+            <div style={{ display: "flex", flexDirection: "column", height: 92, border: `1px solid ${LINE}` }}>
+              <div style={{ flex: 1, background: GRAPHITE }} />
+              <div style={{ height: 3, background: PULSE, flex: "none" }} />
+              <div style={{ flex: 1, background: VOID }} />
             </div>
-            <p style={{ font: `400 13px/1.5 ${SG}`, color: "#6E7490", marginTop: 15, marginBottom: 0 }}>
-              Marca el borde del header y del terminal en las dos apps. Es el mismo violeta en
-              ambas: la única cosa que comparten.
+            <TraceElement />
+            <p style={{ font: `400 13px/1.5 ${INTER}`, color: STEEL, marginTop: 15, marginBottom: 0 }}>
+              La línea marca el borde del header en las dos apps. El rastro punteado asciende y
+              termina en un punto Pulse — el momento revelado: latente en Steel, revelado en Pulse.
             </p>
           </div>
         </div>
@@ -307,7 +353,7 @@ export function Pagina() {
       <div
         style={{
           margin: "44px 60px 0",
-          borderTop: "2px solid #171A28",
+          borderTop: "2px solid " + PULSE,
           paddingTop: 24,
           display: "flex",
           justifyContent: "space-between",
@@ -324,14 +370,15 @@ export function Pagina() {
               maxWidth: "52ch",
               textWrap: "pretty",
               letterSpacing: "-.02em",
+              color: BONE,
             }}
           >
             Dos aplicaciones:{" "}
-            <a href={URL_CLIENTE} style={{ color: "#5B44C9" }}>
+            <a href={URL_CLIENTE} style={{ color: PULSEHI }}>
               Cliente
             </a>{" "}
             — denunciar, revelar autoría, emitir credenciales — y{" "}
-            <a href={URL_EXPLORER} style={{ color: "#5B44C9" }}>
+            <a href={URL_EXPLORER} style={{ color: PULSEHI }}>
               Explorer
             </a>{" "}
             — ledger, verificar sello, verificar autoría.
@@ -341,28 +388,55 @@ export function Pagina() {
           style={{
             flex: "none",
             font: `400 12.5px/1.7 ${MONO}`,
-            color: "#8A92B2",
+            color: STEEL,
             textAlign: "right",
           }}
         >
           Midnight Hack BA 2026
           <br />
-          <span style={{ color: "#5B44C9" }}>UX &amp; Design = 15 %</span>
+          <span style={{ color: PULSEHI }}>UX &amp; Design = 15 %</span>
         </div>
       </div>
     </div>
   );
 }
 
+/** El rastro — punteado ascendente que termina en un punto Pulse. */
+function TraceElement() {
+  return (
+    <svg
+      viewBox="0 0 200 60"
+      width="100%"
+      style={{ display: "block", marginTop: 14 }}
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="30" r="3" fill={STEEL} />
+      <circle cx="24" cy="26" r="3" fill={STEEL} />
+      <circle cx="40" cy="22" r="3" fill={STEEL} />
+      <circle cx="56" cy="18" r="3" fill={STEEL} />
+      <circle cx="72" cy="15" r="3" fill={PULSEHI} />
+      <circle cx="192" cy="8" r="7" fill={PULSE} />
+    </svg>
+  );
+}
+
 function Titulo({ children }: { children: ReactNode }) {
   return (
-    <div style={{ font: `600 32px/1 ${SG}`, letterSpacing: "-.035em", marginBottom: 22 }}>
+    <div style={{ font: `600 32px/1 ${SG}`, letterSpacing: "-.035em", marginBottom: 22, color: BONE }}>
       {children}
     </div>
   );
 }
 
-function Rotulito({ children, color = "#8A92B2" }: { children: ReactNode; color?: string }) {
+function Rotulito({
+  children,
+  color = STEEL,
+  style,
+}: {
+  children: ReactNode;
+  color?: string;
+  style?: React.CSSProperties;
+}) {
   return (
     <div
       style={{
@@ -371,6 +445,7 @@ function Rotulito({ children, color = "#8A92B2" }: { children: ReactNode; color?
         textTransform: "uppercase",
         color,
         marginBottom: 13,
+        ...style,
       }}
     >
       {children}
@@ -380,7 +455,7 @@ function Rotulito({ children, color = "#8A92B2" }: { children: ReactNode; color?
 
 function Cod({ children }: { children: ReactNode }) {
   return (
-    <code style={{ font: `500 13px ${MONO}`, background: "#E5E7F0", padding: "1px 5px" }}>
+    <code style={{ font: `500 13px ${MONO}`, background: PANEL, color: PULSEHI, padding: "1px 5px" }}>
       {children}
     </code>
   );
@@ -395,13 +470,11 @@ function Muestra({
   hex,
   texto,
   borde,
-  chica,
 }: {
   nombre: string;
   hex: string;
   texto: string;
   borde?: boolean;
-  chica?: boolean;
 }) {
   return (
     <div
@@ -410,10 +483,10 @@ function Muestra({
         background: hex,
         display: "flex",
         alignItems: "flex-end",
-        padding: chica ? 10 : 11,
-        font: `500 ${chica ? 9 : 9.5}px/1.35 ${MONO}`,
+        padding: 11,
+        font: `500 9.5px/1.35 ${MONO}`,
         color: texto,
-        borderLeft: borde ? "1.5px solid #171A28" : undefined,
+        borderLeft: borde ? `1.5px solid ${LINE}` : undefined,
       }}
     >
       {nombre}
