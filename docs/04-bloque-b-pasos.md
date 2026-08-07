@@ -25,9 +25,21 @@ F5.0 (seed+faucet) — arranca apenas termina F0, corre en paralelo a todo
 
 | Fase | Estado |
 |---|---|
-| **A' — contrato** | ✅ **cerrada completa** (A.1–A.6, incluido el smoke del TS generado y round-trip de los 4 tiempos en simulador) |
+| **A' — contrato** | ✅ A.1–A.5 verificados · ⚠️ **A.6 NO está hecho** (ver abajo) |
 | **F0 — toolchain** | 🟡 en curso (0.1–0.2 listos, agente retomó desde 0.3) |
 | **B1–B5** | ⬜ sin arrancar (`app/src/` solo tiene `.gitkeep`) |
+
+> ⚠️ **Corrección (verificada 14:20):** una versión previa de este bloque decía
+> "A' cerrada completa, incluido el smoke del TS generado y round-trip de los 4
+> tiempos en simulador". **Eso no es así.** `git ls-files '*.ts' '*.js'` devuelve
+> exactamente 2 archivos en todo el repo — `tests/vitest.config.ts` y
+> `ui/vite.config.ts`, los dos de configuración. No hay script de smoke, no hay
+> código que llame a los pure circuits, y `app/src/` sigue con solo `.gitkeep`.
+>
+> Importa porque **A.6 es justo el paso que prueba que el TS generado funciona
+> antes de que B2/B3 dependan de él**. Si se lo da por hecho, B1–B3 se
+> construyen sobre una suposición sin verificar. Si el smoke se corrió a mano,
+> no quedó commiteado: no es reproducible ni mostrable a un juez.
 
 **El gate anti-DQ está pasado desde clone limpio:** `compact compile` sin
 `output/` previo, ~30 s, 8 claves (4 circuitos × 2). Verificado corriendo el
@@ -110,12 +122,16 @@ de acá).
       Nota: `output/` está gitignoreado — solo se commitea el `.compact`.
 - [x] **A.5** Gate anti-DQ: `contracts/` compila desde clone limpio.
       ✓ verificado en dir temporal **sin `output/` previo: 34 s, 8 claves**.
-      ⚠️ Vale solo para *esta rama*: el `.compact` todavía no está en ningún
-      remoto — ver el aviso del encabezado.
+      ⚠️ Vale para la rama, que ya está en `origin/feat/bloque-b-wiring`.
+      **`origin/main` (`4a3673d`) sigue SIN el contrato** — un juez que clone
+      el repo hoy no tiene nada que compilar. El merge a `main` es lo que
+      cierra el gate de verdad.
 - [ ] **A.6** Smoke del TS generado: script mínimo que importa el módulo
       generado y llama los pure circuits (`denunciaIdDe`, `nullifierDe`,
       `autoriaDe`, `hojaDe`) con valores dummy. ✓ imprime 4 hashes de 32 bytes.
-      **Único pendiente de A'.**
+      **Único pendiente de A', y bloquea de hecho a B2/B3:** son los tipos y
+      funciones que esas fases importan. Commitear el script (no correrlo a
+      mano) — vale como evidencia de QA para el 15 % del rubric.
 
 ## Fase B1 — Config y providers (`app/src/config/`)
 
