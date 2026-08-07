@@ -4,5 +4,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    include: ["src/**/*.test.ts"],
+    globalSetup: ["src/harness/global-setup.ts"],
   },
 });
