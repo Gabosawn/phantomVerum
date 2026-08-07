@@ -2,16 +2,31 @@
   "name": "@phantomtrace/app",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Wiring TypeScript — witnesses, deploy, scripts CLI (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "tsc",
+    "build": "if [ -n \"$(find src -name '*.ts' -print -quit)\" ]; then tsc -p .; else echo '(app) src/ sin .ts todavia — build skip'; fi",
     "registrar-org": "node dist/scripts/registrar-org.js",
+    "emitir-credencial": "node dist/scripts/emitir-credencial.js",
     "denunciar": "node dist/scripts/denunciar.js",
     "revelar-autoria": "node dist/scripts/revelar-autoria.js",
-    "verificar-autoria": "node dist/scripts/verificar-autoria.js"
+    "verificar-autoria": "node dist/scripts/verificar-autoria.js",
+    "e2e": "node dist/scripts/e2e.js"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "4.1.1",
+    "@midnight-ntwrk/wallet-sdk": "1.1.0"
+  },
   "devDependencies": {
+    "@midnight-ntwrk/testkit-js": "4.1.1",
     "typescript": "^5.5.0",
     "@types/node": "^22.0.0"
   }

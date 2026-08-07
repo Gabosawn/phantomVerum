@@ -2,9 +2,11 @@
   "name": "@phantomtrace/tests",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Tests y simulación E2E — Testigo (Midnight Hack BA 2026)",
   "scripts": {
-    "test": "vitest run",
+    "build": "if [ -n \"$(find src -name '*.ts' -print -quit)\" ]; then tsc -p .; else echo '(tests) src/ sin .ts todavia — build skip'; fi",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "simulate": "node dist/simulation/e2e.js"
   },
