@@ -110,9 +110,11 @@ const main = async (): Promise<void> => {
     fail('ZK artifacts', error);
   }
 
-  // 4 — Local proof server.
+  // 4 — Local proof server. On 8.1.0 both `GET /` and `GET /health` answer
+  //     `{"status":"ok"}` (an unknown path 404s, so neither is a catch-all).
+  //     We use `/` because it is the one the root check is documented against.
   try {
-    const response = await fetchWithTimeout(`${network.proofServer}/health`, {}, 10_000);
+    const response = await fetchWithTimeout(`${network.proofServer}/`, {}, 10_000);
     const body = (await response.text()).trim();
     if (!response.ok) {
       throw new Error(`HTTP ${response.status} — ${body}`);

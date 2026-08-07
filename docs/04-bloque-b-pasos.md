@@ -103,7 +103,7 @@ de acá).
       `compile` = `compact compile src/testigo.compact output/` (CON claves —
       el deploy real las necesita) y `compile:fast` = con `--skip-zk` para
       iteración. ✓ commit `4f4d99e`; además `check:fallback`, `format`, `clean`.
-- [x] **A.4** Compilar y verificar artefactos: `output/contract/index.cjs` +
+- [x] **A.4** Compilar y verificar artefactos: `output/contract/index.js` (ESM) +
       tipos, `output/keys/*.prover|.verifier`, `output/zkir/`.
       ✓ **8/8 claves** (`registrarOrganizacion`, `emitirCredencial`,
       `denunciar`, `revelarAutoria` × prover/verifier) + `output/contract/index.d.ts`.
