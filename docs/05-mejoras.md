@@ -139,10 +139,78 @@ En Q&A es oro: *"sabemos exactamente cuál es el fix, son 12 líneas y compilan"
 
 ---
 
-## 4. El "roadmap" que en realidad ES implementable: designated verifier real
+## 4. H-2: el fix cuesta 1,5 h, no 6 — y no necesita criptografía nueva
 
-**H-2 (quien recibe el export puede actuar como el autor) tiene fix criptográfico
-en 0.31.1 — compilado y ejecutado.**
+> **Corrección a una versión previa de este documento**, que recomendaba ECDH
+> como único camino. Una investigación posterior encontró algo más simple y
+> **más barato que el contrato actual**.
+
+### ✅ OPCIÓN 0 (RECOMENDADA) — sacar `sec` del hash del recibo · 1,5 h
+
+**El circuito ya prueba en ZK que quien escribe conoce el preimagen de
+`denunciaId`.** Esa garantía la da la cadena al verificar el proof — no el hash.
+El único motivo por el que hoy le entregamos `secretDenuncia` al fiscal es que
+`autoriaDe(sec, denunciaId, fiscalPk)` mete `sec` adentro, y sin `sec` el fiscal
+no puede recomputar el hash para buscarlo en el `Set`.
+
+Solución: sacar `sec` del hash y que el `fiscalPk` sea un **nonce fresco que el
+fiscal elige en el momento**:
+
+```compact
+export pure circuit reciboDe(denunciaId: Bytes<32>, fiscalNonce: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domAutoria(), denunciaId, fiscalNonce]);
+}
+```
+
+El fiscal recomputa `reciboDe(denunciaId, suNonce)` con datos **100 % públicos**
+y lo busca en `autorias`. **Nadie le entrega ningún secreto jamás.** Que el
+recibo exista solo puede haberlo causado alguien que pasó el assert
+`denunciaIdDe(ev, sec) == denunciaId`.
+
+**Verificado ejecutando:**
+```
+[fiscal]          recibo esperado en el ledger? SI ✓
+[atacante]        bloqueado: failed assert: no sos el autor
+[fiscal-suplanta] bloqueado: failed assert: no sos el autor   ← el ataque de H-2, muerto
+```
+
+La tercera línea es la clave: **el propio fiscal, con todo lo que recibió, no
+puede republicar la autoría.**
+
+**Cuesta menos que el contrato actual:** 36,7 s de compilación ZK vs 40,8 s;
+prover key 5 201 780 B vs 5 204 698 B. Cero criptografía nueva, cero
+dependencias, ~6 líneas de contrato.
+
+**Veredicto: HOY, antes del deploy.** Cierra el agujero reproducido y deja la
+historia de seguridad del pitch cerrada.
+
+### OPCIÓN A′ — ECDH, solo si sobran ≥ 6 h después del deploy
+
+Agrega **confidencialidad del destinatario** (un observador no puede saber *a
+quién* se reveló). Es un upgrade estrictamente aditivo sobre la Opción 0.
+Compilado y verificado end-to-end; prover key 5,75 MB (+10 %), 38,6 s.
+
+⚠️ **No usar el módulo `EcdhMask` de OpenZeppelin tal cual**: su KDF usa
+`persistentHash` (SHA-256, caro en circuito) y **duplica la prover key a
+11,0 MB**. Cambiando la KDF a `transientHash` baja a 5,75 MB.
+
+⚠️ **Trampa del escalar, medida:** `ecMul`/`ecMulGenerator` fallan en *runtime*
+si el escalar ≥ el orden de Jubjub. **81 % de los `Field` aleatorios revientan**
+(162/200 en la medición) y **no hay chequeo en compilación**. Patrón seguro
+(0 fallos en 500 muestras): `degradeToTransient(persistentHash([seed]))`, que
+trunca a 31 bytes.
+
+### ❌ Lo que NO funciona (dos correcciones a supuestos previos)
+
+- **`CurvePoint` no existe** — es `JubjubPoint`, y **no es un struct**: `P.x`
+  falla, hay que usar `jubjubPointX/Y`.
+- **El esquema "commitment + apertura interactiva off-chain" está roto**: el
+  fiscal manda un nonce `n`, el denunciante responde `H(sec‖n)` — **y el fiscal
+  no tiene con qué verificar esa respuesta sin conocer `sec`**. Es un no-op. La
+  Opción 0 es exactamente ese esquema arreglado: mover el nonce del fiscal
+  *adentro* del hash del recibo.
+
+### Material de respaldo (ECDH, para el deck)
 
 La stdlib expone `ecAdd`, `ecMul`, `ecMulGenerator`, `hashToCurve`.
 ⚠️ El tipo se llama **`JubjubPoint`** (no `CurvePoint`/`NativePoint` — la doc
