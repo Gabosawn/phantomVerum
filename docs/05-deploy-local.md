@@ -27,20 +27,23 @@ uncontrollable part is isolated to the last step.
 
 ---
 
-## 1. The one real gap: there is no deploy script yet
+## 1. The deploy script (B5.1) — WRITTEN, not yet run
 
-`app/src/api/testigo.ts` exports `deployContract()` and
-`app/src/config/deployment.ts` exports `writeDeployment()`, but **no CLI script
-wires them together**. `app/src/scripts/` has `register-org`, `issue-credential`,
-`report`, `reveal-authorship`, `verify-authorship`, `e2e` — no `deploy`.
+**Update:** `app/src/scripts/deploy.ts` now exists (+ `"deploy"` npm script in
+`app/package.json`), wiring `deployContract()` → `writeDeployment()`. It has NOT
+been type-checked or run yet (the current machine is broken). On the healthy
+machine, `npm run build --workspace=app` type-checks it before first use.
 
-`app/src/config/deployment.json` is still the `null` placeholder, and every
-network script calls `requireDeployment()`, which throws:
+Context for why it was needed: `app/src/api/testigo.ts` exports
+`deployContract()` and `app/src/config/deployment.ts` exports
+`writeDeployment()`, but no CLI wired them. `app/src/config/deployment.json` is
+still the `null` placeholder, and every network script calls
+`requireDeployment()`, which throws:
 
 > `No deployed contract: …/deployment.json is still a placeholder. Run the deploy script (B5.1) before this step.`
 
-**So step 1 of actually deploying — on local OR Preview — is writing this
-script.** It is small; the API already does the work. Spec in §4.
+What the script does is specified in §4; it is small because the API already
+does the work.
 
 ---
 
@@ -112,10 +115,10 @@ PROOF_SERVER=http://localhost:6300
 
 ---
 
-## 4. Write the deploy script (B5.1)
+## 4. The deploy script (B5.1) — as written
 
-New file `app/src/scripts/deploy.ts` + `"deploy": "node dist/scripts/deploy.js"`
-in `app/package.json`. All primitives already exist:
+`app/src/scripts/deploy.ts` + `"deploy": "node dist/scripts/deploy.js"` in
+`app/package.json`. It follows this flow (all primitives already existed):
 
 ```
 1. import '../config/init.js'            // sets global networkId (setNetworkId)
