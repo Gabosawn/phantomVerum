@@ -1,17 +1,8 @@
 /**
- * Backend discovery. This is what makes Block D independent of Block A's schedule.
+ * Backend discovery.
  *
- *   - `model`    always available. Spec implementation over the real hash + real Merkle tree.
- *   - `contract` available once `contracts/output/contract/index.cjs` exists, i.e. once
- *                someone has run `npm run compile --workspace=contracts`.
- *
- * Tests call `backends()` and `describe.each` over the result, so the same 13 cases run
- * against whatever is available. When both are present, any divergence between them is a real
- * bug in one of the two — that is the point of the seam.
- *
- * The contract module is loaded with a dynamic `import` on purpose: a static one would make
- * `tsc` demand `contracts/output/` at build time, which is exactly the coupling we are
- * avoiding.
+ *   - `model`    always available.
+ *   - `contract` available once `contracts/output/contract/index.js` exists.
  */
 
 import { existsSync } from "node:fs";
@@ -26,7 +17,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** `tests/src/harness` → repo root. Also correct from `tests/dist/harness`. */
 const REPO_ROOT = resolve(HERE, "../../..");
 
-export const COMPILED_CONTRACT = resolve(REPO_ROOT, "contracts/output/contract/index.cjs");
+export const COMPILED_CONTRACT = resolve(REPO_ROOT, "contracts/output/contract/index.js");
 
 export interface Backend {
   readonly name: BackendName;
@@ -44,14 +35,15 @@ export async function backends(): Promise<Backend[]> {
   const found: Backend[] = [{ name: "model", fresh: () => new ModelHarness() }];
 
   if (contractIsCompiled()) {
-    const { SimulatorHarness } = await import("./simulator.js");
-    found.push({ name: "contract", fresh: () => new SimulatorHarness() });
+    const { SimulatorHarness, loadGeneratedModule } = await import("./simulator.js");
+    const mod = await loadGeneratedModule(COMPILED_CONTRACT);
+    found.push({ name: "contract", fresh: () => new SimulatorHarness(mod) });
   }
 
   return found;
 }
 
-/** One line telling the reader which backends actually ran. Printed by the suite and by e2e. */
+/** One line telling the reader which backends actually ran. */
 export function backendBanner(found: readonly Backend[]): string {
   const names = found.map((b) => b.name).join(", ");
   if (found.length > 1) {

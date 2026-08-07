@@ -1,32 +1,42 @@
-# TODO
+# TODO — audit 2026-08-07
 
-## Fixes técnicos
+Findings from bringing up the monorepo (`npm install`, `npm run compile`, `npm test`, `npm run build`, proof server).
 
-- [ ] Dejar `npm test` completamente verde en un entorno limpio.
-- [ ] Resolver los permisos de ejecución de los wrappers en `node_modules/.bin` para que `vitest` y `tsc` funcionen mediante los scripts estándar.
-- [ ] Corregir la carga de la dependencia nativa de Rollup (`@rollup/rollup-linux-x64-gnu`) y verificar que Vitest pueda iniciar.
-- [ ] Regenerar los artefactos de Compact antes de ejecutar las pruebas (`compact compile`), evitando que `contracts/output/contract/index.js` quede desactualizado respecto de `src/testigo.compact`.
-- [ ] Alinear el harness de tests con el artefacto generado: actualmente busca `contracts/output/contract/index.cjs`, mientras Compact genera `index.js`.
-- [ ] Activar y validar el backend de contrato real en `tests/`, no solo el backend de modelo.
-- [ ] Ejecutar la suite completa contra el contrato compilado y confirmar que todas las aserciones pasan en ambos backends.
-- [ ] Revisar los scripts de build, test y simulate para que funcionen con una instalación limpia usando únicamente los comandos documentados.
+## Environment
 
-## Revisión integral del proyecto
+- [x] `npm install`
+- [x] `npm run compile` (4 Compact circuits)
+- [x] Contract smoke / merkle / security suites green
+- [x] Proof server: `phantomtrace-proof-server` on `:6300` (`docker.io/midnightntwrk/proof-server:latest`). Health is `GET /` → `{"status":"ok"}` (not `/health`)
+- [ ] UI: scaffold only; `5173` may be taken by other containers — use port `5174`
 
-- [ ] Revisar la coherencia completa entre la idea, `docs/00-idea.md`, la arquitectura de `docs/01-arquitectura.md`, los contratos Compact, el wiring TypeScript, la UI y las pruebas.
-- [ ] Confirmar que la implementación conserva la semántica acordada: anonimato del denunciante, compromiso de credencial, evidencia privada, nullifier anti-spam y autoría revelable solo al verificador designado.
-- [ ] Verificar que los nombres y responsabilidades de circuitos, API, CLI, ledger, witnesses y vistas de UI sean consistentes entre todos los módulos.
-- [ ] Comprobar el funcionamiento correcto del flujo completo: registrar organización, emitir credencial, denunciar, impedir duplicados, verificar evidencia y revelar/verificar autoría.
-- [ ] Revisar que ningún secret, identidad, evidencia o private state se filtre en logs, transcript público, ledger, UI o artefactos generados.
-- [ ] Validar el flujo tanto con el simulador como contra el contrato real y documentar cualquier diferencia de comportamiento.
-- [ ] Actualizar el README y la documentación de bloques para reflejar el estado real de A, B, C y D, eliminando pendientes obsoletos.
-- [ ] Revisar el estado de la UI y confirmar que sus tres vistas estén conectadas al mismo contrato de API y respeten el modelo de privacidad.
-- [ ] Ejecutar una revisión final de seguridad, integración y demo antes de considerar la rama lista para entrega.
+## Technical fixes
 
-## Verificación final
+### FS `noexec` on `/home/snatty/Data`
 
-- [ ] `npm install` en un checkout limpio.
-- [ ] `npm run compile` sin errores.
-- [ ] `npm test` sin errores.
-- [ ] `npm run simulate` ejecutando el flujo E2E completo.
-- [ ] Confirmar que `git status` quede limpio después de la verificación, salvo artefactos ignorados esperados.
+- [x] **P1** npm scripts invoke `tsc` / `vitest` / `vite` via `node` (`.bin` shebangs fail with exit 126)
+- [x] **P1** Rollup native `.node` fails (`ERR_DLOPEN_FAILED`) — `postinstall` switches to `@rollup/wasm-node` and relocates esbuild binaries under `/tmp`
+
+### Contract test backend alignment
+
+- [x] **P1** Harness loads `contracts/output/contract/index.js` (ESM) instead of missing `index.cjs`
+- [x] **P1** `ASSERTS` match Compact messages
+- [x] **P1** Model ↔ contract semantics: domain tags, `credCommitmentDe` / `hojaDe`, epoch `Uint<64>` + `blockTime`, nullifier from `credencialSecret`, path witness returns siblings only
+- [x] **P2** Differential suite (model + contract) and `npm run simulate` green
+- [ ] **P2** README / docs still mention `index.cjs` in places
+- [ ] **P2** Document full Docker image name (`docker.io/midnightntwrk/...`) for podman short-name issues
+
+## Broader review (after green)
+
+- [ ] End-to-end coherence: idea ↔ architecture ↔ Compact ↔ app wiring ↔ UI ↔ tests
+- [ ] Privacy: no secrets / evidence in logs, transcript, or UI
+- [ ] UI: three views wired to the same API
+- [ ] README: accurate block A/B/C/D status
+
+## Final verification
+
+- [x] `npm run compile`
+- [x] `npm test` (model + contract, 38 Vitest cases)
+- [x] `npm run simulate`
+- [x] `npm run build` (UI scaffold stubs in English)
+- [ ] UI `dev` fully wired to `@phantomtrace/app`

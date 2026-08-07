@@ -1,32 +1,22 @@
 /**
- * The four acts of the demo, end to end, printing the public ledger after every step.
- * `npm run simulate`
- *
- * This is the script that gets recorded for the video (§4, Block E), so the output is written
- * to be read on a projector. It is also self-checking: every act asserts its own invariant and
- * the process exits non-zero on failure. A demo that prints a pretty story while being wrong is
- * worse than no demo.
- *
- * Runs against whichever backends are available — the spec model always, the real compiled
- * contract as soon as `contracts/output/` exists.
+ * The four acts of the demo, end to end. `npm run simulate`
  */
 
 import { ASSERTS } from "../harness/contract-surface.js";
-import { autoriaDe, denunciaIdDe, hojaDe } from "../harness/crypto.js";
+import { autoriaDe, credCommitmentDe, denunciaIdDe, hojaPara } from "../harness/crypto.js";
 import {
   ACME,
   ACME_ANCHOR,
-  AUGUST,
+  AHORA,
   EMPLOYEE_A,
   EMPLOYEE_B,
   EMPLOYER_PK,
+  EPOCA,
   FISCAL_PK,
 } from "../harness/fixtures.js";
 import { backendBanner, backends } from "../harness/index.js";
 import { AssertError } from "../harness/types.js";
 import type { Hex32, LedgerSnapshot, TestigoHarness } from "../harness/types.js";
-
-// ── output helpers ──────────────────────────────────────────────────────────────────────
 
 const W = 78;
 const line = (ch = "─") => ch.repeat(W);
@@ -63,12 +53,10 @@ function verdict(ok: boolean, text: string): void {
   console.log(`  ${ok ? "✅" : "❌"} ${text}`);
 }
 
-/** Self-check. Throws so the process exits non-zero rather than printing a false story. */
 function require(condition: boolean, what: string): void {
   if (!condition) throw new Error(`simulate: invariant failed — ${what}`);
 }
 
-/** Runs `fn` and returns the assert message it failed with, or `null` if it did not fail. */
 function expectRejection(fn: () => void): string | null {
   try {
     fn();
@@ -79,8 +67,6 @@ function expectRejection(fn: () => void): string | null {
   }
 }
 
-// ── §3.2 — the export the reporter hands to the prosecutor, off-chain ───────────────────
-
 interface ExportLlaveAutoria {
   readonly version: 1;
   readonly denunciaId: Hex32;
@@ -90,10 +76,6 @@ interface ExportLlaveAutoria {
   readonly autoriaHash: Hex32;
 }
 
-/**
- * §3.1 `verificarAutoria` — 100 % off-chain: recompute with the pure circuits and read the
- * ledger. No proof server, no transaction. `verifierPk` is the key of whoever is looking.
- */
 function verificarAutoria(
   claim: ExportLlaveAutoria,
   verifierPk: Hex32,
@@ -104,34 +86,33 @@ function verificarAutoria(
   return { ok: enLedger && recomputed === claim.autoriaHash, enLedger, recomputed };
 }
 
-// ── the demo ────────────────────────────────────────────────────────────────────────────
-
 function runDemo(h: TestigoHarness): void {
   console.log(`\n${line("═")}`);
   console.log(`  TESTIGO — the four acts        backend: ${h.backend}`);
   console.log(line("═"));
 
-  // ── T1 ────────────────────────────────────────────────────────────────────────────────
+  h.at(AHORA);
+
   act(1, "ACME registers and issues credentials", "The anchor goes public. The secrets never do.");
 
   h.registrarOrganizacion(ACME, ACME_ANCHOR);
   step(`registrarOrganizacion(ACME, ancla) — ancla ${short(ACME_ANCHOR)}`);
 
   for (const employee of [EMPLOYEE_A, EMPLOYEE_B]) {
-    const hoja = hojaDe(ACME, employee.credencialSecret);
-    h.emitirCredencial(ACME, hoja);
+    const commitment = credCommitmentDe(employee.credencialSecret);
+    const hoja = hojaPara(ACME, employee.credencialSecret);
+    h.emitirCredencial(ACME, commitment);
     step(`emitirCredencial(ACME) → ${employee.name}: hoja ${short(hoja)}`);
   }
-  console.log("     the mock issuer only ever publishes H(tag ‖ orgId ‖ credSecret) — never the secret");
+  console.log("     the mock issuer only ever receives credCommitment — never the secret");
   showLedger(h.ledger());
   require(h.ledger().organizaciones.size === 1, "ACME should be registered");
 
-  // ── T2 ────────────────────────────────────────────────────────────────────────────────
   act(2, "An employee reports fraud", "Membership proven in private. Identity never disclosed.");
 
-  h.as(EMPLOYEE_A).denunciar(ACME, AUGUST);
+  h.as(EMPLOYEE_A).denunciar(ACME, EPOCA);
   const denunciaId = denunciaIdDe(EMPLOYEE_A.evidenciaHash, EMPLOYEE_A.secretPersonal);
-  step(`denunciar(ACME, "${AUGUST}") as ${EMPLOYEE_A.name}`);
+  step(`denunciar(ACME, epoca ${EPOCA}) as ${EMPLOYEE_A.name}`);
   step(`sealed: denunciaId ${short(denunciaId)}`);
   showLedger(h.ledger());
 
@@ -154,12 +135,11 @@ function runDemo(h: TestigoHarness): void {
     );
   }
 
-  step(`a second report in "${AUGUST}" from the same person:`);
-  const blocked = expectRejection(() => h.as(EMPLOYEE_A).denunciar(ACME, AUGUST));
+  step(`a second report in epoca ${EPOCA} from the same person:`);
+  const blocked = expectRejection(() => h.as(EMPLOYEE_A).denunciar(ACME, EPOCA));
   verdict(false, `rejected — "${blocked}"  (nullifier, anti-spam)`);
   require(blocked === ASSERTS.alreadyReportedThisPeriod, "the nullifier should block a replay");
 
-  // ── T3 ────────────────────────────────────────────────────────────────────────────────
   act(3, "ACME tampers with the evidence", "The seal is on chain. Any edit breaks the hash.");
 
   const tampered: Hex32 = "de".repeat(32);
@@ -169,7 +149,6 @@ function runDemo(h: TestigoHarness): void {
   verdict(false, "the altered evidence matches nothing that was sealed");
   require(!h.ledger().denuncias.has(tamperedId), "tampered evidence must not match the seal");
 
-  // ── T4 ────────────────────────────────────────────────────────────────────────────────
   act(4, "Months later: proving authorship", "Only the author. Only to the verifier they choose.");
 
   h.as(EMPLOYEE_A).revelarAutoria(denunciaId, FISCAL_PK);
@@ -187,7 +166,6 @@ function runDemo(h: TestigoHarness): void {
   verdict(false, `rejected — "${stolen}"  (only the author knows the preimage)`);
   require(stolen === ASSERTS.notTheAuthor, "a foreign secret must not prove authorship");
 
-  // The climax (§4, Block E): one proof, two verifiers, two outcomes.
   console.log("\n  ── the same claim, read by two different people ──────────────────────");
 
   const claim: ExportLlaveAutoria = {
@@ -213,8 +191,6 @@ function runDemo(h: TestigoHarness): void {
   require(asFiscal.ok, "the designated prosecutor must verify");
   require(!asEmployer.ok, "the employer must not be able to reuse the proof");
 }
-
-// ── entry point ─────────────────────────────────────────────────────────────────────────
 
 const found = await backends();
 console.log(`\ntestigo · ${backendBanner(found)}`);

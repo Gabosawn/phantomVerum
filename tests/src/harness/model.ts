@@ -1,37 +1,24 @@
 /**
- * The `model` backend — an implementation of the spec, written FROM the spec.
+ * The `model` backend — spec implementation over real `persistentHash` + Merkle tree.
  *
- * It is not a mock. Two things make it a real oracle:
- *
- *   1. Hashes come from compact-runtime's `persistentHash` → byte-identical to the circuit.
- *   2. The credential tree is `StateBoundedMerkleTree`, the SAME structure Compact uses for
- *      `HistoricMerkleTree<8, Bytes<32>>` → real roots and real paths, not simulated ones.
- *
- * What this backend does NOT do: run the constraints inside a ZK circuit. It checks
- * membership with `findPathForLeaf` instead of `checkRoot(merkleTreePathRoot(path))`. The
- * semantic outcome is the same (valid / invalid credential) over the same bytes, but only
- * the `contract` backend proves the `.compact` actually enforces it.
- *
- * Written from `docs/01-arquitectura.md` §3–§4 and deliberately NOT from the contract: that
- * independence is where the differential value comes from once both backends run one suite.
+ * Aligned with `contracts/src/testigo.compact` (Opción A, epoch-gated nullifiers).
  */
 
 import { StateBoundedMerkleTree } from "@midnight-ntwrk/compact-runtime";
 
-import { ASSERTS, MERKLE_DEPTH } from "./contract-surface.js";
+import { ASSERTS, AHORA, DUR_EPOCA, MERKLE_DEPTH } from "./contract-surface.js";
 import {
   autoriaDe,
   bytesToHex,
+  credCommitmentDe,
   denunciaIdDe,
   hojaDe,
   hojaHash,
   nullifierDe,
-  padHex32,
 } from "./crypto.js";
 import { AssertError } from "./types.js";
 import type { Actor, Hex32, LedgerSnapshot, TestigoHarness } from "./types.js";
 
-/** Compact's `assert(cond, msg)`. On the real network this fails at proof time, emitting no tx. */
 function assert(condition: boolean, message: string): void {
   if (!condition) throw new AssertError(message);
 }
@@ -48,9 +35,15 @@ export class ModelHarness implements TestigoHarness {
   private nextLeaf = 0n;
 
   private actor: Actor | undefined;
+  private clock = AHORA;
 
   as(actor: Actor): this {
     this.actor = actor;
+    return this;
+  }
+
+  at(unixSeconds: number): this {
+    this.clock = unixSeconds;
     return this;
   }
 
@@ -61,40 +54,36 @@ export class ModelHarness implements TestigoHarness {
     return this.actor;
   }
 
-  // ── §4.1 ──────────────────────────────────────────────────────────────────────────────
-
   registrarOrganizacion(orgId: Hex32, ancla: Hex32): void {
     assert(!this.organizaciones.has(orgId), ASSERTS.orgAlreadyRegistered);
     this.organizaciones.set(orgId, ancla);
   }
 
-  /**
-   * Mock issuer: inserts the employee's leaf into the global tree. No access control —
-   * declared up front in §2.6, consistent with "the issuer is a mock".
-   */
-  emitirCredencial(orgId: Hex32, hoja: Hex32): void {
+  emitirCredencial(orgId: Hex32, credCommitment: Hex32): void {
     assert(this.organizaciones.has(orgId), ASSERTS.orgNotFound);
+    const hoja = hojaDe(orgId, credCommitment);
     this.credenciales = this.credenciales.update(this.nextLeaf, hojaHash(hoja)).rehash();
     this.nextLeaf += 1n;
   }
 
-  // ── §4.2 — the heart ──────────────────────────────────────────────────────────────────
-
-  denunciar(orgId: Hex32, periodo: string): void {
+  denunciar(orgId: Hex32, periodo: bigint): void {
     const { credencialSecret, secretPersonal, evidenciaHash } = this.witnesses();
     assert(this.organizaciones.has(orgId), ASSERTS.orgNotFound);
 
-    // C1 — membership. The leaf is built here rather than supplied by the witness, so the
-    // reporter cannot lie about which org they belong to (§2.1).
-    const hoja = hojaDe(orgId, credencialSecret);
-    assert(this.credenciales.findPathForLeaf(hojaHash(hoja)) !== undefined, ASSERTS.invalidCredential);
+    const inicio = periodo * DUR_EPOCA;
+    const fin = inicio + DUR_EPOCA;
+    assert(BigInt(this.clock) >= inicio, ASSERTS.periodNotStarted);
+    assert(BigInt(this.clock) < fin, ASSERTS.periodExpired);
 
-    // C2 — one report per (person, org, period).
-    const nullifier = nullifierDe(secretPersonal, orgId, padHex32(periodo));
+    const hoja = hojaDe(orgId, credCommitmentDe(credencialSecret));
+    assert(
+      this.credenciales.findPathForLeaf(hojaHash(hoja)) !== undefined,
+      ASSERTS.invalidCredential,
+    );
+
+    const nullifier = nullifierDe(credencialSecret, orgId, periodo);
     assert(!this.nullifiers.has(nullifier), ASSERTS.alreadyReportedThisPeriod);
 
-    // Idempotency guard (§2.6): `Set.insert` is idempotent, so without this assert a
-    // resubmission of the same evidence would pass SILENTLY.
     const denunciaId = denunciaIdDe(evidenciaHash, secretPersonal);
     assert(!this.denuncias.has(denunciaId), ASSERTS.reportAlreadyExists);
 
@@ -102,14 +91,10 @@ export class ModelHarness implements TestigoHarness {
     this.nullifiers.add(nullifier);
   }
 
-  // ── §4.3 — the differentiator ─────────────────────────────────────────────────────────
-
   revelarAutoria(denunciaId: Hex32, fiscalPk: Hex32): void {
     const { secretPersonal, evidenciaHash } = this.witnesses();
 
-    // C1 — only the author knows the preimage of denunciaId.
     assert(denunciaIdDe(evidenciaHash, secretPersonal) === denunciaId, ASSERTS.notTheAuthor);
-    // C2 — the report exists.
     assert(this.denuncias.has(denunciaId), ASSERTS.reportNotFound);
 
     const autoria = autoriaDe(secretPersonal, denunciaId, fiscalPk);
@@ -117,8 +102,6 @@ export class ModelHarness implements TestigoHarness {
 
     this.autorias.add(autoria);
   }
-
-  // ── §3 — the only thing the world gets to see ─────────────────────────────────────────
 
   ledger(): LedgerSnapshot {
     return {
@@ -131,12 +114,6 @@ export class ModelHarness implements TestigoHarness {
     };
   }
 
-  /**
-   * The Merkle root as hex, or `null` while the tree is empty.
-   *
-   * `root()` is typed as possibly-undefined because the tree returns nothing until `rehash()`
-   * has run — every `emitirCredencial` rehashes, so in practice it is set once there is a leaf.
-   */
   private root(): Hex32 | null {
     if (this.nextLeaf === 0n) return null;
     const field = this.credenciales.root()?.value?.[0];
