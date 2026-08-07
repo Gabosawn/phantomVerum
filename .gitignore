@@ -34,3 +34,12 @@ docker-data/
 *.key
 *.pem
 secrets/
+
+# Private state del SDK (LevelDB) — contiene estado privado del denunciante.
+# El default de levelPrivateStateProvider crea estos directorios en cuanto
+# corre el primer script con una seed real. NUNCA commitear.
+.private-state/
+**/.private-state/
+.states/
+**/.states/
+logs/
