@@ -1,16 +1,16 @@
-# `contracts/` - Testigo en Compact
+# `contracts/` - PhantomTrace in Compact
 
-Contrato Compact del proyecto **Testigo**: denuncias anonimas con autoria
-diferida. La semantica esta definida en
-[`../docs/01-arquitectura.md`](../docs/01-arquitectura.md) secciones 3 a 5.
+Compact contract for the **PhantomTrace** project: anonymous reports with delayed
+authorship. The semantics are defined in
+[`../docs/01-arquitectura.md`](../docs/01-arquitectura.md) sections 3 through 5.
 
 | | |
 |---|---|
-| Contrato de produccion | `src/testigo.compact` (Opcion A - Merkle) |
-| Fallback congelado | `src/fallback/testigo-b.compact` (Opcion B) |
+| Production contract | `src/testigo.compact` (Option A - Merkle) |
+| Frozen fallback | `src/fallback/testigo-b.compact` (Option B) |
 | Compiler / language | `0.31.1` / `0.23.0` |
 
-## Compilar
+## Compile
 
 ```bash
 npm run compile --workspace=contracts
@@ -18,20 +18,20 @@ npm run compile:fast --workspace=contracts
 npm run check:fallback --workspace=contracts
 ```
 
-El contrato principal usa un `HistoricMerkleTree` global de profundidad 8.
-Cada hoja es `H("testigo:cred:v1" || orgId || credSecret)`, por lo que la
-prueba de membership queda ligada a una organizacion sin revelar la credencial.
-El arbol historico mantiene validos los paths despues de nuevas emisiones.
+The main contract uses a global `HistoricMerkleTree` of depth 8.
+Each leaf is `H("phantomtrace:cred:v1" || orgId || credSecret)`, so the
+membership proof is bound to an organization without revealing the credential.
+The historic tree keeps paths valid after new issuances.
 
-Los circuitos exportados son `registrarOrganizacion`, `emitirCredencial`,
-`denunciar` y `revelarAutoria`. Los pure circuits `hojaDe`, `denunciaIdDe`,
-`nullifierDe` y `autoriaDe` permiten recomputar valores localmente sin proof
-server.
+The exported circuits are `registerOrganization`, `issueCredential`,
+`report`, and `revealAuthorship`. The pure circuits `leafOf`, `reportIdOf`,
+`nullifierOf`, and `authorshipOf` allow recomputing values locally without a
+proof server.
 
-La opcion B es una red de seguridad no compilada por defecto. Reemplaza
-membership Merkle por `H(orgSecret) == ancla`, con las limitaciones declaradas
-en `docs/01-arquitectura.md`.
+Option B is a safety net not compiled by default. It replaces
+Merkle membership with `H(orgSecret) == anchor`, with the limitations stated
+in `docs/01-arquitectura.md`.
 
-El emisor es mock, no hay revocacion y el circuito no prueba la veracidad de la
-denuncia. La credencial, el secret y la evidencia son witnesses y no se
-publican en el ledger.
+The issuer is a mock, there is no revocation, and the circuit does not prove
+the veracity of the report. The credential, secret, and evidence are witnesses
+and are not published on the ledger.

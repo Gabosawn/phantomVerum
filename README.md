@@ -1,163 +1,163 @@
-# Testigo — PhantomTrace
+# PhantomTrace
 
-> **Denuncias de corrupción con anonimato reversible.** El denunciante prueba
-> que es de adentro sin revelar quién es, la evidencia queda sellada — y, a
-> diferencia de todos los sistemas existentes, puede probar su autoría después:
-> solo él, solo ante la autoridad que elija, solo cuando le convenga.
+> **Corruption reports with reversible anonymity.** The whistleblower proves
+> they are an insider without revealing who they are, the evidence is sealed —
+> and, unlike all existing systems, they can prove authorship later:
+> only them, only before the authority they choose, only when it suits them.
 
-Construido sobre [Midnight](https://midnight.network) (Compact + ZK).
+Built on [Midnight](https://midnight.network) (Compact + ZK).
 
 ---
 
-## Cómo funciona (los 4 tiempos)
+## How it works (the 4 stages)
 
-1. **La organización se registra** — publica el ancla de sus credenciales en
-   el ledger y emite credenciales a empleados (mock, off-chain).
-2. **Un empleado denuncia** — la app verifica su credencial *en privado* y
-   publica solo `denunciaId = H(evidencia ‖ secret)` y un nullifier anti-spam.
-   La organización ve que *hay* una denuncia; no puede saber de quién.
-3. **La evidencia es inalterable** — el hash quedó sellado on-chain. Cualquier
-   alteración no matchea.
-4. **Meses después, revela su autoría** — `revelarAutoria` prueba que conoce el
-   preimagen del hash, ligado a la clave de *ese* fiscal (designated verifier).
-   Interceptada por cualquier otro, la prueba no sirve.
+1. **The organization registers** — publishes the credential anchor on
+   the ledger and issues credentials to employees (mock, off-chain).
+2. **An employee reports** — the app verifies their credential *privately* and
+   publishes only `reportId = H(evidence ‖ secret)` and an anti-spam nullifier.
+   The organization sees that *there is* a report; it cannot know from whom.
+3. **The evidence is immutable** — the hash is sealed on-chain. Any
+   alteration won't match.
+4. **Months later, they reveal authorship** — `revealAuthorship` proves they know
+   the hash preimage, tied to *that* prosecutor's key (designated verifier).
+   Intercepted by anyone else, the proof is useless.
 
-Detalle completo: [`docs/00-idea.md`](docs/00-idea.md) y
+Full detail: [`docs/00-idea.md`](docs/00-idea.md) and
 [`docs/01-arquitectura.md`](docs/01-arquitectura.md).
 
 ## Quick start
 
 ```bash
-npm install                        # instala todas las workspaces
-npm run compile                    # compila contratos Compact
-npm test                           # corre la suite de tests
-npm run simulate                   # simulación E2E de los 4 tiempos
-npm run dev --workspace=ui         # levanta el frontend en :3000
+npm install                        # installs all workspaces
+npm run compile                    # compiles Compact contracts
+npm test                           # runs the test suite
+npm run simulate                   # E2E simulation of the 4 stages
+npm run dev --workspace=ui         # starts the frontend on :3000
 ```
 
-Scripts CLI (workspace `app`):
+CLI scripts (workspace `app`):
 
 ```bash
-npm run registrar-org --workspace=app      # registrar organización
-npm run denunciar --workspace=app          # denuncia sellada + nullifier
-npm run revelar-autoria --workspace=app    # prueba de autoría al fiscal
-npm run verificar-autoria --workspace=app  # verificación off-chain (✅/❌)
+npm run register-org --workspace=app       # register organization
+npm run report --workspace=app             # sealed report + nullifier
+npm run reveal-authorship --workspace=app  # authorship proof to the prosecutor
+npm run verify-authorship --workspace=app  # off-chain verification (✅/❌)
 ```
 
-## Estructura del repo
+## Repo structure
 
 ```
 phantomtrace/
-├── contracts/               # @phantomtrace/contracts — circuitos Compact
-│   ├── src/                 #   testigo.compact (los 3 circuitos)
-│   └── output/              #   artefactos del compilador (generado)
-├── app/                     # @phantomtrace/app — wiring TypeScript
+├── contracts/               # @phantomtrace/contracts — Compact circuits
+│   ├── src/                 #   testigo.compact (the 3 circuits)
+│   └── output/              #   compiler artifacts (generated)
+├── app/                     # @phantomtrace/app — TypeScript wiring
 │   └── src/
-│       ├── witnesses/       #   witness providers de los 3 circuitos
-│       ├── scripts/         #   CLI: registrar-org, denunciar, revelar, verificar
-│       └── config/          #   red Preview, proof server, indexer
+│       ├── witnesses/       #   witness providers for the 3 circuits
+│       ├── scripts/         #   CLI: register-org, report, reveal-authorship, verify-authorship
+│       └── config/          #   Preview network, proof server, indexer
 ├── ui/                      # @phantomtrace/ui — React + Vite
 │   └── src/
-│       ├── views/           #   Organizacion / Denunciante / Fiscal
-│       ├── components/      #   componentes reutilizables
-│       ├── hooks/           #   wallet, contrato
-│       └── lib/             #   helpers y constantes
-├── tests/                   # @phantomtrace/tests — Vitest + simulación E2E
+│       ├── views/           #   Organization / Whistleblower / Prosecutor
+│       ├── components/      #   reusable components
+│       ├── hooks/           #   wallet, contract
+│       └── lib/             #   helpers and constants
+├── tests/                   # @phantomtrace/tests — Vitest + E2E simulation
 │   └── src/
-│       ├── circuits/        #   tests por circuito
-│       └── simulation/      #   simulación E2E de los 4 tiempos
-├── deck/                    # material de presentación
-└── docs/                    # idea, arquitectura, entorno
+│       ├── circuits/        #   per-circuit tests
+│       └── simulation/      #   E2E simulation of the 4 stages
+├── deck/                    # presentation material
+└── docs/                    # idea, architecture, environment
 ```
 
-### Las 3 vistas de la UI
+### The 3 UI views
 
-| Vista | Qué hace |
+| View | What it does |
 |---|---|
-| **Organización** | Registrar org (ancla) + emitir credencial (mock) + panel del ledger: hay N denuncias, ninguna atribuible |
-| **Denunciante** | Cargar evidencia (se hashea local — dicho en pantalla), elegir org/período, denunciar, exportar llave de autoría |
-| **Fiscal** | Cargar denunciaId + clave + material entregado → verificar contra el ledger → ✅ / ❌ |
+| **Organization** | Register org (anchor) + issue credential (mock) + ledger panel: there are N reports, none attributable |
+| **Whistleblower** | Load evidence (hashed locally — stated on screen), choose org/period, report, export authorship key |
+| **Prosecutor** | Load reportId + key + delivered material → verify against ledger → ✅ / ❌ |
 
-Reglas de UI: legible y proyectable (fuente grande, alto contraste). La vista
-denunciante dice explícitamente qué NO sale de la máquina.
+UI rules: legible and projectable (large font, high contrast). The whistleblower
+view explicitly states what does NOT leave the machine.
 
 ### Tests
 
-| Circuito | Casos |
+| Circuit | Cases |
 |---|---|
-| `registrarOrganizacion` | registra ok · re-registro falla |
-| `denunciar` | caso feliz · credencial inválida falla · doble denuncia mismo período falla · período distinto pasa · dos orgs no interfieren |
-| `revelarAutoria` | autor real pasa · secret ajeno falla · denuncia inexistente falla · mismo autor + otro fiscal ⇒ hash distinto |
+| `registerOrganization` | registers ok · re-register fails |
+| `report` | happy path · invalid credential fails · double report same period fails · different period passes · two orgs don't interfere |
+| `revealAuthorship` | real author passes · wrong secret fails · nonexistent report fails · same author + different prosecutor ⇒ different hash |
 
-## Plan de desarrollo — 4 bloques independientes
+## Development plan — 4 independent blocks
 
-> **Versión completa y actualizada:** [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) —
-> rubric oficial del evento, decisiones técnicas validadas contra el compilador
-> (Opción A Merkle ya compila), contratos de datos entre bloques (API de `app/`,
-> formatos), **Bloque E — Entrega** (deck/video/demo) y timeline horario.
+> **Complete and updated version:** [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) —
+> official event rubric, technical decisions validated against the compiler
+> (Option A Merkle already compiles), data contracts between blocks (API for `app/`,
+> formats), **Block E — Delivery** (deck/video/demo) and hourly timeline.
 
-Los bloques **no se bloquean entre sí**: cada uno trabaja contra el spec de
-[`docs/01-arquitectura.md`](docs/01-arquitectura.md) (que define nombres de
-circuitos, estado del ledger y tipos) y contra mocks de las capas vecinas.
-La integración se hace al final de cada bloque.
+The blocks **don't block each other**: each works against the spec in
+[`docs/01-arquitectura.md`](docs/01-arquitectura.md) (which defines circuit
+names, ledger state and types) and against mocks of neighboring layers.
+Integration happens at the end of each block.
 
-### Bloque A — Contratos Compact (`contracts/`)
+### Block A — Compact Contracts (`contracts/`)
 
-- [ ] Template oficial compilando sin tocarlo (validar toolchain y sintaxis vigente)
-- [ ] `registrarOrganizacion` — insertar org, fallar si ya existe
-- [ ] `denunciar` — verificación de credencial (Opción A Merkle, fallback B), `denunciaId` + nullifier
-- [ ] `revelarAutoria` — preimagen + designated verifier (`fiscalPk`)
+- [ ] Official template compiling untouched (validate toolchain and current syntax)
+- [ ] `registerOrganization` — insert org, fail if already exists
+- [ ] `report` — credential verification (Option A Merkle, fallback B), `reportId` + nullifier
+- [ ] `revealAuthorship` — preimage + designated verifier (`prosecutorPk`)
 
-**Entregable:** `compact compile` verde. Los valores derivados y el ledger
-coinciden *exactamente* con el spec (§3–§4).
+**Deliverable:** `compact compile` green. Derived values and ledger
+match the spec *exactly* (§3–§4).
 
-### Bloque B — Wiring TypeScript (`app/`)
+### Block B — TypeScript Wiring (`app/`)
 
-- [ ] Config de red (Preview), proof server local, indexer
-- [ ] Witness providers de los 3 circuitos + persistencia local de secrets/credenciales (archivo)
-- [ ] Hash local de evidencia (el archivo nunca sale de la máquina)
-- [ ] Scripts CLI: `registrar-org`, `denunciar`, `revelar-autoria`, `verificar-autoria`
-- [ ] Deploy del contrato
+- [ ] Network config (Preview), local proof server, indexer
+- [ ] Witness providers for the 3 circuits + local persistence of secrets/credentials (file)
+- [ ] Local evidence hash (the file never leaves the machine)
+- [ ] CLI scripts: `register-org`, `report`, `reveal-authorship`, `verify-authorship`
+- [ ] Contract deploy
 
-**Se puede arrancar sin el Bloque A** mockeando el módulo del contrato
-compilado con las firmas del spec. **Entregable:** un comando corre los 4
-tiempos E2E; el caso "secret ajeno" falla en proof time sin emitir tx.
+**Can start without Block A** by mocking the compiled contract
+module with the spec signatures. **Deliverable:** one command runs the 4
+stages E2E; the "wrong secret" case fails at proof time without emitting a tx.
 
-### Bloque C — UI (`ui/`)
+### Block C — UI (`ui/`)
 
-- [ ] Vista Organización: registro + emisión mock de credenciales + panel del ledger
-- [ ] Vista Denunciante: carga de evidencia (hash local), denuncia, exportar llave
-- [ ] Vista Fiscal: verificación ✅/❌ contra el ledger
+- [ ] Organization view: registration + mock credential issuance + ledger panel
+- [ ] Whistleblower view: evidence loading (local hash), report, export key
+- [ ] Prosecutor view: verification ✅/❌ against ledger
 
-**Se puede arrancar sin los Bloques A y B** detrás de una capa de servicio
-mock con la API de los scripts CLI. **Entregable:** las 3 vistas conectadas a
-la capa real de `app/`.
+**Can start without Blocks A and B** behind a service layer
+mock with the CLI script API. **Deliverable:** the 3 views connected to
+the real `app/` layer.
 
-### Bloque D — Tests (`tests/`)
+### Block D — Tests (`tests/`)
 
-- [ ] Suite por circuito (tabla de arriba)
-- [ ] Simulación E2E de los 4 tiempos que imprime el estado del ledger en cada paso
+- [ ] Per-circuit suite (table above)
+- [ ] E2E simulation of the 4 stages printing ledger state at each step
 
-**Se puede arrancar sin el Bloque A** testeando contra el comportamiento del
-spec. **Entregable:** `npm test` verde + `npm run simulate` con un comando.
+**Can start without Block A** testing against the spec's
+behavior. **Deliverable:** `npm test` green + `npm run simulate` in one command.
 
-### Contratos entre bloques (lo único congelado upfront)
+### Contracts between blocks (the only thing frozen upfront)
 
-1. **Circuitos y ledger** — tal cual `docs/01-arquitectura.md` §3–§4. Si la
-   sintaxis instalada obliga a desviar, se adapta la sintaxis, nunca la
-   semántica.
-2. **API de `app/`** — las 4 funciones de los scripts CLI, con firmas TS
-   acordadas antes de empezar C.
-3. **Credencial** — se intenta Opción A (Merkle); si no sale, fallback a
-   Opción B. La decisión no bloquea a B/C/D: la interfaz del circuito
-   `denunciar` es la misma en ambas.
+1. **Circuits and ledger** — exactly as `docs/01-arquitectura.md` §3–§4. If the
+   installed syntax forces a deviation, adapt the syntax, never the
+   semantics.
+2. **`app/` API** — the 4 CLI script functions, with TS signatures
+   agreed upon before starting C.
+3. **Credential** — try Option A (Merkle); if it doesn't work, fallback to
+   Option B. The decision doesn't block B/C/D: the `report` circuit
+   interface is the same in both.
 
-## Documentación
+## Documentation
 
-| Doc | Para qué |
+| Doc | What for |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | Toolchain, servicios y convenciones — contexto para agentes de IA |
-| [`docs/00-idea.md`](docs/00-idea.md) | La idea, el problema y el diferencial |
-| [`docs/01-arquitectura.md`](docs/01-arquitectura.md) | Actores, flujo, spec de los 3 circuitos, estado del ledger |
-| [`docs/02-entorno.md`](docs/02-entorno.md) | Setup del entorno: toolchain, servicios, checklist |
-| [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) | Plan de ejecución mejorado: rubric oficial, decisiones validadas contra el compilador, contratos de datos entre bloques, bloque de entrega y timeline horario |
+| [`AGENTS.md`](AGENTS.md) | Toolchain, services and conventions — context for AI agents |
+| [`docs/00-idea.md`](docs/00-idea.md) | The idea, the problem and the differentiator |
+| [`docs/01-arquitectura.md`](docs/01-arquitectura.md) | Actors, flow, spec of the 3 circuits, ledger state |
+| [`docs/02-entorno.md`](docs/02-entorno.md) | Environment setup: toolchain, services, checklist |
+| [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) | Enhanced execution plan: official rubric, decisions validated against the compiler, data contracts between blocks, delivery block and hourly timeline |

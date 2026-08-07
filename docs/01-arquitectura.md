@@ -1,217 +1,218 @@
-# 01 — Arquitectura y spec de los circuitos
+# 01 — Architecture and circuit spec
 
-> Prerequisito: `00-idea.md`. Este documento especifica **semántica**, no
-> sintaxis. Leer §8 antes de escribir una línea de Compact.
+> Prerequisite: `00-idea.md`. This document specifies **semantics**, not
+> syntax. Read §8 before writing a line of Compact.
 
 ---
 
-## 1. Actores
+## 1. Actors
 
-| Actor | Rol | Qué ve |
+| Actor | Role | What they see |
 |---|---|---|
-| **Organización** (ACME S.A.) | Registra el ancla de sus credenciales; emite credenciales a empleados (mock) | El ledger público. Nunca sabe quién denunció |
-| **Denunciante** (el testigo) | Denuncia probando pertenencia; meses después prueba autoría | Todo lo suyo: credencial, secret, evidencia |
-| **Proof server** | Genera las pruebas ZK | Los witnesses — por eso corre **local** |
-| **Ledger Midnight** | Guarda hashes, nullifiers y autorías | Solo hashes. Ni identidad ni evidencia |
-| **Fiscal** (verificador designado) | Recibe la prueba de autoría ligada a su clave | Lo que el denunciante le revele + el ledger |
+| **Organization** (ACME Inc.) | Registers the credential anchor; issues credentials to employees (mock) | The public ledger. Never knows who reported |
+| **Whistleblower** (the witness) | Reports proving membership; months later proves authorship | Everything of theirs: credential, secret, evidence |
+| **Proof server** | Generates ZK proofs | The witnesses — that's why it runs **locally** |
+| **Midnight Ledger** | Stores hashes, nullifiers, and authorships | Only hashes. Neither identity nor evidence |
+| **Prosecutor** (designated verifier) | Receives the authorship proof tied to their key | What the whistleblower reveals + the ledger |
 
-## 2. Flujo end-to-end (los 4 tiempos de la demo)
-
-```
-T1. ACME se registra: publica el ancla de credenciales en el ledger.
-    ACME emite (mock) una credencial a cada empleado, off-chain.
-
-T2. Un empleado descubre fraude. Abre Testigo, carga la evidencia.
-    La app llama a `denunciar` vía el proof server LOCAL:
-      - verifica EN PRIVADO la credencial contra el ancla de ACME
-      - publica: denunciaId = H(evidencia ‖ secret)  ← el sellado
-                 nullifier  = H(secret ‖ orgId ‖ período)  ← anti-spam
-    ACME mira el ledger: ve que HAY una denuncia. No puede saber de quién.
-
-T3. ACME intenta alterar la evidencia. No puede: el hash está sellado
-    on-chain con su posición en la cadena. Cualquier alteración no matchea.
-
---- meses después: el empleado quiere protección legal / recompensa ---
-
-T4. El denunciante llama a `revelarAutoria(denunciaId, fiscalPk)`:
-    prueba que conoce el preimagen de denunciaId (solo el autor lo conoce)
-    SIN revelar evidencia ni secret, y liga la prueba a la clave del fiscal.
-    El fiscal verifica. El empleador, si la intercepta, no puede usarla.
-```
-
-## 3. Estado del ledger (público)
+## 2. End-to-end flow (the 4 stages of the demo)
 
 ```
-ledger organizaciones: Map<Bytes<32>, Bytes<32>>  // orgId → ancla de credenciales
-ledger denuncias:      Set<Bytes<32>>             // denunciaId sellados
-ledger nullifiers:     Set<Bytes<32>>             // anti-spam por período
-ledger autorias:       Set<Bytes<32>>             // H(secret ‖ denunciaId ‖ fiscalPk)
+T1. ACME registers: publishes the credential anchor on the ledger.
+    ACME issues (mock) a credential to each employee, off-chain.
+
+T2. An employee discovers fraud. Opens PhantomTrace, loads the evidence.
+    The app calls report via the LOCAL proof server:
+      - verifies the credential PRIVATELY against ACME's anchor
+      - publishes: reportId = H(evidence ‖ secret)  ← the seal
+                   nullifier  = H(secret ‖ orgId ‖ period)  ← anti-spam
+    ACME looks at the ledger: sees there IS a report. Cannot know who made it.
+
+T3. ACME tries to alter the evidence. Cannot: the hash is sealed
+    on-chain with its position in the chain. Any alteration won't match.
+
+--- months later: the employee wants legal protection / reward ---
+
+T4. The whistleblower calls revealAuthorship(reportId, prosecutorPk):
+    proves they know the preimage of reportId (only the author knows it)
+    WITHOUT revealing evidence or secret, and binds the proof to the
+    prosecutor's key. The prosecutor verifies. The employer, if intercepted,
+    cannot use it.
 ```
 
-Todo lo demás — credencial, secret, evidencia — es witness: nunca sale de la
-máquina del denunciante (salvo hacia su proof server local).
+## 3. Ledger state (public)
 
-## 4. Los tres circuitos
+```
+ledger organizations: Map<Bytes<32>, Bytes<32>>  // orgId → credential anchor
+ledger reports:       Set<Bytes<32>>             // sealed reportIds
+ledger nullifiers:    Set<Bytes<32>>             // anti-spam per period
+ledger authorships:   Set<Bytes<32>>             // H(secret ‖ reportId ‖ prosecutorPk)
+```
 
-### 4.1 `registrarOrganizacion(orgId, ancla)` — trivial
+Everything else — credential, secret, evidence — is witness: never leaves the
+whistleblower's machine (except to their local proof server).
 
-Inserta `orgId → ancla` en `organizaciones`. Falla si ya existe. Sin witnesses.
-Sirve de andamio para el resto del contrato.
+## 4. The three circuits
 
-### 4.2 `denunciar` — el corazón
+### 4.1 `registerOrganization(orgId, anchor)` — trivial
 
-**Inputs públicos:** `orgId`, `periodo` (epoch grueso, p. ej. `2026-08`).
-**Witnesses:** `credencial` (ver §5), `secret` (personal, persistente),
-`evidenciaHash` (la app hashea el archivo localmente; al circuito entra el hash).
+Inserts `orgId → anchor` in `organizations`. Fails if it already exists. No
+witnesses. Acts as scaffolding for the rest of the contract.
+
+### 4.2 `report` — the core
+
+**Public inputs:** `orgId`, `period` (coarse epoch, e.g. `2026-08`).
+**Witnesses:** `credential` (see §5), `secret` (personal, persistent),
+`evidenceHash` (the app hashes the file locally; the circuit receives the hash).
 
 **Constraints:**
 
 ```
-C1. credencialValida(credencial, organizaciones[orgId])   // ver §5
-C2. assert(!nullifiers.member(nullifier))                 // una denuncia por período
+C1. validCredential(credential, organizations[orgId])   // see §5
+C2. assert(!nullifiers.member(nullifier))               // one report per period
 ```
 
-**Valores derivados:**
+**Derived values:**
 
 ```
-denunciaId = H(evidenciaHash ‖ secret)     // el sellado; solo el autor conoce el preimagen
-nullifier  = H(secret ‖ orgId ‖ periodo)   // una denuncia por (persona, org, período)
+reportId   = H(evidenceHash ‖ secret)     // the seal; only the author knows the preimage
+nullifier  = H(secret ‖ orgId ‖ period)   // one report per (person, org, period)
 ```
 
-**Efectos:**
+**Effects:**
 
 ```
-denuncias.insert(disclose(denunciaId))
+reports.insert(disclose(reportId))
 nullifiers.insert(disclose(nullifier))
 ```
 
-El nullifier evita que alguien ahogue el canal con mil denuncias falsas, sin
-identificar a nadie: períodos distintos → nullifiers no linkeables.
+The nullifier prevents someone from drowning the channel with a thousand fake
+reports, without identifying anyone: different periods → unlinkable nullifiers.
 
-### 4.3 `revelarAutoria(denunciaId, fiscalPk)` — el diferencial
+### 4.3 `revealAuthorship(reportId, prosecutorPk)` — the differentiator
 
-**Inputs públicos:** `denunciaId`, `fiscalPk`.
-**Witnesses:** `evidenciaHash`, `secret` — los mismos de la denuncia.
+**Public inputs:** `reportId`, `prosecutorPk`.
+**Witnesses:** `evidenceHash`, `secret` — the same ones from the report.
 
 ```
-C1. assert(H(evidenciaHash ‖ secret) == denunciaId)   // solo el autor puede
-C2. assert(denuncias.member(denunciaId))              // la denuncia existe
+C1. assert(H(evidenceHash ‖ secret) == reportId)   // only the author can
+C2. assert(reports.member(reportId))               // the report exists
 
-autorias.insert(disclose(H(secret ‖ denunciaId ‖ fiscalPk)))
+authorships.insert(disclose(H(secret ‖ reportId ‖ prosecutorPk)))
 ```
 
-**Por qué designated verifier:** la autoría queda ligada a *ese* fiscal. El
-registro on-chain solo es interpretable por quien tenga el contexto que el
-denunciante entrega off-chain al fiscal (su claim + los valores para verificar
-el hash de autoría). Mostrado al empleador, el registro no prueba nada — no
-puede distinguir quién lo generó ni replayearlo. Es el delta chico sobre el
-circuito base que ningún juez vio nunca shipped.
+**Why designated verifier:** the authorship is tied to *that* prosecutor. The
+on-chain record is only interpretable by whoever has the context the
+whistleblower delivers off-chain to the prosecutor (their claim + the values to
+verify the authorship hash). Shown to the employer, the record proves nothing —
+they cannot distinguish who generated it or replay it. This is the small delta
+over the base circuit that no judge has ever seen shipped.
 
-## 5. La credencial — dos opciones, en orden de preferencia
+## 5. The credential — two options, in order of preference
 
-El emisor es **mock declarado** (como en todos los proyectos comparables). Lo
-que hay que decidir al implementar, con la stdlib instalada a la vista, es el
-mecanismo de verificación en circuito. Dos opciones, en orden de preferencia:
+The issuer is a **declared mock** (same as all comparable projects). What needs
+to be decided during implementation, with the installed stdlib in view, is the
+in-circuit verification mechanism. Two options, in order of preference:
 
-**Opción A — Merkle membership (preferida, estándar del ecosistema):**
-la organización publica como `ancla` la raíz de un árbol de Merkle de
-commitments de credenciales (`H(credencialSecret)` por empleado). `denunciar`
-toma la hoja y el path como witnesses y verifica la raíz en circuito.
-depapp lo hizo en Compact (árbol de 1M de hojas), así que es viable; para
-nosotros alcanza profundidad chica (p. ej. 8 niveles = 256 empleados).
-El nullifier usa `credencialSecret` como `secret` → una credencial = una
-denuncia por período. Correcto y defendible.
+**Option A — Merkle membership (preferred, ecosystem standard):**
+the organization publishes as `anchor` the root of a Merkle tree of credential
+commitments (`H(credentialSecret)` per employee). `report` takes the leaf and
+path as witnesses and verifies the root in-circuit. depapp did it in Compact
+(1M-leaf tree), so it's viable; we only need shallow depth (e.g. 8 levels = 256
+employees). The nullifier uses `credentialSecret` as `secret` → one credential =
+one report per period. Correct and defensible.
 
-**Opción B — fallback de riesgo cero (solo si A no compila a tiempo):**
-la organización publica `ancla = H(orgSecret)` y entrega el mismo `orgSecret`
-a todos los empleados (mock). El circuito verifica `H(orgSecret) == ancla`.
-Anonimato perfecto dentro de la org; **debilidad declarada:** quien tenga el
-secret puede generar N nullifiers con N secrets personales (anti-spam débil) y
-no hay revocación. Se presenta como límite del mock del emisor, no del diseño.
+**Option B — zero-risk fallback (only if A doesn't compile in time):**
+the organization publishes `anchor = H(orgSecret)` and delivers the same
+`orgSecret` to all employees (mock). The circuit verifies `H(orgSecret) ==
+anchor`. Perfect anonymity within the org; **stated weakness:** whoever has the
+secret can generate N nullifiers with N personal secrets (weak anti-spam) and
+there is no revocation. Presented as a limit of the mock issuer, not of the
+design.
 
-**Regla de decisión:** se intenta la Opción A primero. Si no compila en un
-tiempo razonable, se congela la B y la A pasa a roadmap.
+**Decision rule:** try Option A first. If it doesn't compile in a reasonable
+time, freeze B and move A to roadmap.
 
-## 6. Qué resuelve y qué NO resuelve cada mecanismo
+## 6. What each mechanism solves and does NOT solve
 
-| Ataque | Mecanismo que lo mata | ¿Resuelto? |
+| Attack | Counter-mechanism | Resolved? |
 |---|---|---|
-| La empresa identifica al denunciante on-chain | Membership en ZK + tx senderless de Midnight (sin `msg.sender`, fees shielded) | ✅ |
-| La empresa altera o repudia la evidencia | `denunciaId` sellado on-chain; alterar la evidencia rompe el hash | ✅ |
-| Un tercero se atribuye la denuncia (roba la recompensa) | Solo el autor conoce `(evidenciaHash, secret)` — preimagen de `denunciaId` | ✅ |
-| El empleador reusa/replaya la prueba de autoría | Designated verifier: la autoría está ligada a `fiscalPk` | ✅ |
-| Spam / ahogar el canal con denuncias falsas | Nullifier `H(secret ‖ orgId ‖ período)` | ✅ (débil en Opción B — declarado) |
-| Denuncia con contenido falso | **Ninguno.** No probamos veracidad — se dice de frente | ❌ declarado |
-| Metadata off-chain (indexer ve viewing key/IP) | Proof server local + Tor/nodo propio; roadmap fee-sponsor | ⚠️ mitigado, declarado |
-| Timing correlation (la denuncia sale a las 3 AM y solo Juan estaba) | Fuera de alcance; períodos gruesos ayudan | ⚠️ declarado |
+| The company identifies the whistleblower on-chain | ZK membership + Midnight's senderless tx (no `msg.sender`, shielded fees) | ✅ |
+| The company alters or repudiates the evidence | `reportId` sealed on-chain; altering the evidence breaks the hash | ✅ |
+| A third party claims the report (steals the reward) | Only the author knows `(evidenceHash, secret)` — preimage of `reportId` | ✅ |
+| The employer reuses/replays the authorship proof | Designated verifier: authorship is tied to `prosecutorPk` | ✅ |
+| Spam / drowning the channel with fake reports | Nullifier `H(secret ‖ orgId ‖ period)` | ✅ (weak in Option B — declared) |
+| Report with false content | **None.** We don't prove veracity — stated upfront | ❌ declared |
+| Off-chain metadata (indexer sees viewing key/IP) | Local proof server + Tor/own node; fee-sponsor roadmap | ⚠️ mitigated, declared |
+| Timing correlation (report at 3 AM, only Juan was online) | Out of scope; coarse periods help | ⚠️ declared |
 
-## 7. Fuera de alcance (no implementar)
+## 7. Out of scope (do not implement)
 
-- Emisor de credenciales real (directorio corporativo, firma del empleador) → roadmap.
-- Cifrado E2E de la evidencia hacia el fiscal → stretch, si sobra tiempo.
-- Revocación de credenciales.
-- Recompensas on-chain / tokens.
-- Multi-chain, indexer propio, fee-sponsor (→ roadmap en el deck).
+- Real credential issuer (corporate directory, employer signature) → roadmap.
+- E2E encryption of evidence to prosecutor → stretch, if time permits.
+- Credential revocation.
+- On-chain rewards / tokens.
+- Multi-chain, custom indexer, fee-sponsor (→ roadmap in the deck).
 
-## 8. Nota obligatoria sobre sintaxis Compact
+## 8. Mandatory note on Compact syntax
 
-El pseudocódigo de abajo es **ilustrativo**. La sintaxis cambia entre versiones
-(p. ej. `disclose()` es obligatorio para publicar valores derivados de
-witnesses). **Procedimiento obligatorio, en este orden:**
+The pseudocode below is **illustrative**. The syntax changes between versions
+(e.g. `disclose()` is mandatory for publishing witness-derived values).
+**Mandatory procedure, in this order:**
 
-1. Compilar un **template oficial sin tocarlo** primero.
-2. Leer qué sintaxis usa *ese* template: `pragma`, imports de la standard
-   library, tipos, firma de los hashes.
-3. Adaptar esta especificación a esa sintaxis. **Adaptá la sintaxis, nunca la
-   semántica.**
+1. Compile an **official template untouched** first.
+2. Read what syntax *that* template uses: `pragma`, standard library imports,
+   types, hash signatures.
+3. Adapt this specification to that syntax. **Adapt the syntax, never the
+   semantics.**
 
-No inventes API. Si `persistentHash` no existe con ese nombre o aridad, usá lo
-que exponga la standard library instalada. Verificar también: si Compact
-expone tiempo/altura de bloque (para el sellado) o si el timestamp fino queda
-como orden de inclusión + `periodo` como input público.
+Do not invent APIs. If `persistentHash` doesn't exist with that name or arity,
+use whatever the installed standard library exposes. Also verify: whether
+Compact exposes time/block height (for sealing) or whether fine-grained
+timestamp is left as inclusion order + `period` as a public input.
 
 ```compact
-// PSEUDOCÓDIGO — adaptar a la versión instalada. Ver §8.
+// PSEUDOCODE — adapt to the installed version. See §8.
 
-export ledger organizaciones: Map<Bytes<32>, Bytes<32>>;
-export ledger denuncias: Set<Bytes<32>>;
+export ledger organizations: Map<Bytes<32>, Bytes<32>>;
+export ledger reports: Set<Bytes<32>>;
 export ledger nullifiers: Set<Bytes<32>>;
-export ledger autorias: Set<Bytes<32>>;
+export ledger authorships: Set<Bytes<32>>;
 
-witness credencialSecret(): Bytes<32>;
-witness merklePath(): /* según stdlib instalada — solo Opción A */;
-witness secretPersonal(): Bytes<32>;
-witness evidenciaHash(): Bytes<32>;
+witness credentialSecret(): Bytes<32>;
+witness merklePath(): /* per installed stdlib — Option A only */;
+witness personalSecret(): Bytes<32>;
+witness evidenceHash(): Bytes<32>;
 
-export circuit registrarOrganizacion(orgId: Bytes<32>, ancla: Bytes<32>): [] {
-  assert(!organizaciones.member(orgId), "organizacion ya registrada");
-  organizaciones.insert(orgId, ancla);
+export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
+  assert(!organizations.member(orgId), "organization already registered");
+  organizations.insert(orgId, anchor);
 }
 
-export circuit denunciar(orgId: Bytes<32>, periodo: Bytes<32>): [] {
-  const cred = credencialSecret();
-  const sec  = secretPersonal();
-  const ev   = evidenciaHash();
+export circuit report(orgId: Bytes<32>, period: Bytes<32>): [] {
+  const cred = credentialSecret();
+  const sec  = personalSecret();
+  const ev   = evidenceHash();
 
-  // C1 — pertenencia (Opción A: verificar merklePath contra organizaciones[orgId])
-  assertCredencialValida(cred, organizaciones.lookup(orgId));
+  // C1 — membership (Option A: verify merklePath against organizations[orgId])
+  assertValidCredential(cred, organizations.lookup(orgId));
 
-  const nul = persistentHash<...>([sec, orgId, periodo]);
-  assert(!nullifiers.member(disclose(nul)), "ya denunciaste este periodo");
+  const nul = persistentHash<...>([sec, orgId, period]);
+  assert(!nullifiers.member(disclose(nul)), "already reported this period");
 
   const id = persistentHash<...>([ev, sec]);
 
-  denuncias.insert(disclose(id));
+  reports.insert(disclose(id));
   nullifiers.insert(disclose(nul));
 }
 
-export circuit revelarAutoria(denunciaId: Bytes<32>, fiscalPk: Bytes<32>): [] {
-  const sec = secretPersonal();
-  const ev  = evidenciaHash();
+export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [] {
+  const sec = personalSecret();
+  const ev  = evidenceHash();
 
-  assert(persistentHash<...>([ev, sec]) == denunciaId, "no sos el autor");
-  assert(denuncias.member(denunciaId), "denuncia inexistente");
+  assert(persistentHash<...>([ev, sec]) == reportId, "not the author");
+  assert(reports.member(reportId), "report does not exist");
 
-  autorias.insert(disclose(persistentHash<...>([sec, denunciaId, fiscalPk])));
+  authorships.insert(disclose(persistentHash<...>([sec, reportId, prosecutorPk])));
 }
 ```
