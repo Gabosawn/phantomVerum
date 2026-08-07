@@ -5,12 +5,15 @@ import { describe, expect, it } from "vitest";
 import {
   aHex,
   authorshipOf,
+  credCommitmentOf,
   deHex,
+  EPOCH_DURATION_SECONDS,
+  epochIndexOf,
+  epochToBytes32,
   hashDeArchivo,
   leafOf,
   nullifierOf,
   pad32,
-  periodoABytes32,
   reportIdOf,
   secretNuevo,
 } from "./cripto";
@@ -47,8 +50,31 @@ describe("codificación", () => {
     expect(() => deHex("abc")).toThrow(/hex inválido/);
   });
 
-  it("periodoABytes32 produce 32 bytes", () => {
-    expect(periodoABytes32("2026-08")).toHaveLength(64);
+  it("epochToBytes32 encodes the epoch index big-endian in 32 bytes", () => {
+    expect(epochToBytes32(0)).toHaveLength(32);
+    // Value in the last 8 bytes, zero-padded on the left — deterministic.
+    expect(aHex(epochToBytes32(0x1234))).toBe(`${"0".repeat(60)}1234`);
+    expect(aHex(epochToBytes32(20672n))).toBe(aHex(epochToBytes32(20672)));
+  });
+
+  it("epochToBytes32 rejects values outside Uint<64>", () => {
+    expect(() => epochToBytes32(-1)).toThrow(/does not fit in Uint<64>/);
+    expect(() => epochToBytes32(1n << 64n)).toThrow(/does not fit in Uint<64>/);
+  });
+});
+
+describe("reporting epochs — mirror of the contract's C0 arithmetic", () => {
+  it("epochIndexOf is floor(unixSeconds / 86400)", () => {
+    const start = 20672 * EPOCH_DURATION_SECONDS;
+    expect(epochIndexOf(start)).toBe(20672);
+    expect(epochIndexOf(start + EPOCH_DURATION_SECONDS - 1)).toBe(20672);
+    expect(epochIndexOf(start + EPOCH_DURATION_SECONDS)).toBe(20673);
+  });
+
+  it("consecutive epochs yield different nullifiers for the same credential", async () => {
+    const a = await nullifierOf(CRED, ORG_ID, 20672);
+    const b = await nullifierOf(CRED, ORG_ID, 20673);
+    expect(a).not.toBe(b);
   });
 });
 
@@ -73,15 +99,28 @@ describe("derivaciones — espejo de los pure circuits", () => {
   });
 
   it("todas devuelven Bytes<32>", async () => {
-    const periodo = periodoABytes32("2026-08");
     for (const h of [
-      await leafOf(ORG_ID, CRED),
+      await credCommitmentOf(CRED),
+      await leafOf(ORG_ID, await credCommitmentOf(CRED)),
       await reportIdOf("00".repeat(32), SECRET),
-      await nullifierOf(CRED, ORG_ID, periodo),
+      await nullifierOf(CRED, ORG_ID, 20672),
       await authorshipOf(SECRET, "00".repeat(32), PK_PIA),
     ]) {
       expect(h).toMatch(/^[0-9a-f]{64}$/);
     }
+  });
+
+  it("credCommitmentOf is deterministic and never equals the raw secret", async () => {
+    expect(await credCommitmentOf(CRED)).toBe(await credCommitmentOf(CRED));
+    expect(await credCommitmentOf(CRED)).not.toBe(CRED);
+  });
+
+  it("leafOf takes the COMMITMENT: commitment and raw secret give different leaves", async () => {
+    // Mirrors the unified contract: leaf = H(dom, orgId, credCommitmentOf(sec)).
+    // Feeding the raw secret where the commitment belongs must not collide.
+    const fromCommitment = await leafOf(ORG_ID, await credCommitmentOf(CRED));
+    const fromRawSecret = await leafOf(ORG_ID, CRED);
+    expect(fromCommitment).not.toBe(fromRawSecret);
   });
 
   it("el orden de los argumentos importa", async () => {
@@ -97,8 +136,12 @@ describe("domain separation", () => {
    * aunque les entren exactamente los mismos argumentos.
    */
   it("nullifier y autoría no colisionan con los mismos tres argumentos", async () => {
-    const a = await nullifierOf(SECRET, ORG_ID, PK_PIA);
-    const b = await authorshipOf(SECRET, ORG_ID, PK_PIA);
+    // Same byte content in every position: the epoch encoding fed to the
+    // nullifier is reused verbatim as the authorship's prosecutorPk. Only the
+    // domain tag differs, and that alone must keep the spaces disjoint.
+    const epoch = 20672;
+    const a = await nullifierOf(SECRET, ORG_ID, epoch);
+    const b = await authorshipOf(SECRET, ORG_ID, aHex(epochToBytes32(epoch)));
     expect(a).not.toBe(b);
   });
 
@@ -106,6 +149,14 @@ describe("domain separation", () => {
     const a = await leafOf(ORG_ID, SECRET);
     const b = await reportIdOf(ORG_ID, SECRET);
     expect(a).not.toBe(b);
+  });
+
+  it("commitment y hash de archivo tampoco comparten espacio", async () => {
+    // credCommitmentOf prefixes its domain tag; a bare SHA-256 of the same
+    // 32 bytes (what hashDeArchivo would produce) must not collide with it.
+    const asCommitment = await credCommitmentOf(SECRET);
+    const asBareHash = await hashDeArchivo(deHex(SECRET));
+    expect(asCommitment).not.toBe(asBareHash);
   });
 });
 

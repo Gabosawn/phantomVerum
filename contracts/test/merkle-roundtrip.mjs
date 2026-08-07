@@ -1,78 +1,78 @@
-// Los 4 tiempos de la demo (docs/01-arquitectura.md §2), de punta a punta,
-// contra el contrato COMPILADO REAL en el simulador local. Sin red, sin
-// proof server. Es el mismo camino que va a recorrer app/ en B3.
+// The 4 acts of the demo (docs/01-arquitectura.md §2), end to end, against
+// the REAL COMPILED contract in the local simulator. No network, no proof
+// server. It is the same path app/ will walk in B3.
 
 import {
-  pureCircuits, nuevoMundo, b32, hex, check, checkRechaza, resumen, EPOCA,
+  pureCircuits, newWorld, b32, hex, check, checkRejects, summary, EPOCH,
 } from './harness.mjs';
 
 const orgId = b32(0x11);
-const ancla = b32(0xaa);
+const anchor = b32(0xaa);
 const credSecret = b32(0x22);
-const secretPersonal = b32(0x44);
-const evidenciaHash = b32(0x33);
-const fiscalPk = b32(0x66);
-const empleadorPk = b32(0x77);
+const personalSecret = b32(0x44);
+const evidenceHash = b32(0x33);
+const prosecutorPk = b32(0x66);
+const employerPk = b32(0x77);
 
-const credComm = pureCircuits.credCommitmentDe(credSecret);
-const hoja = pureCircuits.hojaDe(orgId, credComm);
+const credComm = pureCircuits.credCommitmentOf(credSecret);
+const leaf = pureCircuits.leafOf(orgId, credComm);
 
-// El witness real que va a vivir en app/src/witnesses/index.ts (B2.3).
+// The real witness set that will live in app/src/witnesses/index.ts (B2.3).
 const witnesses = {
-  credencialSecret: (c) => [c.privateState, credSecret],
-  secretPersonal: (c) => [c.privateState, secretPersonal],
-  evidenciaHash: (c) => [c.privateState, evidenciaHash],
-  credencialPath: (c) => {
-    const camino = c.ledger.credenciales.findPathForLeaf(hoja);
-    if (camino === undefined) throw new Error('credencial no emitida para esta org');
-    return [c.privateState, camino.path];
+  credentialSecret: (c) => [c.privateState, credSecret],
+  personalSecret: (c) => [c.privateState, personalSecret],
+  evidenceHash: (c) => [c.privateState, evidenceHash],
+  credentialPath: (c) => {
+    const path = c.ledger.credentials.findPathForLeaf(leaf);
+    if (path === undefined) throw new Error('no credential issued for this org');
+    return [c.privateState, path.path];
   },
 };
 
-const m = nuevoMundo(witnesses);
+const m = newWorld(witnesses);
 
-console.log('=== T1. La org se registra y emite una credencial ===');
-m.call('registrarOrganizacion', orgId, ancla);
-check('organizaciones.size == 1', m.estado().organizaciones.size() === 1n);
+console.log('=== T1. The org registers and issues a credential ===');
+m.call('registerOrganization', orgId, anchor);
+check('organizations.size == 1', m.state().organizations.size() === 1n);
 console.log(`  credCommitment = ${hex(credComm)}`);
-console.log(`  hoja           = ${hex(hoja)}`);
-// El emisor manda el COMMITMENT; el contrato construye la hoja en circuito.
-m.call('emitirCredencial', orgId, credComm);
-check('credenciales.firstFree == 1', m.estado().credenciales.firstFree() === 1n);
+console.log(`  leaf           = ${hex(leaf)}`);
+// The issuer sends the COMMITMENT; the contract builds the leaf in-circuit.
+m.call('issueCredential', orgId, credComm);
+check('credentials.firstFree == 1', m.state().credentials.firstFree() === 1n);
 
-const camino = m.estado().credenciales.findPathForLeaf(hoja);
-check('findPathForLeaf encuentra la hoja construida en circuito', camino !== undefined);
-check('el path tiene 8 hermanos', camino?.path.length === 8, `len=${camino?.path.length}`);
-check('findPathForLeaf de una hoja ajena -> undefined',
-  m.estado().credenciales.findPathForLeaf(b32(0x99)) === undefined);
+const path = m.state().credentials.findPathForLeaf(leaf);
+check('findPathForLeaf finds the leaf built in-circuit', path !== undefined);
+check('the path has 8 siblings', path?.path.length === 8, `len=${path?.path.length}`);
+check('findPathForLeaf of a foreign leaf -> undefined',
+  m.state().credentials.findPathForLeaf(b32(0x99)) === undefined);
 
-console.log('\n=== T2. Denuncia (usa el witness credencialPath) ===');
-m.call('denunciar', orgId, EPOCA);
-const denunciaId = pureCircuits.denunciaIdDe(evidenciaHash, secretPersonal);
-const nullifier = pureCircuits.nullifierDe(credSecret, orgId, EPOCA);
-console.log(`  denunciaId = ${hex(denunciaId)}`);
-console.log(`  nullifier  = ${hex(nullifier)}`);
-check('la denuncia quedo sellada', m.estado().denuncias.member(denunciaId));
-check('el nullifier quedo quemado', m.estado().nullifiers.member(nullifier));
+console.log('\n=== T2. Report (uses the credentialPath witness) ===');
+m.call('report', orgId, EPOCH);
+const reportId = pureCircuits.reportIdOf(evidenceHash, personalSecret);
+const nullifier = pureCircuits.nullifierOf(credSecret, orgId, EPOCH);
+console.log(`  reportId  = ${hex(reportId)}`);
+console.log(`  nullifier = ${hex(nullifier)}`);
+check('the report got sealed', m.state().reports.member(reportId));
+check('the nullifier got burned', m.state().nullifiers.member(nullifier));
 
-console.log('\n=== T3. La evidencia no se puede alterar ni re-denunciar ===');
-checkRechaza('re-denuncia en la misma epoca',
-  () => m.call('denunciar', orgId, EPOCA), 'ya denunciaste este periodo');
+console.log('\n=== T3. Evidence cannot be altered nor re-reported ===');
+checkRejects('re-report within the same epoch',
+  () => m.call('report', orgId, EPOCH), 'already reported this period');
 
-console.log('\n=== T4. Autoria diferida, ligada al fiscal ===');
-m.call('revelarAutoria', denunciaId, fiscalPk);
-const autoriaHash = pureCircuits.autoriaDe(secretPersonal, denunciaId, fiscalPk);
-console.log(`  autoriaHash = ${hex(autoriaHash)}`);
-check('la autoria quedo registrada', m.estado().autorias.member(autoriaHash));
+console.log('\n=== T4. Deferred authorship, bound to the prosecutor ===');
+m.call('revealAuthorship', reportId, prosecutorPk);
+const authorshipHash = pureCircuits.authorshipOf(personalSecret, reportId, prosecutorPk);
+console.log(`  authorshipHash = ${hex(authorshipHash)}`);
+check('the authorship got recorded', m.state().authorships.member(authorshipHash));
 
-checkRechaza('un secret ajeno no puede reclamar la autoria',
-  () => m.callComo({ ...witnesses, secretPersonal: (c) => [c.privateState, b32(0x99)] },
-    'revelarAutoria', denunciaId, fiscalPk),
-  'no sos el autor');
+checkRejects('a foreign secret cannot claim the authorship',
+  () => m.callAs({ ...witnesses, personalSecret: (c) => [c.privateState, b32(0x99)] },
+    'revealAuthorship', reportId, prosecutorPk),
+  'not the author');
 
-console.log('\n--- El momento del video: misma denuncia, dos verificadores ---');
-const hashEmpleador = pureCircuits.autoriaDe(secretPersonal, denunciaId, empleadorPk);
-check('FISCAL   -> la autoria verifica', m.estado().autorias.member(autoriaHash));
-check('EMPLEADOR -> no verifica', !m.estado().autorias.member(hashEmpleador));
+console.log('\n--- The video moment: same report, two verifiers ---');
+const employerHash = pureCircuits.authorshipOf(personalSecret, reportId, employerPk);
+check('PROSECUTOR -> the authorship verifies', m.state().authorships.member(authorshipHash));
+check('EMPLOYER   -> does not verify', !m.state().authorships.member(employerHash));
 
-resumen('merkle-roundtrip');
+summary('merkle-roundtrip');

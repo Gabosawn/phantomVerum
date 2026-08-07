@@ -1,111 +1,110 @@
-// B2.1 — Almacén local de secrets del denunciante.
+// B2.1 — Local store of the whistleblower's secrets.
 //
-// Formato v2 (docs/03-plan-ejecucion.md §3.2), congelado:
+// Format v2 (docs/03-plan-ejecucion.md §3.2):
 //
 //   { "version": 2,
-//     "credencialSecret": "<hex64>",
+//     "credentialSecret": "<hex64>",
 //     "orgId": "<hex64>",
-//     "hojaIndex": 3 | null,
-//     "denuncias": { "<denunciaId>": { "secretDenuncia": "<hex64>",
-//                                      "evidenciaHash": "<hex64>" } } }
+//     "leafIndex": 3 | null,
+//     "reports": { "<reportId>": { "reportSecret": "<hex64>",
+//                                  "evidenceHash": "<hex64>" } } }
 //
-// ── Por qué v2: un secret POR DENUNCIA, no uno global ────────────────────
-// El hallazgo H-3 del review de seguridad (docs/03 §3.4, reproducido en el
-// simulador) es que un `secretPersonal` único reusado en todas las denuncias
-// convierte cualquier revelación de autoría en una desanonimización
-// RETROACTIVA de todo el historial: quien recibe el export aprende el secret
-// y con él puede recomputar `denunciaIdDe(evidenciaHash, secret)` para
-// cualquier evidencia que sospeche, y así atribuirle al autor todas sus
-// denuncias pasadas. Con un secret fresco por denuncia el daño de un reveal
-// queda acotado a ESA denuncia.
+// ── Why v2: one secret PER REPORT, not a global one ─────────────────────
+// Finding H-3 of the security review (docs/03 §3.4, reproduced in the
+// simulator) is that a single `personalSecret` reused across all reports
+// turns any authorship reveal into a RETROACTIVE de-anonymization of the
+// whole history: whoever receives the export learns the secret and can
+// recompute `reportIdOf(evidenceHash, secret)` for any evidence they
+// suspect, attributing all the author's past reports to them. With a fresh
+// secret per report, the damage of one reveal is bounded to THAT report.
 //
-// Por eso `denuncias` es un mapa: cada `denunciaId` guarda el par
-// (secretDenuncia, evidenciaHash) que lo generó, y es lo único que hace
-// falta para revelar la autoría de esa denuncia meses después.
+// That is why `reports` is a map: each `reportId` stores the pair
+// (reportSecret, evidenceHash) that generated it, and that is all it takes
+// to reveal that report's authorship months later.
 //
-// El archivo vive en `secrets/`, que ya está en `.gitignore`, y se escribe
-// con permisos 0600 (solo el dueño).
+// The file lives under `secrets/`, which is already in `.gitignore`, and is
+// written with 0600 permissions (owner only).
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { esPeriodoSerializado, periodoAJson, periodoDesdeJson } from './epoca.js';
+import { isSerializedPeriod, periodToJson, periodFromJson } from './epoch.js';
 import {
   type Hex32,
-  aHex,
-  bytesAleatorios32,
-  comoHex32,
-  esHex32,
+  toHex,
+  randomBytes32,
+  asHex32,
+  isHex32,
 } from './hex.js';
 
-// ── Tipos del formato persistido ────────────────────────────────────────
+// ── Types of the persisted format ───────────────────────────────────────
 
-export const VERSION_SECRETS = 2 as const;
+export const SECRETS_VERSION = 2 as const;
 
-export interface RegistroDenuncia {
-  /** Secret fresco de ESTA denuncia. Nunca se reusa en otra. */
-  readonly secretDenuncia: Hex32;
-  /** sha-256 del archivo de evidencia (el archivo nunca sale de la máquina). */
-  readonly evidenciaHash: Hex32;
+export interface ReportRecord {
+  /** Fresh secret of THIS report. Never reused for another one. */
+  readonly reportSecret: Hex32;
+  /** sha-256 of the evidence file (the file never leaves the machine). */
+  readonly evidenceHash: Hex32;
   /**
-   * Época en que se emitió, como string decimal.
+   * Epoch in which it was submitted, as a decimal string.
    *
-   * `periodo` es `Uint<64>` en el contrato -> `bigint` en TS, y `bigint` no
-   * sobrevive a `JSON.stringify` (lanza TypeError). Se guarda serializado y
-   * se recupera con `periodoDeRegistro`. Es opcional porque NO hace falta
-   * para revelar autoría — `revelarAutoria` solo usa (secretDenuncia,
-   * evidenciaHash). Queda como dato de diagnóstico: permite explicar un
-   * "ya denunciaste este periodo" sin adivinar.
+   * `period` is `Uint<64>` in the contract -> `bigint` in TS, and `bigint`
+   * does not survive `JSON.stringify` (throws TypeError). It is stored
+   * serialized and recovered with `periodOfRecord`. It is optional because it
+   * is NOT needed to reveal authorship — `revealAuthorship` only uses
+   * (reportSecret, evidenceHash). It stays as diagnostic data: it lets you
+   * explain an "already reported this period" without guessing.
    */
-  readonly periodo?: string;
+  readonly period?: string;
 }
 
-/** Época de un registro como bigint, o null si no se guardó. */
-export function periodoDeRegistro(registro: RegistroDenuncia): bigint | null {
-  return registro.periodo === undefined ? null : periodoDesdeJson(registro.periodo);
+/** Epoch of a record as a bigint, or null if it was not stored. */
+export function periodOfRecord(record: ReportRecord): bigint | null {
+  return record.period === undefined ? null : periodFromJson(record.period);
 }
 
-export interface SecretsDenunciante {
-  readonly version: typeof VERSION_SECRETS;
-  /** Secret de la credencial. Lo genera el CLIENTE; el emisor nunca lo ve. */
-  readonly credencialSecret: Hex32;
-  /** Organización que emitió la credencial. */
+export interface WhistleblowerSecrets {
+  readonly version: typeof SECRETS_VERSION;
+  /** Credential secret. Generated by the CLIENT; the issuer never sees it. */
+  readonly credentialSecret: Hex32;
+  /** Organization that issued the credential. */
   readonly orgId: Hex32;
-  /** Índice de la hoja en el árbol on-chain; null hasta que se emite. */
-  readonly hojaIndex: number | null;
-  /** denunciaId -> secrets de esa denuncia. */
-  readonly denuncias: Readonly<Record<Hex32, RegistroDenuncia>>;
+  /** Index of the leaf in the on-chain tree; null until issued. */
+  readonly leafIndex: number | null;
+  /** reportId -> secrets of that report. */
+  readonly reports: Readonly<Record<Hex32, ReportRecord>>;
 }
 
-export class SecretsCorruptosError extends Error {
-  constructor(detalle: string, public readonly ruta: string) {
-    super(`secrets inválidos en ${ruta}: ${detalle}`);
-    this.name = 'SecretsCorruptosError';
+export class CorruptSecretsError extends Error {
+  constructor(detail: string, public readonly path: string) {
+    super(`invalid secrets at ${path}: ${detail}`);
+    this.name = 'CorruptSecretsError';
   }
 }
 
-export class SecretsNoExistenError extends Error {
-  constructor(public readonly ruta: string) {
-    super(`no hay secrets en ${ruta} — corré \`emitir-credencial\` primero`);
-    this.name = 'SecretsNoExistenError';
+export class SecretsNotFoundError extends Error {
+  constructor(public readonly path: string) {
+    super(`no secrets at ${path} — run \`issue-credential\` first`);
+    this.name = 'SecretsNotFoundError';
   }
 }
 
-// ── Ubicación del archivo ───────────────────────────────────────────────
+// ── File location ───────────────────────────────────────────────────────
 
-const MODO_ARCHIVO = 0o600;
-const MODO_DIRECTORIO = 0o700;
+const FILE_MODE = 0o600;
+const DIR_MODE = 0o700;
 
 /**
- * Raíz del repo: el primer ancestro con un `package.json` que declare
- * `workspaces`. Se resuelve desde la ubicación del módulo y NO desde
- * `process.cwd()`, porque `npm run <script> --workspace=app` corre con cwd en
- * `app/` y `node dist/scripts/x.js` desde la raíz corre con cwd en la raíz:
- * sin esto, los dos escribirían secrets en lugares distintos y el denunciante
- * perdería el acceso a sus propias denuncias.
+ * Repo root: the first ancestor with a `package.json` declaring `workspaces`.
+ * Resolved from the module location and NOT from `process.cwd()`, because
+ * `npm run <script> --workspace=app` runs with cwd in `app/` while
+ * `node dist/scripts/x.js` from the root runs with cwd at the root: without
+ * this, the two would write secrets in different places and the whistleblower
+ * would lose access to their own reports.
  */
-function raizRepo(): string {
+function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 12; i++) {
     const pj = path.join(dir, 'package.json');
@@ -120,279 +119,280 @@ function raizRepo(): string {
           return dir;
         }
       } catch {
-        // package.json ilegible: seguir subiendo.
+        // Unreadable package.json: keep climbing.
       }
     }
-    const padre = path.dirname(dir);
-    if (padre === dir) break;
-    dir = padre;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
   return process.cwd();
 }
 
 /**
- * Ruta del almacén. Override con `TESTIGO_SECRETS` (lo usan los selftests
- * para no pisar los secrets reales del denunciante).
+ * Path of the store. Override with `TESTIGO_SECRETS` (the selftests use it so
+ * they never touch the whistleblower's real secrets).
  */
-export function rutaSecrets(): string {
+export function secretsPath(): string {
   const override = process.env['TESTIGO_SECRETS'];
   if (override !== undefined && override !== '') return path.resolve(override);
-  return path.join(raizRepo(), 'secrets', 'denunciante.json');
+  return path.join(repoRoot(), 'secrets', 'denunciante.json');
 }
 
-function resolver(ruta?: string): string {
-  return ruta === undefined ? rutaSecrets() : path.resolve(ruta);
+function resolve(filePath?: string): string {
+  return filePath === undefined ? secretsPath() : path.resolve(filePath);
 }
 
-// ── Validación ──────────────────────────────────────────────────────────
+// ── Validation ──────────────────────────────────────────────────────────
 
-function exigirHex32(valor: unknown, campo: string, ruta: string): Hex32 {
-  if (!esHex32(valor)) {
-    throw new SecretsCorruptosError(`campo "${campo}" no es un hex de 64 chars`, ruta);
+function requireHex32(value: unknown, field: string, filePath: string): Hex32 {
+  if (!isHex32(value)) {
+    throw new CorruptSecretsError(`field "${field}" is not a 64-char hex string`, filePath);
   }
-  return valor;
+  return value;
 }
 
-function validar(crudo: unknown, ruta: string): SecretsDenunciante {
-  if (typeof crudo !== 'object' || crudo === null || Array.isArray(crudo)) {
-    throw new SecretsCorruptosError('el JSON no es un objeto', ruta);
+function validate(raw: unknown, filePath: string): WhistleblowerSecrets {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new CorruptSecretsError('the JSON is not an object', filePath);
   }
-  const o = crudo as Record<string, unknown>;
+  const o = raw as Record<string, unknown>;
 
-  if (o['version'] !== VERSION_SECRETS) {
-    throw new SecretsCorruptosError(
-      `version ${String(o['version'])}, se esperaba ${VERSION_SECRETS}. ` +
-        'El formato v1 tenía un `secretPersonal` global, inseguro por H-3 ' +
-        '(docs/03 §3.4): no se migra automáticamente, hay que reemitir.',
-      ruta,
+  if (o['version'] !== SECRETS_VERSION) {
+    throw new CorruptSecretsError(
+      `version ${String(o['version'])}, expected ${SECRETS_VERSION}. ` +
+        'The v1 format had a global `personalSecret`, insecure per H-3 ' +
+        '(docs/03 §3.4): it is not migrated automatically, re-issue instead.',
+      filePath,
     );
   }
 
-  const hojaIndex = o['hojaIndex'];
+  const leafIndex = o['leafIndex'];
   if (
-    hojaIndex !== null &&
-    !(typeof hojaIndex === 'number' && Number.isInteger(hojaIndex) && hojaIndex >= 0)
+    leafIndex !== null &&
+    !(typeof leafIndex === 'number' && Number.isInteger(leafIndex) && leafIndex >= 0)
   ) {
-    throw new SecretsCorruptosError('"hojaIndex" no es un entero >= 0 ni null', ruta);
+    throw new CorruptSecretsError('"leafIndex" is not an integer >= 0 nor null', filePath);
   }
 
-  const crudoDenuncias = o['denuncias'];
+  const rawReports = o['reports'];
   if (
-    typeof crudoDenuncias !== 'object' ||
-    crudoDenuncias === null ||
-    Array.isArray(crudoDenuncias)
+    typeof rawReports !== 'object' ||
+    rawReports === null ||
+    Array.isArray(rawReports)
   ) {
-    throw new SecretsCorruptosError('"denuncias" no es un objeto', ruta);
+    throw new CorruptSecretsError('"reports" is not an object', filePath);
   }
 
-  const denuncias: Record<Hex32, RegistroDenuncia> = {};
-  for (const [id, valor] of Object.entries(crudoDenuncias as Record<string, unknown>)) {
-    exigirHex32(id, `denuncias["${id}"] (la clave)`, ruta);
-    if (typeof valor !== 'object' || valor === null) {
-      throw new SecretsCorruptosError(`denuncias["${id}"] no es un objeto`, ruta);
+  const reports: Record<Hex32, ReportRecord> = {};
+  for (const [id, value] of Object.entries(rawReports as Record<string, unknown>)) {
+    requireHex32(id, `reports["${id}"] (the key)`, filePath);
+    if (typeof value !== 'object' || value === null) {
+      throw new CorruptSecretsError(`reports["${id}"] is not an object`, filePath);
     }
-    const r = valor as Record<string, unknown>;
-    const periodo = r['periodo'];
-    if (periodo !== undefined && !esPeriodoSerializado(periodo)) {
-      throw new SecretsCorruptosError(
-        `denuncias["${id}"].periodo no es un entero decimal en string`,
-        ruta,
+    const r = value as Record<string, unknown>;
+    const period = r['period'];
+    if (period !== undefined && !isSerializedPeriod(period)) {
+      throw new CorruptSecretsError(
+        `reports["${id}"].period is not a decimal integer string`,
+        filePath,
       );
     }
-    denuncias[id] = {
-      secretDenuncia: exigirHex32(r['secretDenuncia'], `denuncias["${id}"].secretDenuncia`, ruta),
-      evidenciaHash: exigirHex32(r['evidenciaHash'], `denuncias["${id}"].evidenciaHash`, ruta),
-      ...(periodo === undefined ? {} : { periodo }),
+    reports[id] = {
+      reportSecret: requireHex32(r['reportSecret'], `reports["${id}"].reportSecret`, filePath),
+      evidenceHash: requireHex32(r['evidenceHash'], `reports["${id}"].evidenceHash`, filePath),
+      ...(period === undefined ? {} : { period }),
     };
   }
 
   return {
-    version: VERSION_SECRETS,
-    credencialSecret: exigirHex32(o['credencialSecret'], 'credencialSecret', ruta),
-    orgId: exigirHex32(o['orgId'], 'orgId', ruta),
-    hojaIndex: hojaIndex as number | null,
-    denuncias,
+    version: SECRETS_VERSION,
+    credentialSecret: requireHex32(o['credentialSecret'], 'credentialSecret', filePath),
+    orgId: requireHex32(o['orgId'], 'orgId', filePath),
+    leafIndex: leafIndex as number | null,
+    reports,
   };
 }
 
-// ── Lectura / escritura ─────────────────────────────────────────────────
+// ── Read / write ────────────────────────────────────────────────────────
 
-export function existenSecrets(ruta?: string): boolean {
-  return fs.existsSync(resolver(ruta));
+export function secretsExist(filePath?: string): boolean {
+  return fs.existsSync(resolve(filePath));
 }
 
-/** Devuelve null si el archivo no existe. Lanza si existe pero está roto. */
-export function leerSecrets(ruta?: string): SecretsDenunciante | null {
-  const destino = resolver(ruta);
-  if (!fs.existsSync(destino)) return null;
+/** Returns null if the file does not exist. Throws if it exists but is broken. */
+export function readSecrets(filePath?: string): WhistleblowerSecrets | null {
+  const target = resolve(filePath);
+  if (!fs.existsSync(target)) return null;
 
-  // Si alguien aflojó los permisos (p. ej. copiando el archivo), se corrigen
-  // acá: un archivo de secrets legible por el grupo/otros no sirve de nada.
-  const modo = fs.statSync(destino).mode & 0o777;
-  if (modo !== MODO_ARCHIVO) {
-    fs.chmodSync(destino, MODO_ARCHIVO);
+  // If someone loosened the permissions (e.g. by copying the file), they are
+  // fixed here: a secrets file readable by group/others is useless.
+  const mode = fs.statSync(target).mode & 0o777;
+  if (mode !== FILE_MODE) {
+    fs.chmodSync(target, FILE_MODE);
     console.warn(
-      `[secrets] permisos ${modo.toString(8)} en ${destino} — corregidos a 600`,
+      `[secrets] permissions ${mode.toString(8)} on ${target} — fixed to 600`,
     );
   }
 
-  let crudo: unknown;
+  let raw: unknown;
   try {
-    crudo = JSON.parse(fs.readFileSync(destino, 'utf8'));
+    raw = JSON.parse(fs.readFileSync(target, 'utf8'));
   } catch (e) {
-    throw new SecretsCorruptosError(`JSON ilegible (${String(e)})`, destino);
+    throw new CorruptSecretsError(`unreadable JSON (${String(e)})`, target);
   }
-  return validar(crudo, destino);
+  return validate(raw, target);
 }
 
-/** Igual que `leerSecrets` pero lanza si no existe. */
-export function exigirSecrets(ruta?: string): SecretsDenunciante {
-  const s = leerSecrets(ruta);
-  if (s === null) throw new SecretsNoExistenError(resolver(ruta));
+/** Same as `readSecrets` but throws if the file does not exist. */
+export function requireSecrets(filePath?: string): WhistleblowerSecrets {
+  const s = readSecrets(filePath);
+  if (s === null) throw new SecretsNotFoundError(resolve(filePath));
   return s;
 }
 
 /**
- * Escritura atómica con permisos 0600.
+ * Atomic write with 0600 permissions.
  *
- * Se escribe a un temporal y se renombra: si el proceso muere a la mitad, el
- * archivo viejo queda intacto. Perder este archivo a la mitad de un write
- * significa perder el acceso a las denuncias ya emitidas — no hay backup.
- * El temporal se crea ya con modo 0600 y `rename` preserva el modo, así que
- * los bytes nunca existen en disco con permisos laxos.
+ * Written to a temp file and renamed: if the process dies halfway, the old
+ * file stays intact. Losing this file in the middle of a write means losing
+ * access to the already-submitted reports — there is no backup. The temp file
+ * is created already in 0600 mode and `rename` preserves the mode, so the
+ * bytes never exist on disk with lax permissions.
  */
-export function escribirSecrets(secrets: SecretsDenunciante, ruta?: string): void {
-  const destino = resolver(ruta);
-  const dir = path.dirname(destino);
-  fs.mkdirSync(dir, { recursive: true, mode: MODO_DIRECTORIO });
+export function writeSecrets(secrets: WhistleblowerSecrets, filePath?: string): void {
+  const target = resolve(filePath);
+  const dir = path.dirname(target);
+  fs.mkdirSync(dir, { recursive: true, mode: DIR_MODE });
 
-  const tmp = path.join(dir, `.${path.basename(destino)}.${process.pid}.tmp`);
+  const tmp = path.join(dir, `.${path.basename(target)}.${process.pid}.tmp`);
   const json = `${JSON.stringify(secrets, null, 2)}\n`;
-  fs.writeFileSync(tmp, json, { mode: MODO_ARCHIVO });
+  fs.writeFileSync(tmp, json, { mode: FILE_MODE });
   try {
-    fs.renameSync(tmp, destino);
+    fs.renameSync(tmp, target);
   } catch (e) {
     fs.rmSync(tmp, { force: true });
     throw e;
   }
-  fs.chmodSync(destino, MODO_ARCHIVO);
+  fs.chmodSync(target, FILE_MODE);
 }
 
-// ── Operaciones de alto nivel ───────────────────────────────────────────
+// ── High-level operations ───────────────────────────────────────────────
 
 /**
- * Crea el almacén con un `credencialSecret` fresco y lo persiste.
+ * Creates the store with a fresh `credentialSecret` and persists it.
  *
- * SEGURIDAD (H-4, docs/03 §3.4): el secret lo genera EL CLIENTE, acá. Al
- * emisor de credenciales se le manda únicamente
- * `credCommitmentDe(credencialSecret)`. Si el emisor generara el secret,
- * podría recomputar `nullifierDe(credSecret, orgId, periodo)` de cualquier
- * empleado y desanonimizar quién denunció en cada período.
+ * SECURITY (H-4, docs/03 §3.4): the secret is generated by THE CLIENT, here.
+ * The credential issuer is sent only `credCommitmentOf(credentialSecret)`.
+ * If the issuer generated the secret, it could recompute
+ * `nullifierOf(credSecret, orgId, period)` for any employee and
+ * de-anonymize who reported in each period.
  */
-export function crearSecrets(orgId: Uint8Array | Hex32, ruta?: string): SecretsDenunciante {
-  const secrets: SecretsDenunciante = {
-    version: VERSION_SECRETS,
-    credencialSecret: aHex(bytesAleatorios32()),
-    orgId: comoHex32(orgId, 'orgId'),
-    hojaIndex: null,
-    denuncias: {},
+export function createSecrets(orgId: Uint8Array | Hex32, filePath?: string): WhistleblowerSecrets {
+  const secrets: WhistleblowerSecrets = {
+    version: SECRETS_VERSION,
+    credentialSecret: toHex(randomBytes32()),
+    orgId: asHex32(orgId, 'orgId'),
+    leafIndex: null,
+    reports: {},
   };
-  escribirSecrets(secrets, ruta);
+  writeSecrets(secrets, filePath);
   return secrets;
 }
 
-/** Lee los secrets existentes o crea unos nuevos para `orgId`. */
-export function leerOCrearSecrets(
+/** Reads the existing secrets or creates new ones for `orgId`. */
+export function readOrCreateSecrets(
   orgId: Uint8Array | Hex32,
-  ruta?: string,
-): SecretsDenunciante {
-  const existentes = leerSecrets(ruta);
-  if (existentes === null) return crearSecrets(orgId, ruta);
+  filePath?: string,
+): WhistleblowerSecrets {
+  const existing = readSecrets(filePath);
+  if (existing === null) return createSecrets(orgId, filePath);
 
-  const esperado = comoHex32(orgId, 'orgId');
-  if (existentes.orgId !== esperado) {
-    throw new SecretsCorruptosError(
-      `los secrets son de la org ${existentes.orgId}, se pidió ${esperado}. ` +
-        'Usá otra ruta (TESTIGO_SECRETS) en vez de pisar la credencial actual.',
-      resolver(ruta),
+  const expected = asHex32(orgId, 'orgId');
+  if (existing.orgId !== expected) {
+    throw new CorruptSecretsError(
+      `the secrets belong to org ${existing.orgId}, ${expected} was requested. ` +
+        'Use another path (TESTIGO_SECRETS) instead of overwriting the current credential.',
+      resolve(filePath),
     );
   }
-  return existentes;
+  return existing;
 }
 
-/** Guarda el índice de hoja que devolvió `emitirCredencial`. */
-export function fijarHojaIndex(hojaIndex: number, ruta?: string): SecretsDenunciante {
-  const actual = exigirSecrets(ruta);
-  const nuevo: SecretsDenunciante = { ...actual, hojaIndex };
-  escribirSecrets(nuevo, ruta);
-  return nuevo;
+/** Stores the leaf index returned by `issueCredential`. */
+export function setLeafIndex(leafIndex: number, filePath?: string): WhistleblowerSecrets {
+  const current = requireSecrets(filePath);
+  const next: WhistleblowerSecrets = { ...current, leafIndex };
+  writeSecrets(next, filePath);
+  return next;
 }
 
 /**
- * Secret fresco para UNA denuncia. Se llama una vez por denuncia; el
- * resultado nunca se reusa (ver la nota de v2 arriba).
+ * Fresh secret for ONE report. Called once per report; the result is never
+ * reused (see the v2 note above).
  */
-export function nuevoSecretDenuncia(): Uint8Array {
-  return bytesAleatorios32();
+export function newReportSecret(): Uint8Array {
+  return randomBytes32();
 }
 
 /**
- * Registra los secrets de una denuncia ya emitida.
+ * Registers the secrets of a submitted report.
  *
- * Se niega a pisar un `denunciaId` existente con datos distintos: sobrescribir
- * borraría el único secret que permite revelar la autoría de esa denuncia, y
- * es irrecuperable. Re-registrar los mismos valores es idempotente.
+ * Refuses to overwrite an existing `reportId` with different data:
+ * overwriting would erase the only secret that allows revealing that
+ * report's authorship, and it is unrecoverable. Re-registering the same
+ * values is idempotent.
  */
-export function agregarDenuncia(
-  denunciaId: Uint8Array | Hex32,
-  registro: {
-    secretDenuncia: Uint8Array | Hex32;
-    evidenciaHash: Uint8Array | Hex32;
-    periodo?: bigint;
+export function addReport(
+  reportId: Uint8Array | Hex32,
+  record: {
+    reportSecret: Uint8Array | Hex32;
+    evidenceHash: Uint8Array | Hex32;
+    period?: bigint;
   },
-  ruta?: string,
-): SecretsDenunciante {
-  const actual = exigirSecrets(ruta);
-  const id = comoHex32(denunciaId, 'denunciaId');
-  const nuevoRegistro: RegistroDenuncia = {
-    secretDenuncia: comoHex32(registro.secretDenuncia, 'secretDenuncia'),
-    evidenciaHash: comoHex32(registro.evidenciaHash, 'evidenciaHash'),
-    ...(registro.periodo === undefined ? {} : { periodo: periodoAJson(registro.periodo) }),
+  filePath?: string,
+): WhistleblowerSecrets {
+  const current = requireSecrets(filePath);
+  const id = asHex32(reportId, 'reportId');
+  const newRecord: ReportRecord = {
+    reportSecret: asHex32(record.reportSecret, 'reportSecret'),
+    evidenceHash: asHex32(record.evidenceHash, 'evidenceHash'),
+    ...(record.period === undefined ? {} : { period: periodToJson(record.period) }),
   };
 
-  const previo = actual.denuncias[id];
-  if (previo !== undefined) {
+  const previous = current.reports[id];
+  if (previous !== undefined) {
     if (
-      previo.secretDenuncia !== nuevoRegistro.secretDenuncia ||
-      previo.evidenciaHash !== nuevoRegistro.evidenciaHash
+      previous.reportSecret !== newRecord.reportSecret ||
+      previous.evidenceHash !== newRecord.evidenceHash
     ) {
-      throw new SecretsCorruptosError(
-        `la denuncia ${id} ya está registrada con otros secrets — ` +
-          'pisarla dejaría esa denuncia sin forma de revelar autoría',
-        resolver(ruta),
+      throw new CorruptSecretsError(
+        `report ${id} is already registered with different secrets — ` +
+          'overwriting it would leave that report with no way to reveal authorship',
+        resolve(filePath),
       );
     }
-    return actual;
+    return current;
   }
 
-  const nuevo: SecretsDenunciante = {
-    ...actual,
-    denuncias: { ...actual.denuncias, [id]: nuevoRegistro },
+  const next: WhistleblowerSecrets = {
+    ...current,
+    reports: { ...current.reports, [id]: newRecord },
   };
-  escribirSecrets(nuevo, ruta);
-  return nuevo;
+  writeSecrets(next, filePath);
+  return next;
 }
 
-/** Secrets de una denuncia, o null si no está en el almacén. */
-export function obtenerDenuncia(
-  denunciaId: Uint8Array | Hex32,
-  ruta?: string,
-): RegistroDenuncia | null {
-  const actual = exigirSecrets(ruta);
-  return actual.denuncias[comoHex32(denunciaId, 'denunciaId')] ?? null;
+/** Secrets of one report, or null if it is not in the store. */
+export function getReport(
+  reportId: Uint8Array | Hex32,
+  filePath?: string,
+): ReportRecord | null {
+  const current = requireSecrets(filePath);
+  return current.reports[asHex32(reportId, 'reportId')] ?? null;
 }
 
-/** denunciaIds registrados localmente, en orden de inserción. */
-export function listarDenuncias(ruta?: string): Hex32[] {
-  return Object.keys(exigirSecrets(ruta).denuncias);
+/** Locally registered reportIds, in insertion order. */
+export function listReports(filePath?: string): Hex32[] {
+  return Object.keys(requireSecrets(filePath).reports);
 }

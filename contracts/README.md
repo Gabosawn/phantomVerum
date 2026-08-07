@@ -1,147 +1,151 @@
-# `contracts/` — Testigo en Compact
+# `contracts/` — Testigo in Compact
 
-Contrato Compact del proyecto **Testigo**: denuncias anónimas con **autoría
-diferida**. Spec semántica en [`../docs/01-arquitectura.md`](../docs/01-arquitectura.md)
-§3–§5; decisiones técnicas validadas contra el compilador en
+Compact contract of the **Testigo** project: anonymous whistleblowing with
+**deferred authorship**. Semantic spec in
+[`../docs/01-arquitectura.md`](../docs/01-arquitectura.md) §3–§5; technical
+decisions validated against the compiler in
 [`../docs/03-plan-ejecucion.md`](../docs/03-plan-ejecucion.md) §2.
 
 | | |
 |---|---|
-| Contrato en producción | `src/testigo.compact` (Opción A — Merkle) |
-| Fallback congelado | `src/fallback/testigo-b.compact` (Opción B — no se deploya) |
+| Production contract | `src/testigo.compact` (Option A — Merkle) |
+| Frozen fallback | `src/fallback/testigo-b.compact` (Option B — never deployed) |
 | Compiler / language / runtime | `0.31.1` / `0.23.0` / `0.16.0` |
 
-## Compilar y testear
+## Compile and test
 
 ```bash
-npm run compile   --workspace=contracts    # CON claves PLONK -> output/ (~30 s)
-npm run compile:fast --workspace=contracts # --skip-zk, para iterar      (~0,6 s)
-npm run check:fallback --workspace=contracts # verifica que la Opción B sigue viva
-npm test --workspace=contracts             # 47 checks contra el contrato compilado
+npm run compile   --workspace=contracts    # WITH PLONK keys -> output/ (~30 s)
+npm run compile:fast --workspace=contracts # --skip-zk, for iterating   (~0.6 s)
+npm run check:fallback --workspace=contracts # verifies Option B is still alive
+npm test --workspace=contracts             # 47 checks against the compiled contract
 ```
 
-Los tests corren el **contrato compilado real** en el simulador local de
-`@midnight-ntwrk/compact-runtime` — sin red, sin proof server y sin mocks.
-Requieren un `compile` previo.
+The tests run the **real compiled contract** in the local simulator of
+`@midnight-ntwrk/compact-runtime` — no network, no proof server, no mocks.
+They require a prior `compile`.
 
-| Archivo | Qué prueba |
+| File | What it proves |
 |---|---|
-| `test/smoke.mjs` | los pure circuits: 32 bytes, determinismo, domain separation |
-| `test/merkle-roundtrip.mjs` | los 4 tiempos de la demo de punta a punta |
-| `test/security-claims.mjs` | las propiedades load-bearing del diseño |
-| `test/sec-audit.mjs` | regresión de ataques que alguna vez funcionaron |
+| `test/smoke.mjs` | the pure circuits: 32 bytes, determinism, domain separation |
+| `test/merkle-roundtrip.mjs` | the 4 acts of the demo, end to end |
+| `test/security-claims.mjs` | the load-bearing properties of the design |
+| `test/sec-audit.mjs` | regression of attacks that once worked |
 
-`output/` está gitignoreado: solo se commitea el `.compact`. Un `compile`
-completo produce `output/contract/{index.js,index.d.ts}` (ESM),
-`output/keys/*.{prover,verifier}` (8 archivos = 4 circuitos con prueba × 2),
-`output/zkir/*.{zkir,bzkir}` y `output/compiler/contract-info.json`.
+`output/` is gitignored: only the `.compact` gets committed. A full `compile`
+produces `output/contract/{index.js,index.d.ts}` (ESM),
+`output/keys/*.{prover,verifier}` (8 files = 4 provable circuits × 2),
+`output/zkir/*.{zkir,bzkir}` and `output/compiler/contract-info.json`.
 
-## Estado del ledger (todo público)
+## Ledger state (all public)
 
-| Campo | Tipo | Qué guarda |
+| Field | Type | What it holds |
 |---|---|---|
-| `organizaciones` | `Map<Bytes<32>, Bytes<32>>` | `orgId → ancla` del emisor |
-| `credenciales` | `HistoricMerkleTree<8, Bytes<32>>` | hojas de credenciales emitidas (256 máx.) |
-| `denuncias` | `Set<Bytes<32>>` | `denunciaId` sellados |
-| `nullifiers` | `Set<Bytes<32>>` | anti-spam por período |
-| `autorias` | `Set<Bytes<32>>` | autorías reveladas a un fiscal |
+| `organizations` | `Map<Bytes<32>, Bytes<32>>` | `orgId → anchor` of the issuer |
+| `credentials` | `HistoricMerkleTree<8, Bytes<32>>` | leaves of issued credentials (256 max) |
+| `reports` | `Set<Bytes<32>>` | sealed `reportId`s |
+| `nullifiers` | `Set<Bytes<32>>` | per-period anti-spam |
+| `authorships` | `Set<Bytes<32>>` | authorships revealed to a prosecutor |
 
-Credencial, secret y evidencia son **witness**: nunca salen de la máquina del
-denunciante (el proof server corre local).
+Credential, secret and evidence are **witnesses**: they never leave the
+whistleblower's machine (the proof server runs locally).
 
-## Circuitos
+## Circuits
 
-| Circuito | Tipo | Rol |
+| Circuit | Kind | Role |
 |---|---|---|
-| `registrarOrganizacion(orgId, ancla)` | tx | spec §4.1 |
-| `emitirCredencial(orgId, credCommitment)` | tx | auxiliar de la Opción A — emisor mock |
-| `denunciar(orgId, periodo: Uint<64>)` | tx | spec §4.2 — el corazón |
-| `revelarAutoria(denunciaId, fiscalPk)` | tx | spec §4.3 — el diferencial |
-| `credCommitmentDe`, `hojaDe`, `denunciaIdDe`, `nullifierDe`, `autoriaDe` | `pure` | recomputables off-chain, sin proof server |
+| `registerOrganization(orgId, anchor)` | tx | spec §4.1 |
+| `issueCredential(orgId, credCommitment)` | tx | Option A helper — mock issuer |
+| `report(orgId, period: Uint<64>)` | tx | spec §4.2 — the heart |
+| `revealAuthorship(reportId, prosecutorPk)` | tx | spec §4.3 — the differentiator |
+| `credCommitmentOf`, `leafOf`, `reportIdOf`, `nullifierOf`, `authorshipOf` | `pure` | recomputable off-chain, no proof server |
 
-Los `pure circuit` aparecen en el TS generado bajo `pureCircuits`, así que
-`verificarAutoria` es **100 % off-chain**.
+The `pure circuit`s appear in the generated TS under `pureCircuits`, so
+`verify-authorship` is **100 % off-chain**.
 
-## Por qué el árbol es global y el `orgId` va dentro de la hoja
-
-```
-credCommitment = persistentHash(["testigo:credcomm:v1", credSecret])
-hoja           = persistentHash(["testigo:cred:v1", orgId, credCommitment])
-```
-
-La hoja se construye **en circuito** a partir del `orgId` público **en los dos
-extremos**:
-
-- al **emitir**, con el mismo `orgId` que se acaba de validar contra
-  `organizaciones` — si la hoja llegara ya calculada, ese assert sería
-  decorativo y se podría colar la credencial de una organización fantasma;
-- al **denunciar**, con el `orgId` que se está declarando — el witness solo
-  aporta los hermanos del path, así que no puede mentir sobre a qué
-  organización pertenece.
-
-Probar membership en el árbol global prueba pertenencia *a esa org* — la
-semántica multi-org del spec se conserva sin una raíz por-org.
-
-El emisor recibe el **commitment**, nunca el `credencialSecret` del empleado.
-
-## Épocas: el período no lo elige quien llama
-
-`periodo` es un **índice de época** (`Uint<64>`), no una etiqueta libre. El
-circuito lo ata al reloj de la cadena:
+## Why the tree is global and the `orgId` lives inside the leaf
 
 ```
-inicio = periodo * 86400            // duracionEpoca(), en segundos
-assert(blockTimeGte(inicio))        // ya empezó
-assert(blockTimeLt(inicio + 86400)) // todavía no terminó
+credCommitment = persistentHash(["phantomtrace:credcomm:v1", credSecret])
+leaf           = persistentHash(["phantomtrace:cred:v1", orgId, credCommitment])
 ```
 
-con lo cual solo hay **una** época válida en cada momento: la actual. Sin esta
-restricción el nullifier sería inútil — la misma credencial generaría N
-nullifiers distintos variando la etiqueta, y el anti-spam del spec §4.2/§6 no
-valdría nada. El `blockTime` de Midnight es `secondsSinceEpoch`, por eso la
-duración va en segundos. Épocas de 1 día: gruesas a propósito, porque los
-períodos finos permiten correlacionar por timing (spec §6).
+The leaf is built **in-circuit** from the public `orgId` **at both ends**:
 
-Ventaja práctica: el ledger TS generado expone
-`credenciales.findPathForLeaf(hoja)`, así que el witness del path son ~5 líneas
-off-chain en vez de reimplementar un árbol de Merkle en TypeScript.
+- when **issuing**, with the same `orgId` that was just validated against
+  `organizations` — if the leaf arrived precomputed, that assert would be
+  decorative and the credential of a phantom organization could be smuggled
+  in;
+- when **reporting**, with the `orgId` being declared — the witness only
+  provides the path siblings, so it cannot lie about which organization it
+  belongs to.
 
-`HistoricMerkleTree` (no `MerkleTree`) es obligatorio: con el histórico, un
-path emitido sigue siendo válido después de nuevas inserciones — emitir una
-credencial no invalida las denuncias en preparación.
+Proving membership in the global tree proves membership *in that org* — the
+spec's multi-org semantics hold without a per-org root.
+
+The issuer receives the **commitment**, never the employee's
+`credentialSecret`.
+
+## Epochs: the period is not chosen by the caller
+
+`period` is an **epoch index** (`Uint<64>`), not a free label. The circuit
+binds it to the chain's clock:
+
+```
+start = period * 86400              // epochDuration(), in seconds
+assert(blockTimeGte(start))         // "period not started yet"
+assert(blockTimeLt(start + 86400))  // "period already over"
+```
+
+so only **one** epoch is valid at any moment: the current one. Without this
+restriction the nullifier would be useless — the same credential would
+produce N distinct nullifiers by varying the label, and the anti-spam of spec
+§4.2/§6 would be worth nothing. Midnight's `blockTime` is
+`secondsSinceEpoch`, which is why the duration is in seconds. 1-day epochs:
+deliberately coarse, because fine-grained periods allow timing correlation
+(spec §6).
+
+Practical advantage: the generated TS ledger exposes
+`credentials.findPathForLeaf(leaf)`, so the path witness is ~5 lines
+off-chain instead of reimplementing a Merkle tree in TypeScript.
+
+`HistoricMerkleTree` (not `MerkleTree`) is mandatory: with the historic
+variant, an issued path remains valid after new insertions — issuing a
+credential does not invalidate reports in preparation.
 
 ## Domain separation
 
-`nullifier` y `autoria` comparten shape y llevan un secret en la misma
-posición. Sin tag de dominio, un atacante que registra una org con
-`orgId = denunciaId` fuerza una colisión cruzada. Los cinco hashes llevan su
-tag en posición 0 (`testigo:credcomm:v1`, `testigo:cred:v1`,
-`testigo:denuncia:v1`, `testigo:nullifier:v1`, `testigo:autoria:v1`).
+`nullifier` and `authorship` share a shape and carry a secret in the same
+position. Without a domain tag, an attacker who registers an org with
+`orgId = reportId` forces a cross collision. All five hashes carry their tag
+in position 0 (`phantomtrace:credcomm:v1`, `phantomtrace:cred:v1`,
+`phantomtrace:report:v1`, `phantomtrace:nullifier:v1`,
+`phantomtrace:authorship:v1`).
 
 ## `disclose()`
 
-Todo `disclose()` del archivo está **exigido por el compilador**, ninguno es
-especulativo: se verificó compilando sin ellos en los argumentos puramente
-públicos (`orgId`, `ancla`, `hoja`, `denunciaId`) y el compilador los rechaza —
-trata los parámetros de un `export circuit` como potencialmente derivados de
-witness. Los `assert` sobre comparaciones puras entre valores witness (la C1 de
-`revelarAutoria`) van sin `disclose()`.
+Every `disclose()` in the file is **required by the compiler**, none is
+speculative: this was verified by compiling without them on the purely public
+arguments (`orgId`, `anchor`, `leaf`, `reportId`) and the compiler rejects it
+— it treats the parameters of an `export circuit` as potentially derived from
+witnesses. The `assert`s over pure comparisons between witness values (the C1
+of `revealAuthorship`) go without `disclose()`.
 
-## Limitaciones declaradas
+## Declared limitations
 
-- **Emisor mock:** `registrarOrganizacion` y `emitirCredencial` no tienen
-  control de acceso. Cualquiera puede registrar una org o agregar una hoja.
-  Es el alcance del MVP; el emisor real (directorio corporativo firmante) es
-  roadmap.
-- **No se prueba la veracidad** del contenido denunciado (spec §6).
-- **Sin revocación** de credenciales (spec §7).
-- **Profundidad 8** = 256 credenciales por deploy, suficiente para la demo.
-- **El export de llave de autoría le entrega el `secret` al fiscal**
-  (`03-plan-ejecucion.md` §3.2). Quien lo tenga puede republicar la autoría a
-  otra clave y quemar el slot `(denuncia, fiscal)` del autor real.
-  Mitigación actual: se entrega a un solo fiscal, fuera de banda. Roadmap:
-  prueba ZK al fiscal en vez del secret. Cubierto por `test/sec-audit.mjs` §D.
-- **La raíz de Merkle revelada** por `checkRoot` acota el conjunto de anonimato
-  si el path está cacheado. `app/src/witnesses` debe recalcular el path con
-  `findPathForLeaf` sobre el estado más reciente antes de cada denuncia, para
-  que todos los denunciantes del momento revelen la misma raíz.
+- **Mock issuer:** `registerOrganization` and `issueCredential` have no
+  access control. Anyone can register an org or add a leaf. That is the MVP
+  scope; the real issuer (a signing corporate directory) is roadmap.
+- **The truth of the reported content is not proven** (spec §6).
+- **No credential revocation** (spec §7).
+- **Depth 8** = 256 credentials per deploy, enough for the demo.
+- **The authorship key export hands the `secret` to the prosecutor**
+  (`03-plan-ejecucion.md` §3.2). Whoever holds it can republish the
+  authorship to another key and burn the real author's
+  `(report, prosecutor)` slot. Current mitigation: it is handed to a single
+  prosecutor, out of band. Roadmap: a ZK proof to the prosecutor instead of
+  the secret. Covered by `test/sec-audit.mjs` §D.
+- **The Merkle root revealed** by `checkRoot` narrows the anonymity set if
+  the path is cached. `app/src/witnesses` must recompute the path with
+  `findPathForLeaf` over the latest state before every report, so all
+  whistleblowers of the moment reveal the same root.

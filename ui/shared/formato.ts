@@ -42,3 +42,13 @@ export function horaLog(fecha: Date): string {
   const dosDigitos = (n: number) => String(n).padStart(2, "0");
   return [fecha.getHours(), fecha.getMinutes(), fecha.getSeconds()].map(dosDigitos).join(":");
 }
+
+/**
+ * Display label for a reporting epoch. The epoch is the contract's period:
+ * `floor(unixSeconds / 86400)`, i.e. one UTC day. The index is shown next to
+ * the calendar day so the demo narrative can point at a concrete number.
+ */
+export function epochLabel(epoch: number): string {
+  const day = new Date(epoch * 86_400_000).toISOString().slice(0, 10);
+  return `época ${epoch} · ${day} UTC`;
+}

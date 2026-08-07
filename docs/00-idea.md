@@ -40,10 +40,12 @@ Three Compact circuits on Midnight's dual-ledger model (detail in
    per organization, per period). Identity, credential, and evidence never
    touch the chain.
 3. **`revealAuthorship`** — the differentiator. Months later, the whistleblower
-   proves to a prosecutor that they wrote *that* report, without revealing the
-   evidence or their secret, **binding the proof to the prosecutor's public key**
-   (*designated verifier*): shown to anyone else — the employer, for instance
-   — it proves nothing.
+   proves to a prosecutor that they wrote *that* report, **binding the on-chain
+   record to the prosecutor's public key**: the ledger entry, shown to anyone
+   else — the employer, for instance — proves nothing. The off-chain
+   verification package is what convinces, and whoever holds it can verify, so
+   it is delivered only to the chosen prosecutor; cryptographically
+   non-transferable proofs (true designated-verifier tags) are roadmap.
 
 **Four stages:** (1) the organization registers → (2) an employee reports and
 the company looks at the ledger without being able to know who did it → (3) the

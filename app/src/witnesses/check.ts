@@ -1,67 +1,67 @@
-// Mini framework de asserts para los selftests de `witnesses/`.
+// Mini assert framework for the `witnesses/` selftests.
 //
-// Deliberadamente diminuto: los selftests tienen que poder correr con
-// `node app/dist/witnesses/<script>.js`, sin vitest ni ningún runner, para
-// que sirvan como evidencia reproducible aunque el resto del toolchain esté
-// a medio armar. La suite formal del proyecto vive en `tests/` (bloque D).
+// Deliberately tiny: the selftests must be able to run with
+// `node app/dist/witnesses/<script>.js`, without vitest or any runner, so
+// they serve as reproducible evidence even while the rest of the toolchain is
+// half-assembled. The project's formal suite lives in `tests/` (block D).
 //
-// Mismo formato de salida que `contracts/test/harness.mjs`, para que los dos
-// se lean igual en la terminal durante la demo.
+// Same output format as `contracts/test/harness.mjs`, so both read the same
+// in the terminal during the demo.
 
-let corridos = 0;
-let fallos = 0;
+let run = 0;
+let failures = 0;
 
-export function check(nombre: string, cond: boolean, detalle = ''): void {
-  corridos++;
-  if (cond) console.log(`  ok    ${nombre}${detalle ? ` (${detalle})` : ''}`);
+export function check(name: string, cond: boolean, detail = ''): void {
+  run++;
+  if (cond) console.log(`  ok    ${name}${detail ? ` (${detail})` : ''}`);
   else {
-    fallos++;
-    console.log(`  FAIL  ${nombre}${detalle ? ` (${detalle})` : ''}`);
+    failures++;
+    console.log(`  FAIL  ${name}${detail ? ` (${detail})` : ''}`);
   }
 }
 
-/** Espera que `fn` lance y que el mensaje contenga `fragmento`. */
-export function checkRechaza(nombre: string, fn: () => unknown, fragmento: string): void {
-  corridos++;
+/** Expects `fn` to throw with a message containing `fragment`. */
+export function checkRejects(name: string, fn: () => unknown, fragment: string): void {
+  run++;
   try {
     fn();
-    fallos++;
-    console.log(`  FAIL  ${nombre} -> no lanzó (se esperaba "${fragmento}")`);
+    failures++;
+    console.log(`  FAIL  ${name} -> did not throw (expected "${fragment}")`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!msg.includes(fragmento)) {
-      fallos++;
-      console.log(`  FAIL  ${nombre} -> lanzó "${msg}", se esperaba "${fragmento}"`);
+    if (!msg.includes(fragment)) {
+      failures++;
+      console.log(`  FAIL  ${name} -> threw "${msg}", expected "${fragment}"`);
     } else {
-      console.log(`  ok    ${nombre} -> rechazado: ${msg.split('\n')[0]}`);
+      console.log(`  ok    ${name} -> rejected: ${msg.split('\n')[0]}`);
     }
   }
 }
 
-/** Igual que `checkRechaza` para promesas. */
-export async function checkRechazaAsync(
-  nombre: string,
+/** Same as `checkRejects` for promises. */
+export async function checkRejectsAsync(
+  name: string,
   fn: () => Promise<unknown>,
-  fragmento: string,
+  fragment: string,
 ): Promise<void> {
-  corridos++;
+  run++;
   try {
     await fn();
-    fallos++;
-    console.log(`  FAIL  ${nombre} -> no lanzó (se esperaba "${fragmento}")`);
+    failures++;
+    console.log(`  FAIL  ${name} -> did not throw (expected "${fragment}")`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (!msg.includes(fragmento)) {
-      fallos++;
-      console.log(`  FAIL  ${nombre} -> lanzó "${msg}", se esperaba "${fragmento}"`);
+    if (!msg.includes(fragment)) {
+      failures++;
+      console.log(`  FAIL  ${name} -> threw "${msg}", expected "${fragment}"`);
     } else {
-      console.log(`  ok    ${nombre} -> rechazado: ${msg.split('\n')[0]}`);
+      console.log(`  ok    ${name} -> rejected: ${msg.split('\n')[0]}`);
     }
   }
 }
 
-/** Devuelve el mensaje del error que lanzó `fn`, o null si no lanzó. */
-export function mensajeDeError(fn: () => unknown): string | null {
+/** Returns the message of the error thrown by `fn`, or null if it did not throw. */
+export function errorMessage(fn: () => unknown): string | null {
   try {
     fn();
     return null;
@@ -70,10 +70,10 @@ export function mensajeDeError(fn: () => unknown): string | null {
   }
 }
 
-/** Imprime el resumen y termina el proceso con exit code 0/1. */
-export function resumen(titulo: string): never {
+/** Prints the summary and exits the process with code 0/1. */
+export function summary(title: string): never {
   console.log(
-    `\n=== ${titulo}: ${corridos - fallos}/${corridos} ${fallos === 0 ? 'OK' : `— ${fallos} FALLOS`} ===`,
+    `\n=== ${title}: ${run - failures}/${run} ${failures === 0 ? 'OK' : `— ${failures} FAILURES`} ===`,
   );
-  process.exit(fallos === 0 ? 0 : 1);
+  process.exit(failures === 0 ? 0 : 1);
 }

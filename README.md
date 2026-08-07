@@ -19,8 +19,11 @@ Built on [Midnight](https://midnight.network) (Compact + ZK).
 3. **The evidence is immutable** — the hash is sealed on-chain. Any
    alteration won't match.
 4. **Months later, they reveal authorship** — `revealAuthorship` proves they know
-   the hash preimage, tied to *that* prosecutor's key (designated verifier).
-   Intercepted by anyone else, the proof is useless.
+   the hash preimage and leaves an on-chain record bound to *that* prosecutor's
+   key. The record alone is useless to anyone else; what convinces is the
+   off-chain verification package (evidence hash + report secret), so it must be
+   handed only to the intended prosecutor — whoever holds it can verify.
+   Cryptographically non-transferable designated-verifier proofs are roadmap.
 
 Full detail: [`docs/00-idea.md`](docs/00-idea.md) and
 [`docs/01-arquitectura.md`](docs/01-arquitectura.md).

@@ -2,13 +2,22 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { hashDeArchivo, secretNuevo, type Hex32 } from "../cripto";
+import {
+  credCommitmentOf,
+  EPOCH_DURATION_SECONDS,
+  hashDeArchivo,
+  secretNuevo,
+  type Hex32,
+} from "../cripto";
 import {
   CredencialInvalidaError,
   DenunciaRepetidaError,
   NoSosElAutorError,
   NullifierRepetidoError,
   OrganizacionYaRegistradaError,
+  OrganizationNotRegisteredError,
+  PeriodNotStartedError,
+  PeriodOverError,
 } from "../tipos";
 import { ClienteMock } from "./ClienteMock";
 
@@ -24,13 +33,35 @@ const CRED: Hex32 = "4e7038efbd4f620a7bd88aa10e3d0a1fd5ac95b9e1fadedf4737f83bfec
 const PK_PIA: Hex32 = "7d15c80d067698a0e5e7b1cbfcdb285d3ac658b703df68616c9544fd93209a2f";
 const PK_ACME: Hex32 = "3b92af1fe656626d02dff0abcd50b545ce9166f3d6c008dd350133d9753ac410";
 
+/** The epoch every test pins the chain clock to (2026-08-07 UTC). */
+const EPOCH = 20672;
+
+/**
+ * A mockable chain clock, parked mid-epoch so both C0 bounds are one epoch
+ * away. `advanceOneEpoch()` is what the "next period" tests turn.
+ */
+function clockAtEpoch(epoch = EPOCH) {
+  return {
+    unixSeconds: epoch * EPOCH_DURATION_SECONDS + 3600,
+    advanceOneEpoch() {
+      this.unixSeconds += EPOCH_DURATION_SECONDS;
+    },
+  };
+}
+
 /** Sin esperas: los pasos de proving no aportan nada a los tests. */
-const nuevoCliente = () => new ClienteMock({ ritmoMs: 0 });
+const nuevoCliente = (clock = clockAtEpoch()) =>
+  new ClienteMock({ ritmoMs: 0, now: () => clock.unixSeconds });
 
 /** T1 completo: org registrada y credencial emitida al denunciante. */
 async function conCredencial(cliente: ClienteMock, credencialSecret = CRED) {
   await cliente.registrarOrganizacion({ orgId: ORG_ID, ancla: ANCLA });
-  const { hojaIndex } = await cliente.emitirCredencial({ orgId: ORG_ID, credencialSecret });
+  // Employee side: the commitment is derived HERE and is the only thing the
+  // issuer ever receives — the mock never sees `credencialSecret`.
+  const { hojaIndex } = await cliente.emitirCredencial({
+    orgId: ORG_ID,
+    credCommitment: await credCommitmentOf(credencialSecret),
+  });
   cliente.establecerWitnesses({
     secretPersonal: SECRET,
     credencialSecret,
@@ -57,23 +88,44 @@ describe("T1 · registrar organización y emitir credenciales", () => {
 
   it("no se puede emitir credencial de una org que no existe", async () => {
     const c = nuevoCliente();
-    await expect(c.emitirCredencial({ orgId: ORG_ID })).rejects.toBeInstanceOf(
-      CredencialInvalidaError,
-    );
+    const issue = c.emitirCredencial({
+      orgId: ORG_ID,
+      credCommitment: await credCommitmentOf(CRED),
+    });
+    await expect(issue).rejects.toBeInstanceOf(OrganizationNotRegisteredError);
+    await expect(issue).rejects.toThrow("organization not registered");
+  });
+
+  it("the issuer only ever sees the commitment — credSecret never reaches it", async () => {
+    const c = nuevoCliente();
+    await c.registrarOrganizacion({ orgId: ORG_ID, ancla: ANCLA });
+
+    // What crosses the boundary to the issuer is the COMMITMENT, and it is
+    // not the secret under any encoding the ledger stores.
+    const credCommitment = await credCommitmentOf(CRED);
+    expect(credCommitment).not.toBe(CRED);
+
+    await c.emitirCredencial({ orgId: ORG_ID, credCommitment });
+
+    // Nothing in the org-side public state (the whole mock ledger) contains
+    // the raw secret: only the commitment-derived leaf was stored.
+    expect(JSON.stringify(c.instantanea())).not.toContain(CRED);
   });
 });
 
 describe("T2 · denunciar", () => {
   let c: ClienteMock;
+  let clock: ReturnType<typeof clockAtEpoch>;
   beforeEach(async () => {
-    c = nuevoCliente();
+    clock = clockAtEpoch();
+    c = nuevoCliente(clock);
     await conCredencial(c);
   });
 
   it("sella la denuncia y publica exactamente dos hashes", async () => {
     const r = await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-08",
+      periodo: EPOCH,
       evidencia: muestra("contrato-obra-4471.pdf"),
     });
 
@@ -89,7 +141,7 @@ describe("T2 · denunciar", () => {
   it("el denunciaId se deriva de la evidencia real, no de su nombre", async () => {
     const r = await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-08",
+      periodo: EPOCH,
       evidencia: muestra("contrato-obra-4471.pdf"),
     });
     const evidenciaHash = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
@@ -102,16 +154,16 @@ describe("T2 · denunciar", () => {
   it("reporta los pasos del proof server en orden", async () => {
     const pasos: string[] = [];
     await c.denunciar(
-      { orgId: ORG_ID, periodo: "2026-08", evidencia: muestra("contrato-obra-4471.pdf") },
+      { orgId: ORG_ID, periodo: EPOCH, evidencia: muestra("contrato-obra-4471.pdf") },
       (p) => pasos.push(p),
     );
-    expect(pasos).toHaveLength(6);
+    expect(pasos).toHaveLength(7);
     expect(pasos[0]).toContain("witness");
     expect(pasos.at(-1)).toContain("sin msg.sender");
   });
 
   it("una credencial ajena falla, y falla ANTES de emitir tx", async () => {
-    const ajeno = nuevoCliente();
+    const ajeno = nuevoCliente(clock);
     await ajeno.registrarOrganizacion({ orgId: ORG_ID, ancla: ANCLA });
     ajeno.establecerWitnesses({
       secretPersonal: SECRET,
@@ -123,7 +175,7 @@ describe("T2 · denunciar", () => {
     const pasos: string[] = [];
     await expect(
       ajeno.denunciar(
-        { orgId: ORG_ID, periodo: "2026-08", evidencia: muestra("contrato-obra-4471.pdf") },
+        { orgId: ORG_ID, periodo: EPOCH, evidencia: muestra("contrato-obra-4471.pdf") },
         (p) => pasos.push(p),
       ),
     ).rejects.toBeInstanceOf(CredencialInvalidaError);
@@ -132,30 +184,64 @@ describe("T2 · denunciar", () => {
     expect((await ajeno.leerEstadoLedger()).denuncias).toEqual([]);
   });
 
-  it("dos denuncias en el mismo período colisionan en el nullifier", async () => {
-    await c.denunciar({
-      orgId: ORG_ID,
-      periodo: "2026-08",
-      evidencia: muestra("contrato-obra-4471.pdf"),
-    });
+  // ── C0: the period is bound to the chain clock, never a free label ──────
+
+  it("a past epoch is rejected: 'period already over', before any tx", async () => {
+    const pasos: string[] = [];
+    await expect(
+      c.denunciar(
+        { orgId: ORG_ID, periodo: EPOCH - 1, evidencia: muestra("contrato-obra-4471.pdf") },
+        (p) => pasos.push(p),
+      ),
+    ).rejects.toThrow("period already over");
+    expect(pasos).toEqual([]);
+    expect((await c.leerEstadoLedger()).denuncias).toEqual([]);
+  });
+
+  it("a future epoch is rejected: 'period not started yet'", async () => {
     await expect(
       c.denunciar({
         orgId: ORG_ID,
-        periodo: "2026-08",
-        evidencia: muestra("contrato-obra-4471-rev-legal.pdf"),
+        periodo: EPOCH + 1,
+        evidencia: muestra("contrato-obra-4471.pdf"),
       }),
-    ).rejects.toBeInstanceOf(NullifierRepetidoError);
+    ).rejects.toBeInstanceOf(PeriodNotStartedError);
+  });
+
+  it("C0 error classes carry the contract's verbatim assert strings", () => {
+    expect(new PeriodNotStartedError().message).toBe("period not started yet");
+    expect(new PeriodOverError().message).toBe("period already over");
+  });
+
+  it("dos denuncias en el mismo período colisionan en el nullifier", async () => {
+    await c.denunciar({
+      orgId: ORG_ID,
+      periodo: EPOCH,
+      evidencia: muestra("contrato-obra-4471.pdf"),
+    });
+    // Same credential, same epoch: the nullifier already exists — with the
+    // contract's verbatim assert string.
+    const again = c.denunciar({
+      orgId: ORG_ID,
+      periodo: EPOCH,
+      evidencia: muestra("contrato-obra-4471-rev-legal.pdf"),
+    });
+    await expect(again).rejects.toBeInstanceOf(NullifierRepetidoError);
+    await expect(again).rejects.toThrow("already reported this period");
   });
 
   it("el período siguiente pasa, y los nullifiers no son linkeables", async () => {
     const a = await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-08",
+      periodo: EPOCH,
       evidencia: muestra("contrato-obra-4471.pdf"),
     });
+    // Advancing the chain clock one epoch makes EPOCH + 1 the current one:
+    // the same credential may report again.
+    clock.advanceOneEpoch();
     const b = await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-09",
+      periodo: EPOCH + 1,
       evidencia: muestra("contrato-obra-4471-rev-legal.pdf"),
     });
     expect(b.nullifier).not.toBe(a.nullifier);
@@ -165,15 +251,16 @@ describe("T2 · denunciar", () => {
   it("re-enviar la denuncia idéntica falla por el guard de idempotencia", async () => {
     await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-08",
+      periodo: EPOCH,
       evidencia: muestra("contrato-obra-4471.pdf"),
     });
     // Mismo archivo, mismo secret ⇒ mismo denunciaId. Otro período para que el
     // que salte sea el guard de la denuncia y no el del nullifier.
+    clock.advanceOneEpoch();
     await expect(
       c.denunciar({
         orgId: ORG_ID,
-        periodo: "2026-09",
+        periodo: EPOCH + 1,
         evidencia: muestra("contrato-obra-4471.pdf"),
       }),
     ).rejects.toBeInstanceOf(DenunciaRepetidaError);
@@ -189,7 +276,7 @@ describe("T4 · revelar y verificar autoría", () => {
     await conCredencial(c);
     ({ denunciaId } = await c.denunciar({
       orgId: ORG_ID,
-      periodo: "2026-08",
+      periodo: EPOCH,
       evidencia: muestra("contrato-obra-4471.pdf"),
     }));
   });

@@ -32,8 +32,9 @@ export const ALTURA_ACTUAL = 1_284_931;
 export const DENUNCIA_DEMO: Hex32 =
   "3ab5b5b6dd9be079019eb9a9bac9e939966bdbc0405c16313cb9aa1d1b6d50f4";
 
+/** nullifierOf(credSecret de la demo, ORG_ID, DEMO_EPOCH). */
 export const NULLIFIER_DEMO: Hex32 =
-  "80c85c8cdc03baa7fdc59906fcfa8ee025ebc19d27cb198829caedb70a0f297e";
+  "a17c408172b01b039291ba8060b189d23d6e844421d5c6aebdb579e05bdfdb28";
 
 /** authorshipOf(secret, DENUNCIA_DEMO, pk de la Fiscalía). */
 export const AUTORIA_DEMO_PIA: Hex32 =

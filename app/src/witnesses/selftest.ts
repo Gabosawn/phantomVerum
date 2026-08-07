@@ -1,8 +1,8 @@
-// Selftest de B2.1 (secrets) + B2.2 (evidencia) + los helpers de época.
+// Selftest of B2.1 (secrets) + B2.2 (evidence) + the epoch helpers.
 //
-// No toca red, ni el contrato compilado, ni los secrets reales del
-// denunciante: trabaja entero sobre un directorio temporal. El selftest del
-// witness contra el simulador va aparte, en `selftest-simulador.ts`.
+// Touches no network, no compiled contract, and none of the whistleblower's
+// real secrets: it works entirely on a temporary directory. The witness
+// selftest against the simulator lives apart, in `selftest-simulator.ts`.
 //
 //   npm run build --workspace=app && node app/dist/witnesses/selftest.js
 
@@ -10,293 +10,293 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
-import { check, checkRechaza, checkRechazaAsync, resumen } from './check.js';
+import { check, checkRejects, checkRejectsAsync, summary } from './check.js';
 import {
-  DURACION_EPOCA_SEG,
-  epocaActual,
-  epocaDeSegundos,
-  finDeEpoca,
-  inicioDeEpoca,
-  periodoAJson,
-  periodoDesdeJson,
-} from './epoca.js';
-import { hashEvidenciaArchivo, hashEvidenciaBytes, resumenEvidencia } from './evidencia.js';
-import { aBytes32, aHex, bytesAleatorios32, esHex32 } from './hex.js';
+  EPOCH_DURATION_SEC,
+  currentEpoch,
+  epochOfSeconds,
+  epochEnd,
+  epochStart,
+  periodToJson,
+  periodFromJson,
+} from './epoch.js';
+import { hashEvidenceFile, hashEvidenceBytes, evidenceSummary } from './evidence.js';
+import { toBytes32, toHex, randomBytes32, isHex32 } from './hex.js';
 import {
-  SecretsCorruptosError,
-  agregarDenuncia,
-  crearSecrets,
-  existenSecrets,
-  fijarHojaIndex,
-  leerSecrets,
-  listarDenuncias,
-  nuevoSecretDenuncia,
-  obtenerDenuncia,
-  periodoDeRegistro,
-  rutaSecrets,
+  CorruptSecretsError,
+  addReport,
+  createSecrets,
+  secretsExist,
+  setLeafIndex,
+  readSecrets,
+  listReports,
+  newReportSecret,
+  getReport,
+  periodOfRecord,
+  secretsPath,
 } from './secrets.js';
 
 // ── fixtures ────────────────────────────────────────────────────────────
-const dirTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'testigo-selftest-'));
-const rutaTmp = path.join(dirTmp, 'secrets', 'denunciante.json');
-const orgId = aHex(Uint8Array.from({ length: 32 }, (_, i) => (0x11 + i) % 256));
+const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'testigo-selftest-'));
+const tmpPath = path.join(tmpDir, 'secrets', 'denunciante.json');
+const orgId = toHex(Uint8Array.from({ length: 32 }, (_, i) => (0x11 + i) % 256));
 
 async function main(): Promise<void> {
-  console.log(`=== 1. Ubicación y ciclo de vida del almacén (B2.1) ===`);
-  console.log(`  ruta por defecto: ${rutaSecrets()}`);
+  console.log(`=== 1. Store location and lifecycle (B2.1) ===`);
+  console.log(`  default path: ${secretsPath()}`);
   check(
-    'la ruta por defecto cuelga de la raíz del repo, no del cwd',
-    rutaSecrets().endsWith(path.join('secrets', 'denunciante.json')) &&
-      path.isAbsolute(rutaSecrets()),
+    'the default path hangs off the repo root, not the cwd',
+    secretsPath().endsWith(path.join('secrets', 'denunciante.json')) &&
+      path.isAbsolute(secretsPath()),
   );
-  check('sin archivo -> existenSecrets false', !existenSecrets(rutaTmp));
-  check('sin archivo -> leerSecrets devuelve null', leerSecrets(rutaTmp) === null);
+  check('no file -> secretsExist false', !secretsExist(tmpPath));
+  check('no file -> readSecrets returns null', readSecrets(tmpPath) === null);
 
-  const creado = crearSecrets(orgId, rutaTmp);
-  check('crearSecrets deja el archivo en disco', existenSecrets(rutaTmp));
-  check('version 2', creado.version === 2, String(creado.version));
-  check('credencialSecret es hex de 64 chars', esHex32(creado.credencialSecret));
-  check('orgId se preservó', creado.orgId === orgId);
-  check('hojaIndex arranca en null', creado.hojaIndex === null);
-  check('sin denuncias todavía', Object.keys(creado.denuncias).length === 0);
+  const created = createSecrets(orgId, tmpPath);
+  check('createSecrets leaves the file on disk', secretsExist(tmpPath));
+  check('version 2', created.version === 2, String(created.version));
+  check('credentialSecret is 64-char hex', isHex32(created.credentialSecret));
+  check('orgId was preserved', created.orgId === orgId);
+  check('leafIndex starts at null', created.leafIndex === null);
+  check('no reports yet', Object.keys(created.reports).length === 0);
 
-  const modo = fs.statSync(rutaTmp).mode & 0o777;
-  check('permisos del archivo = 0600', modo === 0o600, `0${modo.toString(8)}`);
-  const modoDir = fs.statSync(path.dirname(rutaTmp)).mode & 0o777;
-  check('permisos del directorio = 0700', modoDir === 0o700, `0${modoDir.toString(8)}`);
+  const mode = fs.statSync(tmpPath).mode & 0o777;
+  check('file permissions = 0600', mode === 0o600, `0${mode.toString(8)}`);
+  const dirMode = fs.statSync(path.dirname(tmpPath)).mode & 0o777;
+  check('directory permissions = 0700', dirMode === 0o700, `0${dirMode.toString(8)}`);
 
-  console.log('\n=== 2. Relectura y entropía ===');
-  const releido = leerSecrets(rutaTmp);
-  check('relectura no es null', releido !== null);
+  console.log('\n=== 2. Re-read and entropy ===');
+  const reread = readSecrets(tmpPath);
+  check('re-read is not null', reread !== null);
   check(
-    'round-trip exacto',
-    releido !== null &&
-      releido.credencialSecret === creado.credencialSecret &&
-      releido.orgId === creado.orgId &&
-      releido.hojaIndex === creado.hojaIndex,
+    'exact round-trip',
+    reread !== null &&
+      reread.credentialSecret === created.credentialSecret &&
+      reread.orgId === created.orgId &&
+      reread.leafIndex === created.leafIndex,
   );
 
-  const rutaOtro = path.join(dirTmp, 'otro', 'denunciante.json');
-  const otro = crearSecrets(orgId, rutaOtro);
+  const otherPath = path.join(tmpDir, 'other', 'denunciante.json');
+  const other = createSecrets(orgId, otherPath);
   check(
-    'dos credenciales -> secrets distintos (randomBytes, no derivación)',
-    otro.credencialSecret !== creado.credencialSecret,
+    'two credentials -> distinct secrets (randomBytes, no derivation)',
+    other.credentialSecret !== created.credentialSecret,
   );
 
-  console.log('\n=== 3. hojaIndex y registro de denuncias ===');
-  const conHoja = fijarHojaIndex(3, rutaTmp);
-  check('fijarHojaIndex persiste', conHoja.hojaIndex === 3);
-  check('y sobrevive a la relectura', leerSecrets(rutaTmp)?.hojaIndex === 3);
+  console.log('\n=== 3. leafIndex and report registry ===');
+  const withLeaf = setLeafIndex(3, tmpPath);
+  check('setLeafIndex persists', withLeaf.leafIndex === 3);
+  check('and survives a re-read', readSecrets(tmpPath)?.leafIndex === 3);
 
-  // Un ciclo de denuncia como lo va a hacer B3: secret FRESCO por denuncia.
-  const secretDenuncia1 = nuevoSecretDenuncia();
-  const secretDenuncia2 = nuevoSecretDenuncia();
+  // A report cycle as B3 will do it: FRESH secret per report.
+  const reportSecret1 = newReportSecret();
+  const reportSecret2 = newReportSecret();
   check(
-    'cada denuncia recibe un secret distinto (H-3: nunca uno global)',
-    aHex(secretDenuncia1) !== aHex(secretDenuncia2),
+    'each report receives a distinct secret (H-3: never a global one)',
+    toHex(reportSecret1) !== toHex(reportSecret2),
   );
 
-  const evHash1 = hashEvidenciaBytes(Buffer.from('sumario interno 2026'));
-  const denunciaId1 = bytesAleatorios32(); // en B3 sale de pureCircuits.denunciaIdDe
-  const periodo1 = epocaActual();
+  const evHash1 = hashEvidenceBytes(Buffer.from('internal file 2026'));
+  const reportId1 = randomBytes32(); // in B3 it comes from pureCircuits.reportIdOf
+  const period1 = currentEpoch();
 
-  agregarDenuncia(
-    denunciaId1,
-    { secretDenuncia: secretDenuncia1, evidenciaHash: evHash1, periodo: periodo1 },
-    rutaTmp,
+  addReport(
+    reportId1,
+    { reportSecret: reportSecret1, evidenceHash: evHash1, period: period1 },
+    tmpPath,
   );
-  const leido1 = obtenerDenuncia(denunciaId1, rutaTmp);
-  check('la denuncia se puede consultar por denunciaId', leido1 !== null);
+  const read1 = getReport(reportId1, tmpPath);
+  check('the report is retrievable by reportId', read1 !== null);
   check(
-    'secretDenuncia round-trip',
-    leido1?.secretDenuncia === aHex(secretDenuncia1),
+    'reportSecret round-trip',
+    read1?.reportSecret === toHex(reportSecret1),
   );
-  check('evidenciaHash round-trip', leido1?.evidenciaHash === aHex(evHash1));
+  check('evidenceHash round-trip', read1?.evidenceHash === toHex(evHash1));
   check(
-    'periodo round-trip como bigint (no rompe JSON.stringify)',
-    leido1 !== null && periodoDeRegistro(leido1) === periodo1,
-    `periodo=${periodo1}`,
+    'period round-trip as bigint (does not break JSON.stringify)',
+    read1 !== null && periodOfRecord(read1) === period1,
+    `period=${period1}`,
   );
-  check('una denuncia consultada que no existe -> null', obtenerDenuncia(bytesAleatorios32(), rutaTmp) === null);
+  check('a lookup for a nonexistent report -> null', getReport(randomBytes32(), tmpPath) === null);
 
-  agregarDenuncia(
-    bytesAleatorios32(),
-    { secretDenuncia: secretDenuncia2, evidenciaHash: hashEvidenciaBytes(Buffer.from('otro')) },
-    rutaTmp,
+  addReport(
+    randomBytes32(),
+    { reportSecret: reportSecret2, evidenceHash: hashEvidenceBytes(Buffer.from('another')) },
+    tmpPath,
   );
-  check('listarDenuncias devuelve las 2', listarDenuncias(rutaTmp).length === 2);
+  check('listReports returns the 2', listReports(tmpPath).length === 2);
 
-  // Idempotencia y protección contra sobrescritura.
-  agregarDenuncia(
-    denunciaId1,
-    { secretDenuncia: secretDenuncia1, evidenciaHash: evHash1, periodo: periodo1 },
-    rutaTmp,
+  // Idempotence and overwrite protection.
+  addReport(
+    reportId1,
+    { reportSecret: reportSecret1, evidenceHash: evHash1, period: period1 },
+    tmpPath,
   );
-  check('re-registrar los mismos valores es idempotente', listarDenuncias(rutaTmp).length === 2);
-  checkRechaza(
-    'pisar una denuncia con otro secret se rechaza (sería irrecuperable)',
+  check('re-registering the same values is idempotent', listReports(tmpPath).length === 2);
+  checkRejects(
+    'overwriting a report with another secret is rejected (it would be unrecoverable)',
     () =>
-      agregarDenuncia(
-        denunciaId1,
-        { secretDenuncia: secretDenuncia2, evidenciaHash: evHash1 },
-        rutaTmp,
+      addReport(
+        reportId1,
+        { reportSecret: reportSecret2, evidenceHash: evHash1 },
+        tmpPath,
       ),
-    'ya está registrada con otros secrets',
+    'already registered with different secrets',
   );
 
-  console.log('\n=== 4. El archivo en disco tiene el formato §3.2 congelado ===');
-  const enDisco: unknown = JSON.parse(fs.readFileSync(rutaTmp, 'utf8'));
-  const claves = Object.keys(enDisco as object).sort();
+  console.log('\n=== 4. The file on disk has the frozen §3.2 format ===');
+  const onDisk: unknown = JSON.parse(fs.readFileSync(tmpPath, 'utf8'));
+  const keys = Object.keys(onDisk as object).sort();
   check(
-    'claves de nivel superior exactas',
-    JSON.stringify(claves) ===
-      JSON.stringify(['credencialSecret', 'denuncias', 'hojaIndex', 'orgId', 'version']),
-    claves.join(','),
+    'exact top-level keys',
+    JSON.stringify(keys) ===
+      JSON.stringify(['credentialSecret', 'leafIndex', 'orgId', 'reports', 'version']),
+    keys.join(','),
   );
   check(
-    'NO hay un secretPersonal global (el formato v1 inseguro, H-3)',
-    !Object.prototype.hasOwnProperty.call(enDisco, 'secretPersonal'),
+    'there is NO global personalSecret (the insecure v1 format, H-3)',
+    !Object.prototype.hasOwnProperty.call(onDisk, 'personalSecret'),
   );
 
-  console.log('\n=== 5. Se falla cerrado ante secrets corruptos ===');
-  const rutaV1 = path.join(dirTmp, 'v1', 'denunciante.json');
-  fs.mkdirSync(path.dirname(rutaV1), { recursive: true, mode: 0o700 });
+  console.log('\n=== 5. Failing closed on corrupt secrets ===');
+  const v1Path = path.join(tmpDir, 'v1', 'denunciante.json');
+  fs.mkdirSync(path.dirname(v1Path), { recursive: true, mode: 0o700 });
   fs.writeFileSync(
-    rutaV1,
-    JSON.stringify({ version: 1, secretPersonal: aHex(bytesAleatorios32()) }),
+    v1Path,
+    JSON.stringify({ version: 1, personalSecret: toHex(randomBytes32()) }),
     { mode: 0o600 },
   );
-  checkRechaza('un almacén v1 no se lee en silencio', () => leerSecrets(rutaV1), 'version 1');
+  checkRejects('a v1 store is not read silently', () => readSecrets(v1Path), 'version 1');
 
-  const rutaRota = path.join(dirTmp, 'rota', 'denunciante.json');
-  fs.mkdirSync(path.dirname(rutaRota), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(rutaRota, '{ no es json', { mode: 0o600 });
-  checkRechaza('JSON ilegible se reporta', () => leerSecrets(rutaRota), 'JSON ilegible');
+  const brokenPath = path.join(tmpDir, 'broken', 'denunciante.json');
+  fs.mkdirSync(path.dirname(brokenPath), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(brokenPath, '{ not json', { mode: 0o600 });
+  checkRejects('unreadable JSON is reported', () => readSecrets(brokenPath), 'unreadable JSON');
 
-  const rutaCampo = path.join(dirTmp, 'campo', 'denunciante.json');
-  fs.mkdirSync(path.dirname(rutaCampo), { recursive: true, mode: 0o700 });
+  const fieldPath = path.join(tmpDir, 'field', 'denunciante.json');
+  fs.mkdirSync(path.dirname(fieldPath), { recursive: true, mode: 0o700 });
   fs.writeFileSync(
-    rutaCampo,
+    fieldPath,
     JSON.stringify({
       version: 2,
-      credencialSecret: 'ZZ',
+      credentialSecret: 'ZZ',
       orgId,
-      hojaIndex: null,
-      denuncias: {},
+      leafIndex: null,
+      reports: {},
     }),
     { mode: 0o600 },
   );
-  checkRechaza(
-    'un hex inválido se detecta al leer, no adentro del circuito',
-    () => leerSecrets(rutaCampo),
-    'credencialSecret',
+  checkRejects(
+    'an invalid hex is caught on read, not inside the circuit',
+    () => readSecrets(fieldPath),
+    'credentialSecret',
   );
   check(
-    'el error es de tipo SecretsCorruptosError',
+    'the error is of type CorruptSecretsError',
     (() => {
       try {
-        leerSecrets(rutaCampo);
+        readSecrets(fieldPath);
         return false;
       } catch (e) {
-        return e instanceof SecretsCorruptosError;
+        return e instanceof CorruptSecretsError;
       }
     })(),
   );
 
-  console.log('\n=== 6. Permisos laxos se corrigen al leer ===');
-  fs.chmodSync(rutaTmp, 0o644);
-  leerSecrets(rutaTmp);
+  console.log('\n=== 6. Lax permissions are fixed on read ===');
+  fs.chmodSync(tmpPath, 0o644);
+  readSecrets(tmpPath);
   check(
-    'un archivo 0644 vuelve a 0600',
-    (fs.statSync(rutaTmp).mode & 0o777) === 0o600,
+    'a 0644 file goes back to 0600',
+    (fs.statSync(tmpPath).mode & 0o777) === 0o600,
   );
 
-  console.log('\n=== 7. Hash de evidencia (B2.2) ===');
-  const rutaEvidencia = path.join(dirTmp, 'evidencia.txt');
-  fs.writeFileSync(rutaEvidencia, 'abc');
-  // Vector conocido de sha-256("abc") — publicado, no calculado por este
-  // código: si algún día alguien cambia el algoritmo, este check lo caza.
+  console.log('\n=== 7. Evidence hashing (B2.2) ===');
+  const evidencePath = path.join(tmpDir, 'evidence.txt');
+  fs.writeFileSync(evidencePath, 'abc');
+  // Known sha-256("abc") vector — published, not computed by this code: if
+  // anyone ever changes the algorithm, this check catches it.
   const SHA256_ABC = 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad';
-  const h1 = await hashEvidenciaArchivo(rutaEvidencia);
-  check('sha-256 de un archivo conocido coincide con el vector público', aHex(h1) === SHA256_ABC, aHex(h1));
-  check('el digest son 32 bytes', h1.length === 32);
+  const h1 = await hashEvidenceFile(evidencePath);
+  check('sha-256 of a known file matches the public vector', toHex(h1) === SHA256_ABC, toHex(h1));
+  check('the digest is 32 bytes', h1.length === 32);
 
-  const h2 = await hashEvidenciaArchivo(rutaEvidencia);
-  check('determinístico: mismo archivo -> mismo hash', aHex(h1) === aHex(h2));
+  const h2 = await hashEvidenceFile(evidencePath);
+  check('deterministic: same file -> same hash', toHex(h1) === toHex(h2));
 
-  const rutaCopia = path.join(dirTmp, 'copia-con-otro-nombre.txt');
-  fs.writeFileSync(rutaCopia, 'abc');
+  const copyPath = path.join(tmpDir, 'copy-with-another-name.txt');
+  fs.writeFileSync(copyPath, 'abc');
   check(
-    'el nombre del archivo no entra al hash',
-    aHex(await hashEvidenciaArchivo(rutaCopia)) === SHA256_ABC,
-  );
-  check(
-    'hashEvidenciaBytes coincide con hashEvidenciaArchivo',
-    aHex(hashEvidenciaBytes(Buffer.from('abc'))) === SHA256_ABC,
-  );
-
-  // Archivo grande: el stream no debe cambiar el resultado.
-  const grande = Buffer.alloc(3 * 1024 * 1024, 7);
-  const rutaGrande = path.join(dirTmp, 'grande.bin');
-  fs.writeFileSync(rutaGrande, grande);
-  check(
-    'un archivo de 3 MB hashea igual por stream que en memoria',
-    aHex(await hashEvidenciaArchivo(rutaGrande)) === aHex(hashEvidenciaBytes(grande)),
-  );
-
-  const resumen1 = await resumenEvidencia(rutaEvidencia);
-  check('resumenEvidencia reporta nombre y tamaño locales', resumen1.nombre === 'evidencia.txt' && resumen1.bytes === 3);
-  check('resumenEvidencia.hashHex coincide', resumen1.hashHex === SHA256_ABC);
-
-  await checkRechazaAsync(
-    'un archivo inexistente rechaza con error legible',
-    () => hashEvidenciaArchivo(path.join(dirTmp, 'no-existe.pdf')),
-    'no se pudo leer la evidencia',
-  );
-
-  console.log('\n=== 8. Épocas (periodo: Uint<64> -> bigint) ===');
-  check('duración de época = 86400 s', DURACION_EPOCA_SEG === 86400n);
-  check('epocaDeSegundos(0) = 0', epocaDeSegundos(0) === 0n);
-  check('epocaDeSegundos(86399) = 0', epocaDeSegundos(86399) === 0n);
-  check('epocaDeSegundos(86400) = 1', epocaDeSegundos(86400) === 1n);
-  check('inicioDeEpoca(1) = 86400', inicioDeEpoca(1n) === 86400n);
-  check('finDeEpoca(1) = 172800', finDeEpoca(1n) === 172800n);
-  const ahora = epocaActual();
-  check(
-    'la época actual cae dentro de su propia ventana',
-    inicioDeEpoca(ahora) <= BigInt(Math.floor(Date.now() / 1000)) &&
-      BigInt(Math.floor(Date.now() / 1000)) < finDeEpoca(ahora),
-    `epoca=${ahora}`,
+    'the file name does not enter the hash',
+    toHex(await hashEvidenceFile(copyPath)) === SHA256_ABC,
   );
   check(
-    'la época actual es plausible (> 20000 días desde 1970, < año 2100)',
-    ahora > 20000n && ahora < 47500n,
-    `epoca=${ahora} — si esto falla, alguien pasó milisegundos`,
+    'hashEvidenceBytes matches hashEvidenceFile',
+    toHex(hashEvidenceBytes(Buffer.from('abc'))) === SHA256_ABC,
   );
-  check('periodo serializa como decimal', periodoAJson(19945n) === '19945');
-  check('y deserializa a bigint', periodoDesdeJson('19945') === 19945n);
-  checkRechaza('un periodo no numérico se rechaza', () => periodoDesdeJson('19945.0'), 'no es un periodo válido');
 
-  console.log('\n=== 9. Conversión hex <-> bytes ===');
-  const bytes = bytesAleatorios32();
-  check('round-trip bytes -> hex -> bytes', aHex(aBytes32(aHex(bytes))) === aHex(bytes));
-  check('aHex produce 64 chars', aHex(bytes).length === 64);
-  checkRechaza('hex corto se rechaza', () => aBytes32('abcd'), 'no es un Hex32 válido');
-  checkRechaza(
-    'hex con caracteres inválidos se rechaza (Buffer.from truncaría en silencio)',
-    () => aBytes32(`zz${'0'.repeat(62)}`),
-    'no es un Hex32 válido',
+  // Large file: streaming must not change the result.
+  const large = Buffer.alloc(3 * 1024 * 1024, 7);
+  const largePath = path.join(tmpDir, 'large.bin');
+  fs.writeFileSync(largePath, large);
+  check(
+    'a 3 MB file hashes the same via stream as in memory',
+    toHex(await hashEvidenceFile(largePath)) === toHex(hashEvidenceBytes(large)),
   );
-  checkRechaza('hex en mayúsculas se rechaza (formato canónico)', () => aBytes32('A'.repeat(64)), 'no es un Hex32 válido');
+
+  const summary1 = await evidenceSummary(evidencePath);
+  check('evidenceSummary reports local name and size', summary1.name === 'evidence.txt' && summary1.bytes === 3);
+  check('evidenceSummary.hashHex matches', summary1.hashHex === SHA256_ABC);
+
+  await checkRejectsAsync(
+    'a nonexistent file rejects with a readable error',
+    () => hashEvidenceFile(path.join(tmpDir, 'does-not-exist.pdf')),
+    'could not read the evidence',
+  );
+
+  console.log('\n=== 8. Epochs (period: Uint<64> -> bigint) ===');
+  check('epoch duration = 86400 s', EPOCH_DURATION_SEC === 86400n);
+  check('epochOfSeconds(0) = 0', epochOfSeconds(0) === 0n);
+  check('epochOfSeconds(86399) = 0', epochOfSeconds(86399) === 0n);
+  check('epochOfSeconds(86400) = 1', epochOfSeconds(86400) === 1n);
+  check('epochStart(1) = 86400', epochStart(1n) === 86400n);
+  check('epochEnd(1) = 172800', epochEnd(1n) === 172800n);
+  const now = currentEpoch();
+  check(
+    'the current epoch falls inside its own window',
+    epochStart(now) <= BigInt(Math.floor(Date.now() / 1000)) &&
+      BigInt(Math.floor(Date.now() / 1000)) < epochEnd(now),
+    `epoch=${now}`,
+  );
+  check(
+    'the current epoch is plausible (> 20000 days since 1970, < year 2100)',
+    now > 20000n && now < 47500n,
+    `epoch=${now} — if this fails, someone passed milliseconds`,
+  );
+  check('period serializes as decimal', periodToJson(19945n) === '19945');
+  check('and deserializes to bigint', periodFromJson('19945') === 19945n);
+  checkRejects('a non-numeric period is rejected', () => periodFromJson('19945.0'), 'not a valid period');
+
+  console.log('\n=== 9. Hex <-> bytes conversion ===');
+  const bytes = randomBytes32();
+  check('round-trip bytes -> hex -> bytes', toHex(toBytes32(toHex(bytes))) === toHex(bytes));
+  check('toHex produces 64 chars', toHex(bytes).length === 64);
+  checkRejects('short hex is rejected', () => toBytes32('abcd'), 'not a valid Hex32');
+  checkRejects(
+    'hex with invalid characters is rejected (Buffer.from would silently truncate)',
+    () => toBytes32(`zz${'0'.repeat(62)}`),
+    'not a valid Hex32',
+  );
+  checkRejects('uppercase hex is rejected (canonical format)', () => toBytes32('A'.repeat(64)), 'not a valid Hex32');
 }
 
 main()
   .then(() => {
-    fs.rmSync(dirTmp, { recursive: true, force: true });
-    resumen('selftest secrets + evidencia');
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    summary('selftest secrets + evidence');
   })
   .catch((e: unknown) => {
-    fs.rmSync(dirTmp, { recursive: true, force: true });
-    console.error('\nselftest abortado:', e);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    console.error('\nselftest aborted:', e);
     process.exit(1);
   });

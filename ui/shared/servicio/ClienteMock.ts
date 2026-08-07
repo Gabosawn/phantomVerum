@@ -14,19 +14,25 @@
 
 import {
   authorshipOf,
+  credCommitmentOf,
+  EPOCH_DURATION_SECONDS,
   hashDeArchivo,
   leafOf,
   nullifierOf,
-  periodoABytes32,
   reportIdOf,
   type Hex32,
 } from "../cripto";
 import {
+  AuthorshipAlreadyRevealedError,
   CredencialInvalidaError,
   DenunciaRepetidaError,
   NoSosElAutorError,
   NullifierRepetidoError,
   OrganizacionYaRegistradaError,
+  OrganizationNotRegisteredError,
+  PeriodNotStartedError,
+  PeriodOverError,
+  ReportDoesNotExistError,
   type EstadoLedger,
   type ExportLlaveAutoria,
   type Progreso,
@@ -66,8 +72,9 @@ export function ledgerVacio(altura = 1_284_917): LedgerLocal {
 
 const PASOS_DENUNCIAR = [
   "witness credentialSecret() + credentialPath() → recibidos, proceso local",
-  "merkleTreePathRoot(leafOf(orgId, cred)) · checkRoot contra el ancla · depth 8",
-  "nullifier = H(dom:nullifier ‖ credSecret ‖ orgId ‖ periodo)",
+  "C0 · blockTime dentro de [inicio, fin) de la época · el período no lo elige el denunciante",
+  "merkleTreePathRoot(leafOf(orgId, credCommitmentOf(cred))) · checkRoot contra el ancla · depth 8",
+  "nullifier = H(dom:nullifier ‖ credSecret ‖ orgId ‖ época)",
   "reportId  = H(dom:report ‖ evidenciaHash ‖ secretPersonal)",
   "zk proof generada · 3.412 constraints",
   "tx submitted · fees shielded · sin msg.sender",
@@ -88,6 +95,12 @@ export type OpcionesMock = {
   ledgerInicial?: LedgerLocal;
   /** Se llama después de cada mutación, para persistir. */
   alCambiar?: (ledger: LedgerLocal) => void;
+  /**
+   * The chain clock, in Unix SECONDS — the mock's stand-in for `blockTime`.
+   * Injectable so tests can advance it across epochs. Defaults to the real
+   * clock, which is what the demo uses.
+   */
+  now?: () => number;
 };
 
 export class ClienteMock implements TestigoClient {
@@ -95,11 +108,13 @@ export class ClienteMock implements TestigoClient {
   private witnesses: Witnesses | null = null;
   private readonly ritmoMs: number;
   private readonly alCambiar?: (ledger: LedgerLocal) => void;
+  private readonly now: () => number;
 
   constructor(opciones: OpcionesMock = {}) {
     this.ledger = opciones.ledgerInicial ?? ledgerVacio();
     this.ritmoMs = opciones.ritmoMs ?? 600;
     this.alCambiar = opciones.alCambiar;
+    this.now = opciones.now ?? (() => Math.floor(Date.now() / 1000));
   }
 
   // ── Estado privado ──────────────────────────────────────────────────────
@@ -152,45 +167,63 @@ export class ClienteMock implements TestigoClient {
     return this.confirmar(3);
   }
 
+  /**
+   * Mirror of `issueCredential(orgId, credCommitment)`: the issuer receives
+   * the COMMITMENT — never `credSecret` — and builds the leaf ITSELF from the
+   * orgId it just validated. If the leaf arrived precomputed, the org check
+   * would be decorative: one could smuggle in a leaf bound to an organization
+   * that never registered (the phantom-org attack the contract closes).
+   */
   async emitirCredencial(p: {
     orgId: Hex32;
-    credencialSecret?: Hex32;
-  }): Promise<{ credencialSecret: Hex32; hojaIndex: number; tx: TxResult }> {
-    // assert(organizations.member(orgId))
+    credCommitment: Hex32;
+  }): Promise<{ hojaIndex: number; tx: TxResult }> {
+    // assert(organizations.member(orgId), "organization not registered")
     if (!(p.orgId in this.ledger.organizaciones)) {
-      throw new CredencialInvalidaError();
+      throw new OrganizationNotRegisteredError();
     }
-    const credencialSecret = p.credencialSecret ?? secretAleatorio();
-    const hoja = await leafOf(p.orgId, credencialSecret);
+    const hoja = await leafOf(p.orgId, p.credCommitment);
     const hojaIndex = this.ledger.credenciales.indexOf(hoja);
     if (hojaIndex === -1) this.ledger.credenciales.push(hoja);
     return {
-      credencialSecret,
       hojaIndex: hojaIndex === -1 ? this.ledger.credenciales.length - 1 : hojaIndex,
       tx: this.confirmar(2),
     };
   }
 
   async denunciar(
-    p: { orgId: Hex32; periodo: string; evidencia: Uint8Array },
+    p: { orgId: Hex32; periodo: number; evidencia: Uint8Array },
     onPaso?: Progreso,
   ): Promise<{ denunciaId: Hex32; nullifier: Hex32; tx: TxResult }> {
     const w = this.exigirWitnesses();
 
     // El archivo se hashea acá y sólo el hash sigue viaje. Esto es real.
     const evidenciaHash = await hashDeArchivo(p.evidencia);
-    const periodo = periodoABytes32(p.periodo);
+
+    // C0 — the period is NOT freely chosen by the caller: it must be the
+    // CURRENT epoch (`start <= blockTime < start + duration`). Without this,
+    // the same credential would yield N distinct nullifiers by varying the
+    // period and the anti-spam would be worth nothing.
+    const windowStart = p.periodo * EPOCH_DURATION_SECONDS;
+    const blockTime = this.now();
+    if (blockTime < windowStart) {
+      throw new PeriodNotStartedError();
+    }
+    if (blockTime >= windowStart + EPOCH_DURATION_SECONDS) {
+      throw new PeriodOverError();
+    }
 
     // C1 — pertenencia. En el circuito es merkleTreePathRoot + checkRoot; acá
     // es pertenencia de la hoja al set de credenciales emitidas. La semántica
     // que se demuestra es la misma: probás que sos de adentro sin decir quién.
-    const hoja = await leafOf(p.orgId, w.credencialSecret);
+    // The leaf is rebuilt from the COMMITMENT, exactly like the circuit does.
+    const hoja = await leafOf(p.orgId, await credCommitmentOf(w.credencialSecret));
     if (!this.ledger.credenciales.includes(hoja)) {
       throw new CredencialInvalidaError();
     }
 
     // C2 — el nullifier usa el secret de la CREDENCIAL, no el personal.
-    const nullifier = await nullifierOf(w.credencialSecret, p.orgId, periodo);
+    const nullifier = await nullifierOf(w.credencialSecret, p.orgId, p.periodo);
     if (this.ledger.nullifiers.includes(nullifier)) {
       throw new NullifierRepetidoError();
     }
@@ -219,18 +252,26 @@ export class ClienteMock implements TestigoClient {
       throw new NoSosElAutorError();
     }
 
-    // assert(reportIdOf(ev, secret) == reportId) — sólo el autor pasa.
+    // C1 — assert(reportIdOf(ev, secret) == reportId, "not the author").
     const recomputado = await reportIdOf(w.evidenciaHash, w.secretPersonal);
     if (recomputado !== p.denunciaId) {
       throw new NoSosElAutorError();
     }
 
-    await this.correrPasos(PASOS_REVELAR, onPaso);
+    // C2 — assert(reports.member(reportId), "report does not exist").
+    if (!this.ledger.denuncias.includes(p.denunciaId)) {
+      throw new ReportDoesNotExistError();
+    }
 
     const autoriaHash = await authorshipOf(w.secretPersonal, p.denunciaId, p.fiscalPk);
-    if (!this.ledger.autorias.includes(autoriaHash)) {
-      this.ledger.autorias.push(autoriaHash);
+    // assert(!authorships.member(...), "authorship already revealed to this prosecutor")
+    if (this.ledger.autorias.includes(autoriaHash)) {
+      throw new AuthorshipAlreadyRevealedError();
     }
+
+    await this.correrPasos(PASOS_REVELAR, onPaso);
+
+    this.ledger.autorias.push(autoriaHash);
 
     return { autoriaHash, tx: this.confirmar(4) };
   }
@@ -256,12 +297,6 @@ export class ClienteMock implements TestigoClient {
       autorias: [...this.ledger.autorias],
     };
   }
-}
-
-function secretAleatorio(): Hex32 {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Fabricado, y declarado como tal. No es un hash de transacción real. */

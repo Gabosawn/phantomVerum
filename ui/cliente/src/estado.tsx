@@ -17,9 +17,16 @@ import {
   type ReactNode,
 } from "react";
 
-import { hashDeArchivo, leafOf, secretNuevo, type Hex32 } from "@shared/cripto";
-import { ANCLA, MUESTRA_ORIGINAL, ORG_ID, ORG_NOMBRE, PERIODO, VERIFICADORES } from "@shared/demo";
-import { horaLog } from "@shared/formato";
+import {
+  credCommitmentOf,
+  epochIndexOf,
+  hashDeArchivo,
+  leafOf,
+  secretNuevo,
+  type Hex32,
+} from "@shared/cripto";
+import { ANCLA, MUESTRA_ORIGINAL, ORG_ID, ORG_NOMBRE, VERIFICADORES } from "@shared/demo";
+import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
@@ -59,6 +66,14 @@ const LOGS_INICIALES: Log[] = [
 ];
 
 function useEstado() {
+  // Shown, never typed: the reporting period is the CURRENT epoch, derived
+  // from the clock exactly like `denunciar` derives it — the contract's C0
+  // rejects any other value, so there is nothing for the user to choose.
+  const currentEpochLabel = useMemo(
+    () => epochLabel(epochIndexOf(Math.floor(Date.now() / 1000))),
+    [],
+  );
+
   const [ruta, setRuta] = useState<Ruta>("denunciar");
   const [logs, setLogs] = useState<Log[]>(LOGS_INICIALES);
   const [terminalAbierta, setTerminalAbierta] = useState(true);
@@ -71,8 +86,15 @@ function useEstado() {
   const [orgRegistrada, setOrgRegistrada] = useState(false);
   const [alturaOrg, setAlturaOrg] = useState<number | null>(null);
   const [hojasEmitidas, setHojasEmitidas] = useState(0);
+  // What the ISSUER sees of each employee: name, role, the COMMITMENT the
+  // employee handed over, and the derived leaf. Never the credential secret.
   const [directorioConHojas, setDirectorioConHojas] = useState(
-    DIRECTORIO.map((emp) => ({ ...emp, hoja: "" as Hex32 })),
+    DIRECTORIO.map((emp) => ({
+      nombre: emp.nombre,
+      rol: emp.rol,
+      credCommitment: "" as Hex32,
+      hoja: "" as Hex32,
+    })),
   );
 
   const [archivo, setArchivo] = useState<Archivo | null>(null);
@@ -122,10 +144,20 @@ function useEstado() {
 
   // Las hojas son públicas: son lo que el ancla resume. Se muestran para dejar
   // claro que conocerlas no le sirve a nadie para saber quién denunció.
+  // The commitment derivation happens on the EMPLOYEE's side: the issuer only
+  // ever receives `credCommitmentOf(credSecret)`, never the secret itself.
   useEffect(() => {
     let vigente = true;
     Promise.all(
-      DIRECTORIO.map(async (emp) => ({ ...emp, hoja: await leafOf(ORG_ID, emp.credencialSecret) })),
+      DIRECTORIO.map(async (emp) => {
+        const credCommitment = await credCommitmentOf(emp.credencialSecret);
+        return {
+          nombre: emp.nombre,
+          rol: emp.rol,
+          credCommitment,
+          hoja: await leafOf(ORG_ID, credCommitment),
+        };
+      }),
     ).then((conHojas) => {
       if (vigente) setDirectorioConHojas(conHojas);
     });
@@ -164,14 +196,16 @@ function useEstado() {
       log("circuit registerOrganization(orgId, ancla) · sin witnesses");
       log(`tx confirmada · organizations[0x${ORG_ID.slice(0, 8)}…] ← ancla`);
 
+      // Employee side: each employee derives their commitment locally and
+      // hands ONLY that to the issuer. The mock rebuilds the leaf itself.
       for (const empleado of DIRECTORIO) {
         await cliente.emitirCredencial({
           orgId: ORG_ID,
-          credencialSecret: empleado.credencialSecret,
+          credCommitment: await credCommitmentOf(empleado.credencialSecret),
         });
       }
       setHojasEmitidas(cliente.instantanea().credenciales.length);
-      log(`${DIRECTORIO.length} credenciales emitidas · el directorio no se publicó`);
+      log(`${DIRECTORIO.length} credenciales emitidas · la empresa sólo vio commitments`);
     } catch (e) {
       fallar(e);
     }
@@ -214,8 +248,11 @@ function useEstado() {
     log("POST /prove report · witnesses: credentialSecret, personalSecret, evidenceHash");
 
     try {
+      // The period is DERIVED from the clock, never typed by the user: the
+      // contract's C0 rejects anything that is not the current epoch.
+      const periodo = epochIndexOf(Math.floor(Date.now() / 1000));
       const r = await cliente.denunciar(
-        { orgId: ORG_ID, periodo: PERIODO, evidencia: evidencia.current },
+        { orgId: ORG_ID, periodo, evidencia: evidencia.current },
         (paso) => {
           setPasosDenuncia((previos) => [...previos, paso]);
           log(paso);
@@ -419,7 +456,7 @@ function useEstado() {
     limpiarError: () => setError(null),
 
     orgNombre: ORG_NOMBRE,
-    periodo: PERIODO,
+    periodo: currentEpochLabel,
     orgId: ORG_ID,
     ancla: ANCLA,
     directorio: DIRECTORIO,

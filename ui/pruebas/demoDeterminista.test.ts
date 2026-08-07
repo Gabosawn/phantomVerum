@@ -17,14 +17,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import {
-  authorshipOf,
-  hashDeArchivo,
-  nullifierOf,
-  periodoABytes32,
-  reportIdOf,
-} from "../shared/cripto";
-import { ORG_ID, PERIODO, PK_ACME_LEGAL, VERIFICADORES } from "../shared/demo";
+import { authorshipOf, hashDeArchivo, nullifierOf, reportIdOf } from "../shared/cripto";
+import { DEMO_EPOCH, ORG_ID, PK_ACME_LEGAL, VERIFICADORES } from "../shared/demo";
 import { EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "../cliente/src/demoPrivado";
 import { AUTORIA_DEMO_PIA, DENUNCIA_DEMO, NULLIFIER_DEMO } from "../explorer/src/ledgerFixture";
 
@@ -49,7 +43,9 @@ describe("el fixture del Explorer corresponde a las muestras reales", () => {
   });
 
   it("NULLIFIER_DEMO usa el secret de la CREDENCIAL, como el circuito", async () => {
-    expect(await nullifierOf(EMPLEADO_DEMO.credencialSecret, ORG_ID, periodoABytes32(PERIODO))).toBe(
+    // The period is the demo's EPOCH INDEX — floor(unixSeconds / 86400) —
+    // exactly what the contract's C0 pins to the block time.
+    expect(await nullifierOf(EMPLEADO_DEMO.credencialSecret, ORG_ID, DEMO_EPOCH)).toBe(
       NULLIFIER_DEMO,
     );
   });

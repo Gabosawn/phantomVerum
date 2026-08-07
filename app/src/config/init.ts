@@ -1,24 +1,24 @@
 /**
- * B1.4 — Inicialización del network id global.
+ * B1.4 — Global network id initialization.
  *
- * `@midnight-ntwrk/midnight-js-network-id` guarda el network id en una variable
- * de módulo. `getNetworkId()` TIRA si nunca se llamó a `setNetworkId()`
- * (verificado en `midnight-js-network-id/dist/index.mjs`, 4.1.1):
+ * `@midnight-ntwrk/midnight-js-network-id` keeps the network id in a module
+ * variable. `getNetworkId()` THROWS if `setNetworkId()` was never called
+ * (verified in `midnight-js-network-id/dist/index.mjs`, 4.1.1):
  *
  *     'Network ID has not been configured. Call setNetworkId() before any
  *      wallet or contract operation.'
  *
- * Por eso este módulo se importa PRIMERO en todos los scripts: hace el
- * `setNetworkId` una sola vez, como efecto de import, antes de que cualquier
- * otro módulo toque el wallet o el contrato.
+ * That is why this module is imported FIRST in every script: it does the
+ * `setNetworkId` once, as an import effect, before any other module touches
+ * the wallet or the contract.
  *
- *     import './config/init.js';   // <- primera línea de cada script
+ *     import './config/init.js';   // <- first line of every script
  *
- * Si `NETWORK` tiene un valor inválido esto explota en el import, no a mitad
- * de un deploy. Es a propósito.
+ * If `NETWORK` has an invalid value this blows up at import time, not
+ * mid-deploy. On purpose.
  *
- * Ojo: en 4.1.1 `NetworkId` es `string`, no un enum. No hay un
- * `NetworkId.TestNet` que importar — el valor sale de `networks.ts`
+ * Note: in 4.1.1 `NetworkId` is a `string`, not an enum. There is no
+ * `NetworkId.TestNet` to import — the value comes from `networks.ts`
  * (`'preview'` / `'undeployed'`).
  */
 import { getNetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -28,8 +28,8 @@ import { activeNetwork, type NetworkConfig } from './networks.js';
 let configured: NetworkConfig | undefined;
 
 /**
- * Setea el network id global a partir del entorno activo. Idempotente: la
- * segunda llamada devuelve lo ya configurado sin volver a escribir.
+ * Sets the global network id from the active environment. Idempotent: the
+ * second call returns what is already configured without writing again.
  */
 export const initNetwork = (env: NodeJS.ProcessEnv = process.env): NetworkConfig => {
   if (configured !== undefined) {
@@ -42,19 +42,19 @@ export const initNetwork = (env: NodeJS.ProcessEnv = process.env): NetworkConfig
 };
 
 /**
- * El entorno activo, ya inicializado. Para código que asume que algún script
- * ya llamó a `initNetwork()` (que es lo que hace el import de este módulo).
+ * The active environment, already initialized. For code assuming some script
+ * already called `initNetwork()` (which importing this module does).
  */
 export const currentNetwork = (): NetworkConfig => initNetwork();
 
 /**
- * El network id global tal como lo ve midnight-js. Sirve para verificar en un
- * test que `init` corrió y que coincide con la red que creemos estar usando.
+ * The global network id as midnight-js sees it. Lets a test verify that
+ * `init` ran and that it matches the network we believe we are on.
  */
 export const currentNetworkId = (): string => {
   initNetwork();
   return getNetworkId();
 };
 
-// Efecto de import: configurar la red apenas se carga el módulo.
+// Import effect: configure the network as soon as the module loads.
 initNetwork();

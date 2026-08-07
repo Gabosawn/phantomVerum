@@ -7,10 +7,21 @@
  * necesitara algo de ese archivo, el discurso entero se caería.
  */
 
+import { epochLabel } from "./formato";
 import type { Hex32, Verificador } from "./tipos";
 
 export const ORG_NOMBRE = "ACME S.A.";
-export const PERIODO = "2026-08";
+
+/**
+ * The reporting epoch of the seeded demo report: `floor(unixSeconds / 86400)`
+ * for 2026-08-07 UTC. Periods are EPOCH INDEXES bound to the chain clock —
+ * the contract's C0 rejects any other value — so the Explorer fixture pins
+ * the epoch its baked-in nullifier was derived from.
+ */
+export const DEMO_EPOCH = 20672;
+
+/** Display label for the demo epoch (what the Explorer shows as the period). */
+export const PERIODO = epochLabel(DEMO_EPOCH);
 
 export const ORG_ID: Hex32 = "9c41e2b7159e8c80e81a49b4ff962258c96e7b463443bb64a24057aebbcad80a";
 export const ANCLA: Hex32 = "4d7a1f091f0bd415480ff72966302e5040792986a8fec755fd4615a696fd3ce6";

@@ -74,15 +74,60 @@ async function hashVector(...partes: Uint8Array[]): Promise<Hex32> {
 // Sin esto, `nullifier` y `authorship` comparten forma y un atacante que
 // registra una org con orgId = reportId fuerza una colisión cruzada.
 const domCred = () => pad32("phantomtrace:cred:v1");
+const domCredComm = () => pad32("phantomtrace:credcomm:v1");
 const domReport = () => pad32("phantomtrace:report:v1");
 const domNullifier = () => pad32("phantomtrace:nullifier:v1");
 const domAuthorship = () => pad32("phantomtrace:authorship:v1");
 
-// ── Los cuatro pure circuits ──────────────────────────────────────────────
+// ── Reporting epochs ──────────────────────────────────────────────────────
+// Mirrors `epochDuration()` in the contract: 86 400 seconds = 1 day.
+// `report()` forces the public `period` argument to be the CURRENT epoch
+// (`start <= blockTime < start + duration`), so the period is never a free
+// label chosen by the caller.
 
-/** `leafOf(orgId, credSecret)` — la hoja del árbol de credenciales. */
-export function leafOf(orgId: Hex32, credSecret: Hex32): Promise<Hex32> {
-  return hashVector(domCred(), deHex(orgId), deHex(credSecret));
+export const EPOCH_DURATION_SECONDS = 86_400;
+
+/** The epoch index for a Unix timestamp: `floor(unixSeconds / 86400)`. */
+export function epochIndexOf(unixSeconds: number): number {
+  return Math.floor(unixSeconds / EPOCH_DURATION_SECONDS);
+}
+
+/**
+ * Encodes an epoch index as the 32-byte value the nullifier hashes over.
+ *
+ * The circuit does `(period as Field) as Bytes<32>`. This mirror pins the
+ * encoding to a 32-byte BIG-ENDIAN unsigned integer (value in the last 8
+ * bytes, zero-padded on the left). The circuit's exact byte order is
+ * irrelevant here — H already differs (SHA-256 vs persistentHash) — what
+ * matters is that the encoding is deterministic and injective.
+ */
+export function epochToBytes32(epoch: number | bigint): Uint8Array {
+  const value = BigInt(epoch);
+  if (value < 0n || value >= 1n << 64n) {
+    throw new Error(`epoch ${value} does not fit in Uint<64>`);
+  }
+  const out = new Uint8Array(32);
+  new DataView(out.buffer).setBigUint64(24, value); // big-endian
+  return out;
+}
+
+// ── Los cinco pure circuits ───────────────────────────────────────────────
+
+/**
+ * `credCommitmentOf(credSecret)` — the credential commitment. It is the ONLY
+ * thing the employee hands to the issuer: the org never sees `credSecret`.
+ */
+export function credCommitmentOf(credSecret: Hex32): Promise<Hex32> {
+  return hashVector(domCredComm(), deHex(credSecret));
+}
+
+/**
+ * `leafOf(orgId, credCommitment)` — la hoja del árbol de credenciales.
+ * Takes the COMMITMENT (`credCommitmentOf(credSecret)`), not the raw secret,
+ * so the issuer can rebuild the leaf without ever learning the secret.
+ */
+export function leafOf(orgId: Hex32, credCommitment: Hex32): Promise<Hex32> {
+  return hashVector(domCred(), deHex(orgId), deHex(credCommitment));
 }
 
 /** `reportIdOf(ev, sec)` — el sellado. Sólo el autor conoce el preimagen. */
@@ -95,9 +140,16 @@ export function reportIdOf(evidenceHash: Hex32, personalSecret: Hex32): Promise<
  *
  * OJO: en `report()` el circuito lo llama con `cred` (el secret de la
  * credencial), NO con el personal. Una credencial = una denuncia por período.
+ *
+ * `period` is the EPOCH INDEX (`epochIndexOf(unixSeconds)`), a Uint<64> in
+ * the circuit — never a free label. See `epochToBytes32` for the encoding.
  */
-export function nullifierOf(credSecret: Hex32, orgId: Hex32, period: Hex32): Promise<Hex32> {
-  return hashVector(domNullifier(), deHex(credSecret), deHex(orgId), deHex(period));
+export function nullifierOf(
+  credSecret: Hex32,
+  orgId: Hex32,
+  period: number | bigint,
+): Promise<Hex32> {
+  return hashVector(domNullifier(), deHex(credSecret), deHex(orgId), epochToBytes32(period));
 }
 
 /** `authorshipOf(sec, reportId, prosecutorPk)` — el designated verifier. */
@@ -118,11 +170,6 @@ export function authorshipOf(
  */
 export async function hashDeArchivo(contenido: Uint8Array): Promise<Hex32> {
   return aHex(await sha256(contenido));
-}
-
-/** `periodo` viaja al circuito como `Bytes<32>`; "2026-08" se paddea. */
-export function periodoABytes32(periodo: string): Hex32 {
-  return aHex(pad32(periodo));
 }
 
 /** Deriva un identificador estable de 32 bytes a partir de una etiqueta. */

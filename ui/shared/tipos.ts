@@ -62,10 +62,15 @@ export type FilaDenuncia = {
   bloque: number;
 };
 
+/**
+ * A directory row as the ISSUER sees it: the employee derives
+ * `credCommitment = credCommitmentOf(credSecret)` on their own machine and
+ * hands over only the commitment. The org never learns `credSecret`.
+ */
 export type Empleado = {
   nombre: string;
   rol: string;
-  credencialSecret: Hex32;
+  credCommitment: Hex32;
   hoja: Hex32;
 };
 
@@ -76,39 +81,78 @@ export type Verificador = {
 };
 
 // ── Errores que fallan en proof time, sin emitir transacción ──────────────
+// Each message is the VERBATIM assert string of `contracts/src/testigo.compact`
+// — what the proof server would report. The views wrap them in their own copy.
 
 export class CredencialInvalidaError extends Error {
   constructor() {
-    super("la credencial no pertenece a la organización");
+    super("credential does not belong to the organization");
     this.name = "CredencialInvalidaError";
   }
 }
 
 export class NullifierRepetidoError extends Error {
   constructor() {
-    super("ya denunciaste este período");
+    super("already reported this period");
     this.name = "NullifierRepetidoError";
   }
 }
 
 export class DenunciaRepetidaError extends Error {
   constructor() {
-    super("esa denuncia ya está sellada");
+    super("report already sealed");
     this.name = "DenunciaRepetidaError";
   }
 }
 
 export class NoSosElAutorError extends Error {
   constructor() {
-    super("no sos el autor de esa denuncia");
+    super("not the author");
     this.name = "NoSosElAutorError";
   }
 }
 
 export class OrganizacionYaRegistradaError extends Error {
   constructor() {
-    super("organización ya registrada");
+    super("organization already registered");
     this.name = "OrganizacionYaRegistradaError";
+  }
+}
+
+export class OrganizationNotRegisteredError extends Error {
+  constructor() {
+    super("organization not registered");
+    this.name = "OrganizationNotRegisteredError";
+  }
+}
+
+/** C0 — the public `period` argument is below the current epoch window. */
+export class PeriodNotStartedError extends Error {
+  constructor() {
+    super("period not started yet");
+    this.name = "PeriodNotStartedError";
+  }
+}
+
+/** C0 — the public `period` argument is above the current epoch window. */
+export class PeriodOverError extends Error {
+  constructor() {
+    super("period already over");
+    this.name = "PeriodOverError";
+  }
+}
+
+export class ReportDoesNotExistError extends Error {
+  constructor() {
+    super("report does not exist");
+    this.name = "ReportDoesNotExistError";
+  }
+}
+
+export class AuthorshipAlreadyRevealedError extends Error {
+  constructor() {
+    super("authorship already revealed to this prosecutor");
+    this.name = "AuthorshipAlreadyRevealedError";
   }
 }
 
@@ -123,13 +167,22 @@ export type Progreso = (paso: string) => void;
 export interface TestigoClient {
   registrarOrganizacion(p: { orgId: Hex32; ancla: Hex32 }): Promise<TxResult>;
 
+  /**
+   * The issuer receives the COMMITMENT (`credCommitmentOf(credSecret)`), never
+   * the secret, and derives the leaf itself — mirror of `issueCredential`.
+   */
   emitirCredencial(p: {
     orgId: Hex32;
-  }): Promise<{ credencialSecret: Hex32; hojaIndex: number; tx: TxResult }>;
+    credCommitment: Hex32;
+  }): Promise<{ hojaIndex: number; tx: TxResult }>;
 
-  /** Hashea la evidencia LOCALMENTE; el archivo no se transmite. */
+  /**
+   * Hashea la evidencia LOCALMENTE; el archivo no se transmite.
+   * `periodo` is the EPOCH INDEX (`epochIndexOf(unixSeconds)`); the contract's
+   * C0 forces it to be the CURRENT epoch, so callers derive it from the clock.
+   */
   denunciar(
-    p: { orgId: Hex32; periodo: string; evidencia: Uint8Array },
+    p: { orgId: Hex32; periodo: number; evidencia: Uint8Array },
     onPaso?: Progreso,
   ): Promise<{ denunciaId: Hex32; nullifier: Hex32; tx: TxResult }>;
 

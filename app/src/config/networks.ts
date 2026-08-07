@@ -1,69 +1,70 @@
 /**
- * B1.1 — Entornos de red de Testigo.
+ * B1.1 — Testigo network environments.
  *
- * Dos entornos: `preview` (la red pública del hackathon) y `local` (devnet en
- * Docker). La selección se hace por `process.env.NETWORK`, con `preview` por
- * defecto.
+ * Two environments: `preview` (the hackathon's public network) and `local`
+ * (Docker devnet). Selection happens via `process.env.NETWORK`, defaulting
+ * to `preview`.
  *
- * REGLA DE ORO (docs/01-arquitectura.md §8): nada acá sale de memoria. La forma
- * del objeto de configuración y las URLs de Preview están copiadas de la fuente
- * autoritativa: `PreviewTestEnvironment.getEnvironmentConfiguration()` y
- * `LocalTestConfiguration` en
+ * GOLDEN RULE (docs/01-arquitectura.md §8): nothing here comes from memory.
+ * The config object's shape and the Preview URLs are copied from the
+ * authoritative source: `PreviewTestEnvironment.getEnvironmentConfiguration()`
+ * and `LocalTestConfiguration` in
  * `node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs` (4.1.1).
  *
- * Dos detalles que el plan (docs/04 §B1.1) no mencionaba y que el SDK SÍ exige:
+ * Two details the plan (docs/04 §B1.1) did not mention and the SDK DOES
+ * require:
  *
- *  1. `indexerPublicDataProvider(queryURL, subscriptionURL)` necesita DOS URLs.
- *     La de suscripción es el endpoint WebSocket del indexer
- *     (`.../api/v4/graphql/ws`), no la HTTP.
- *  2. El `networkId` de la red local NO es `'local'`: el nodo standalone se
- *     identifica como `'undeployed'`. `'local'` es solo el nombre con el que
- *     elegimos el entorno desde la CLI/env.
+ *  1. `indexerPublicDataProvider(queryURL, subscriptionURL)` needs TWO URLs.
+ *     The subscription one is the indexer's WebSocket endpoint
+ *     (`.../api/v4/graphql/ws`), not the HTTP one.
+ *  2. The local network's `networkId` is NOT `'local'`: the standalone node
+ *     identifies as `'undeployed'`. `'local'` is only the name used to pick
+ *     the environment from the CLI/env.
  */
 import { NetworkId } from '@midnight-ntwrk/wallet-sdk';
 
-/** Nombre con el que se elige el entorno (`NETWORK=...`). */
+/** Name used to pick the environment (`NETWORK=...`). */
 export type NetworkName = 'preview' | 'local';
 
 /**
- * Configuración de un entorno.
+ * Configuration of one environment.
  *
- * Es estructuralmente compatible con `EnvironmentConfiguration` de
- * `@midnight-ntwrk/testkit-js` — `config/providers.ts` la pasa directo a
- * `MidnightWalletProvider.build()`, y `tsc` verifica la compatibilidad ahí.
- * Definirla acá (en vez de importar el tipo de un devDependency) mantiene este
- * módulo sin dependencias del testkit.
+ * Structurally compatible with testkit-js's `EnvironmentConfiguration` —
+ * `config/providers.ts` passes it straight to
+ * `MidnightWalletProvider.build()`, and `tsc` verifies the compatibility
+ * there. Defining it here (instead of importing the type from a
+ * devDependency) keeps this module free of testkit dependencies.
  */
 export interface NetworkConfig {
-  /** Nombre del entorno tal como se pide por `NETWORK=`. */
+  /** Environment name as requested via `NETWORK=`. */
   readonly name: NetworkName;
-  /** Network id que consume el wallet SDK (address bech32m, etc.). */
+  /** Network id consumed by the wallet SDK (bech32m addresses, etc.). */
   readonly walletNetworkId: NetworkId.NetworkId;
-  /** Network id global de midnight-js — lo consume `setNetworkId` (ver init.ts). */
+  /** Global midnight-js network id — consumed by `setNetworkId` (see init.ts). */
   readonly networkId: string;
-  /** Endpoint GraphQL HTTP del indexer (queries). */
+  /** Indexer GraphQL HTTP endpoint (queries). */
   readonly indexer: string;
-  /** Endpoint GraphQL WebSocket del indexer (subscriptions). */
+  /** Indexer GraphQL WebSocket endpoint (subscriptions). */
   readonly indexerWS: string;
-  /** RPC HTTP del nodo. */
+  /** Node HTTP RPC. */
   readonly node: string;
-  /** RPC WebSocket del nodo. */
+  /** Node WebSocket RPC. */
   readonly nodeWS: string;
-  /** Proof server. Siempre local: nunca ve la seed ni las signing keys. */
+  /** Proof server. Always local: it never sees the seed or the signing keys. */
   readonly proofServer: string;
-  /** Faucet de tDUST, si el entorno tiene uno. */
+  /** tDUST faucet, if the environment has one. */
   readonly faucet: string | undefined;
 }
 
-/** Proof server por defecto (imagen `midnightntwrk/proof-server:8.1.0`). */
+/** Default proof server (image `midnightntwrk/proof-server:8.1.0`). */
 export const DEFAULT_PROOF_SERVER = 'http://localhost:6300';
 
-/** Entorno usado si `NETWORK` no está seteada. */
+/** Environment used when `NETWORK` is not set. */
 export const DEFAULT_NETWORK: NetworkName = 'preview';
 
 /**
- * Preview — red pública del hackathon.
- * URLs verificadas contra `PreviewTestEnvironment` de testkit-js 4.1.1.
+ * Preview — the hackathon's public network.
+ * URLs verified against testkit-js 4.1.1's `PreviewTestEnvironment`.
  */
 export const PREVIEW: NetworkConfig = {
   name: 'preview',
@@ -78,8 +79,8 @@ export const PREVIEW: NetworkConfig = {
 };
 
 /**
- * Local — devnet en Docker (plan B de docs/03 §6).
- * Puertos según docs/02-entorno.md y AGENTS.md: nodo 9944, indexer 8088.
+ * Local — Docker devnet (plan B of docs/03 §6).
+ * Ports per docs/02-entorno.md and AGENTS.md: node 9944, indexer 8088.
  */
 export const LOCAL: NetworkConfig = {
   name: 'local',
@@ -93,23 +94,23 @@ export const LOCAL: NetworkConfig = {
   faucet: undefined,
 };
 
-/** Todos los entornos conocidos, indexados por nombre. */
+/** Every known environment, indexed by name. */
 export const NETWORKS: Readonly<Record<NetworkName, NetworkConfig>> = {
   preview: PREVIEW,
   local: LOCAL,
 };
 
-/** Nombres válidos, para mensajes de error. */
+/** Valid names, for error messages. */
 export const NETWORK_NAMES: readonly NetworkName[] = ['preview', 'local'];
 
-/** Type guard: ¿este string es un entorno conocido? */
+/** Type guard: is this string a known environment? */
 export const isNetworkName = (value: string): value is NetworkName =>
   Object.prototype.hasOwnProperty.call(NETWORKS, value);
 
 /**
- * Normaliza el valor crudo de `NETWORK`. Falla cerrado: un nombre desconocido
- * es un error explícito, no un fallback silencioso a Preview (deployar contra
- * la red equivocada por un typo es exactamente el bug que no queremos).
+ * Normalizes the raw `NETWORK` value. Fails closed: an unknown name is an
+ * explicit error, not a silent fallback to Preview (deploying against the
+ * wrong network over a typo is exactly the bug we do not want).
  */
 export const resolveNetworkName = (raw: string | undefined): NetworkName => {
   const trimmed = raw?.trim();
@@ -118,21 +119,21 @@ export const resolveNetworkName = (raw: string | undefined): NetworkName => {
   }
   if (!isNetworkName(trimmed)) {
     throw new Error(
-      `NETWORK="${trimmed}" no es un entorno válido. Opciones: ${NETWORK_NAMES.join(' | ')}.`,
+      `NETWORK="${trimmed}" is not a valid environment. Options: ${NETWORK_NAMES.join(' | ')}.`,
     );
   }
   return trimmed;
 };
 
-/** Devuelve la configuración de un entorno por nombre. */
+/** Returns an environment's configuration by name. */
 export const getNetworkConfig = (name: NetworkName): NetworkConfig => NETWORKS[name];
 
 /**
- * Configuración del entorno activo, leyendo el ambiente del proceso.
+ * Configuration of the active environment, reading the process env.
  *
- * - `NETWORK` elige el entorno (default `preview`).
- * - `PROOF_SERVER` puede pisar la URL del proof server (útil si el container
- *   quedó en otro puerto).
+ * - `NETWORK` picks the environment (default `preview`).
+ * - `PROOF_SERVER` may override the proof server URL (useful if the
+ *   container landed on another port).
  */
 export const activeNetwork = (env: NodeJS.ProcessEnv = process.env): NetworkConfig => {
   const base = getNetworkConfig(resolveNetworkName(env.NETWORK));
@@ -143,13 +144,13 @@ export const activeNetwork = (env: NodeJS.ProcessEnv = process.env): NetworkConf
   return { ...base, proofServer: proofServerOverride };
 };
 
-/** Resumen de una línea por endpoint — para el log de arranque de los scripts. */
+/** One line per endpoint — for the scripts' startup log. */
 export const describeNetwork = (config: NetworkConfig): string =>
   [
-    `red            : ${config.name} (networkId=${config.networkId})`,
+    `network        : ${config.name} (networkId=${config.networkId})`,
     `indexer        : ${config.indexer}`,
     `indexer (ws)   : ${config.indexerWS}`,
-    `nodo           : ${config.nodeWS}`,
+    `node           : ${config.nodeWS}`,
     `proof server   : ${config.proofServer}`,
-    `faucet         : ${config.faucet ?? '(sin faucet)'}`,
+    `faucet         : ${config.faucet ?? '(no faucet)'}`,
   ].join('\n');

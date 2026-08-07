@@ -4,6 +4,12 @@
  * proving keys (so `compile:fast` is enough).
  *
  * All shapes here are verified against `contracts/output/contract/index.d.ts`.
+ *
+ * Block time: `createCircuitContext`'s seventh parameter is the block's `secondsSinceEpoch`,
+ * which is what the contract's `blockTimeGte`/`blockTimeLt` (the C0 epoch window) read. The
+ * harness therefore builds a FRESH context per call from the state it carries plus its own
+ * clock — the same shape `contracts/test/harness.mjs` and `app/src/api/ejecutor-simulador.ts`
+ * use. A context created once at construction would freeze the clock forever.
  */
 
 import {
@@ -11,12 +17,17 @@ import {
   createConstructorContext,
   sampleContractAddress,
 } from "@midnight-ntwrk/compact-runtime";
-import type { CircuitContext, MerkleTreeDigest, MerkleTreePath } from "@midnight-ntwrk/compact-runtime";
+import type {
+  ChargedState,
+  CircuitContext,
+  MerkleTreeDigest,
+  MerkleTreePath,
+} from "@midnight-ntwrk/compact-runtime";
 
 import { ASSERTS } from "./contract-surface.js";
-import { bytesToHex, hexToBytes, padHex32 } from "./crypto.js";
+import { bytesToHex, hexToBytes } from "./crypto.js";
 import { COMPILED_CONTRACT } from "./index.js";
-import { AssertError } from "./types.js";
+import { AssertError, GENESIS_BLOCK_TIME } from "./types.js";
 import type { Actor, Hex32, LedgerSnapshot, TestigoHarness } from "./types.js";
 import { privateStateFor, witnesses } from "./witnesses.js";
 import type { TestigoPrivateState } from "./witnesses.js";
@@ -28,16 +39,17 @@ export interface GeneratedModule {
   Contract: new (w: typeof witnesses) => GeneratedContract;
   ledger(state: unknown): GeneratedLedger;
   pureCircuits: {
-    leafOf(orgId: Uint8Array, credSecret: Uint8Array): Uint8Array;
+    credCommitmentOf(credSecret: Uint8Array): Uint8Array;
+    leafOf(orgId: Uint8Array, credCommitment: Uint8Array): Uint8Array;
     reportIdOf(ev: Uint8Array, sec: Uint8Array): Uint8Array;
-    nullifierOf(sec: Uint8Array, orgId: Uint8Array, period: Uint8Array): Uint8Array;
+    nullifierOf(sec: Uint8Array, orgId: Uint8Array, period: bigint): Uint8Array;
     authorshipOf(sec: Uint8Array, reportId: Uint8Array, prosecutorPk: Uint8Array): Uint8Array;
   };
 }
 
 interface GeneratedContract {
   initialState(ctx: unknown): {
-    currentContractState: unknown;
+    currentContractState: { data: ChargedState };
     currentPrivateState: PS;
     currentZswapLocalState: unknown;
   };
@@ -89,7 +101,14 @@ export class SimulatorHarness implements TestigoHarness {
   readonly backend = "contract" as const;
 
   private readonly contract: GeneratedContract;
-  private ctx: CircuitContext<PS>;
+  private readonly address = sampleContractAddress();
+
+  // The pieces a CircuitContext is built from. Kept apart, instead of one long-lived context,
+  // so every call can carry the CURRENT clock (see the module comment).
+  private contractState: ChargedState;
+  private zswap: CircuitContext<PS>["currentZswapLocalState"];
+  private privateState: PS;
+  private clock = GENESIS_BLOCK_TIME;
 
   constructor(private readonly mod: GeneratedModule) {
     this.contract = new mod.Contract(witnesses);
@@ -98,23 +117,42 @@ export class SimulatorHarness implements TestigoHarness {
       createConstructorContext(EMPTY_PRIVATE_STATE, COIN_PUBLIC_KEY),
     );
 
-    this.ctx = createCircuitContext<PS>(
-      sampleContractAddress(),
-      initial.currentZswapLocalState as never,
-      initial.currentContractState as never,
-      initial.currentPrivateState,
-    );
+    this.contractState = initial.currentContractState.data;
+    this.zswap = initial.currentZswapLocalState;
+    this.privateState = initial.currentPrivateState;
   }
 
   as(actor: Actor): this {
-    this.ctx = { ...this.ctx, currentPrivateState: privateStateFor(actor) };
+    this.privateState = privateStateFor(actor);
     return this;
   }
 
+  setBlockTime(secondsSinceEpoch: number): void {
+    this.clock = Math.floor(secondsSinceEpoch);
+  }
+
+  advanceTime(seconds: number): void {
+    this.clock += Math.floor(seconds);
+  }
+
+  /** The context for ONE call: current state, current private state, current block time. */
+  private context(): CircuitContext<PS> {
+    return createCircuitContext<PS>(
+      this.address,
+      this.zswap as never,
+      this.contractState,
+      this.privateState,
+      undefined,
+      undefined,
+      this.clock,
+    );
+  }
+
   /**
-   * Runs a circuit and advances the context.
+   * Runs a circuit and absorbs the resulting state.
    *
-   * A failed `assert` inside the circuit surfaces as a runtime throw from generated code. It is
+   * A failed `assert` inside the circuit surfaces as a runtime throw from generated code, in
+   * which case NOTHING is absorbed — the simulated counterpart of "no tx emitted". The throw is
    * normalised to `AssertError` with the message preserved, so `toThrow(/…/)` matches
    * identically on both backends — that is what lets one suite cover both.
    */
@@ -127,7 +165,10 @@ export class SimulatorHarness implements TestigoHarness {
       );
     }
     try {
-      this.ctx = fn(this.ctx, ...(args as never[])).context;
+      const r = fn(this.context(), ...(args as never[]));
+      this.contractState = r.context.currentQueryContext.state;
+      this.zswap = r.context.currentZswapLocalState;
+      this.privateState = r.context.currentPrivateState;
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       const known = KNOWN_ASSERTS.find((m) => message.includes(m));
@@ -139,12 +180,12 @@ export class SimulatorHarness implements TestigoHarness {
     this.call("registerOrganization", hexToBytes(orgId), hexToBytes(anchor));
   }
 
-  issueCredential(orgId: Hex32, leaf: Hex32): void {
-    this.call("issueCredential", hexToBytes(orgId), hexToBytes(leaf));
+  issueCredential(orgId: Hex32, credCommitment: Hex32): void {
+    this.call("issueCredential", hexToBytes(orgId), hexToBytes(credCommitment));
   }
 
-  report(orgId: Hex32, period: string): void {
-    this.call("report", hexToBytes(orgId), hexToBytes(padHex32(period)));
+  report(orgId: Hex32, period: bigint): void {
+    this.call("report", hexToBytes(orgId), period);
   }
 
   revealAuthorship(reportId: Hex32, prosecutorPk: Hex32): void {
@@ -152,7 +193,7 @@ export class SimulatorHarness implements TestigoHarness {
   }
 
   ledger(): LedgerSnapshot {
-    const l = this.mod.ledger(this.ctx.currentQueryContext.state);
+    const l = this.mod.ledger(this.contractState);
 
     const organizations = new Map<Hex32, Hex32>();
     for (const [k, v] of l.organizations) organizations.set(bytesToHex(k), bytesToHex(v));

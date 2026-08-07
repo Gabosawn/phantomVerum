@@ -9,7 +9,7 @@
 ```
 contracts/   → @phantomtrace/contracts  (Compact, compile with compact compile)
 app/         → @phantomtrace/app        (TS wiring: witnesses, scripts, config)
-ui/          → @phantomtrace/ui         (React + Vite, 3 views)
+ui/          → @phantomtrace/ui         (React + Vite: cliente + explorer + sistema)
 tests/       → @phantomtrace/tests      (Vitest + E2E simulation)
 ```
 - `npm install` at root installs all workspaces

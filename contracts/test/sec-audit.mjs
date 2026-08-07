@@ -1,111 +1,111 @@
-// Regresión adversarial. Cada bloque es un ataque que en algún momento
-// FUNCIONÓ contra este contrato; ahora el test falla si vuelve a funcionar.
-// Origen: review de seguridad del 2026-08-07 (hallazgos HIGH-1 y MEDIUM-1).
+// Adversarial regression. Each block is an attack that at some point
+// WORKED against this contract; the test now fails if it works again.
+// Origin: security review of 2026-08-07 (findings HIGH-1 and MEDIUM-1).
 
 import {
-  Contract, pureCircuits, nuevoMundo, b32, hex, check, checkRechaza, resumen,
-  EPOCA, DUR_EPOCA, AHORA,
+  pureCircuits, newWorld, b32, check, checkRejects, summary, EPOCH,
 } from './harness.mjs';
 
 const orgA = b32(0x11);
-const orgB = b32(0xb0); // NUNCA se registra
-const ancla = b32(0xaa);
+const orgB = b32(0xb0); // NEVER registered
+const anchor = b32(0xaa);
 const cred = b32(0x22);
 const sec = b32(0x44);
 
-const secretos = { ev: b32(0x33) };
-const credComm = pureCircuits.credCommitmentDe(cred);
-let hojaBuscada = pureCircuits.hojaDe(orgA, credComm);
+const secrets = { ev: b32(0x33) };
+const credComm = pureCircuits.credCommitmentOf(cred);
+let wantedLeaf = pureCircuits.leafOf(orgA, credComm);
 
 const witnesses = {
-  credencialSecret: (c) => [c.privateState, cred],
-  secretPersonal: (c) => [c.privateState, sec],
-  evidenciaHash: (c) => [c.privateState, secretos.ev],
-  credencialPath: (c) => {
-    const p = c.ledger.credenciales.findPathForLeaf(hojaBuscada);
-    if (!p) throw new Error('sin credencial');
+  credentialSecret: (c) => [c.privateState, cred],
+  personalSecret: (c) => [c.privateState, sec],
+  evidenceHash: (c) => [c.privateState, secrets.ev],
+  credentialPath: (c) => {
+    const p = c.ledger.credentials.findPathForLeaf(wantedLeaf);
+    if (!p) throw new Error('no credential');
     return [c.privateState, p.path];
   },
 };
 
-const m = nuevoMundo(witnesses);
-m.call('registrarOrganizacion', orgA, ancla);
-m.call('emitirCredencial', orgA, credComm);
-m.call('denunciar', orgA, EPOCA);
+const m = newWorld(witnesses);
+m.call('registerOrganization', orgA, anchor);
+m.call('issueCredential', orgA, credComm);
+m.call('report', orgA, EPOCH);
 
-console.log('=== A. Que expone el transcript publico de denunciar ===');
-// No es un ataque: es la superficie de disclosure que declaramos en el README.
-// Se deja como documentación ejecutable de lo que un observador ve.
-const r = m.call('revelarAutoria', pureCircuits.denunciaIdDe(secretos.ev, sec), b32(0x66));
+console.log('=== A. What the public transcript of report exposes ===');
+// Not an attack: it is the disclosure surface we declare in the README.
+// Kept as executable documentation of what an observer sees.
+const r = m.call('revealAuthorship', pureCircuits.reportIdOf(secrets.ev, sec), b32(0x66));
 const dump = JSON.stringify(r.proofData, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
-check('el transcript existe y es inspeccionable', dump.length > 0, `${dump.length} chars`);
-console.log('  Publico por diseño: orgId, epoca, denunciaId, nullifier, autoriaHash, raiz de Merkle.');
-console.log('  NUNCA sale: credencialSecret, secretPersonal, el archivo de evidencia.');
+check('the transcript exists and is inspectable', dump.length > 0, `${dump.length} chars`);
+console.log('  Public by design: orgId, epoch, reportId, nullifier, authorshipHash, Merkle root.');
+console.log('  NEVER leaves: credentialSecret, personalSecret, the evidence file.');
 
-console.log('\n=== B. [HIGH-1] El periodo NO puede elegirlo quien llama ===');
-// Antes: `periodo` era un Bytes<32> libre -> la misma credencial generaba N
-// nullifiers variando la etiqueta, y el anti-spam del spec §4.2 no servia.
-// Ahora el circuito lo ata al blockTime.
-let aceptadas = 0;
+console.log('\n=== B. [HIGH-1] The period CANNOT be chosen by the caller ===');
+// Before: `period` was a free Bytes<32> -> the same credential produced N
+// nullifiers by varying the label, and the anti-spam of spec §4.2 was
+// worthless. Now the circuit binds it to blockTime.
+let accepted = 0;
 for (const delta of [1n, 2n, 3n]) {
-  secretos.ev = b32(0x33 + Number(delta)); // evidencia distinta -> otro denunciaId
-  try { m.call('denunciar', orgA, EPOCA + delta); aceptadas++; } catch { /* esperado */ }
+  secrets.ev = b32(0x33 + Number(delta)); // different evidence -> another reportId
+  try { m.call('report', orgA, EPOCH + delta); accepted++; } catch { /* expected */ }
 }
-check('ninguna denuncia extra entra cambiando el periodo', aceptadas === 0, `${aceptadas}/3 aceptadas`);
-check('nullifiers.size sigue en 1', m.estado().nullifiers.size() === 1n,
-  `size=${m.estado().nullifiers.size()}`);
+check('no extra report gets in by changing the period', accepted === 0, `${accepted}/3 accepted`);
+check('nullifiers.size stays at 1', m.state().nullifiers.size() === 1n,
+  `size=${m.state().nullifiers.size()}`);
 
-console.log('\n=== C. [MEDIUM-1] emitirCredencial liga el orgId a la hoja ===');
-// Antes: `emitirCredencial(orgId, hoja)` recibia la hoja ya calculada, asi que
-// el assert de organizacion registrada era decorativo: se pasaba un orgId
-// registrado y se colaba la hoja de una org fantasma.
-check('orgB nunca se registro', !m.estado().organizaciones.member(orgB));
-const hojaFantasma = pureCircuits.hojaDe(orgB, credComm);
-m.call('emitirCredencial', orgA, credComm); // el atacante solo controla el commitment
-check('el arbol NO contiene una hoja para la org fantasma',
-  m.estado().credenciales.findPathForLeaf(hojaFantasma) === undefined);
-checkRechaza('emitirCredencial contra una org no registrada',
-  () => m.call('emitirCredencial', orgB, credComm), 'organizacion no registrada');
-hojaBuscada = hojaFantasma;
-secretos.ev = b32(0x70);
-checkRechaza('denunciar en nombre de la org fantasma',
-  () => m.call('denunciar', orgB, EPOCA), 'sin credencial');
-hojaBuscada = pureCircuits.hojaDe(orgA, credComm);
+console.log('\n=== C. [MEDIUM-1] issueCredential binds the orgId to the leaf ===');
+// Before: `issueCredential(orgId, leaf)` received the leaf precomputed, so
+// the registered-organization assert was decorative: one passed a registered
+// orgId and smuggled in the leaf of a phantom org.
+check('orgB was never registered', !m.state().organizations.member(orgB));
+const phantomLeaf = pureCircuits.leafOf(orgB, credComm);
+m.call('issueCredential', orgA, credComm); // the attacker only controls the commitment
+check('the tree does NOT contain a leaf for the phantom org',
+  m.state().credentials.findPathForLeaf(phantomLeaf) === undefined);
+checkRejects('issueCredential against an unregistered org',
+  () => m.call('issueCredential', orgB, credComm), 'organization not registered');
+wantedLeaf = phantomLeaf;
+secrets.ev = b32(0x70);
+checkRejects('reporting on behalf of the phantom org',
+  () => m.call('report', orgB, EPOCH), 'no credential');
+wantedLeaf = pureCircuits.leafOf(orgA, credComm);
 
-console.log('\n=== D. [DECLARADO] Quien tiene el export de llave actua como el autor ===');
-// El export §3.2 contiene {secret, evidenciaHash}: el fiscal aprende el secret.
-// Es una limitacion DECLARADA del MVP (roadmap: prueba ZK al fiscal). Este
-// bloque documenta la consecuencia exacta para que nadie se sorprenda.
-secretos.ev = b32(0x33); // volver a la evidencia de la denuncia original
-const denunciaId = pureCircuits.denunciaIdDe(b32(0x33), sec);
-const fiscal2 = b32(0x99);
-const conElExport = {
-  credencialSecret: (c) => [c.privateState, b32(0)],
-  credencialPath: (c) => [c.privateState, []],
-  secretPersonal: (c) => [c.privateState, sec],
-  evidenciaHash: (c) => [c.privateState, b32(0x33)],
+console.log('\n=== D. [DECLARED] Whoever holds the key export acts as the author ===');
+// The §3.2 export contains {secret, evidenceHash}: the prosecutor learns the
+// secret. It is a DECLARED limitation of the MVP (roadmap: ZK proof to the
+// prosecutor). This block documents the exact consequence so nobody is
+// surprised.
+secrets.ev = b32(0x33); // back to the original report's evidence
+const reportId = pureCircuits.reportIdOf(b32(0x33), sec);
+const prosecutor2 = b32(0x99);
+const withTheExport = {
+  credentialSecret: (c) => [c.privateState, b32(0)],
+  credentialPath: (c) => [c.privateState, []],
+  personalSecret: (c) => [c.privateState, sec],
+  evidenceHash: (c) => [c.privateState, b32(0x33)],
 };
-let republico = true;
-try { m.callComo(conElExport, 'revelarAutoria', denunciaId, b32(0x88)); } catch { republico = false; }
-check('CONOCIDO: con el export se puede republicar la autoria a otra pk', republico);
-m.callComo(conElExport, 'revelarAutoria', denunciaId, fiscal2);
-checkRechaza('CONOCIDO: y quemar el slot (denuncia, fiscal2) del autor real',
-  () => m.call('revelarAutoria', denunciaId, fiscal2), 'autoria ya revelada a este fiscal');
-console.log('  -> Mitigacion actual: el export se entrega a UN fiscal, fuera de banda.');
-console.log('  -> Roadmap: prueba ZK al fiscal en vez de entregarle el secret.');
+let republished = true;
+try { m.callAs(withTheExport, 'revealAuthorship', reportId, b32(0x88)); } catch { republished = false; }
+check('KNOWN: with the export the authorship can be republished to another pk', republished);
+m.callAs(withTheExport, 'revealAuthorship', reportId, prosecutor2);
+checkRejects('KNOWN: and burn the (report, prosecutor2) slot of the real author',
+  () => m.call('revealAuthorship', reportId, prosecutor2), 'authorship already revealed to this prosecutor');
+console.log('  -> Current mitigation: the export is handed to ONE prosecutor, out of band.');
+console.log('  -> Roadmap: ZK proof to the prosecutor instead of handing over the secret.');
 
-console.log('\n=== E. La raiz de Merkle cambia con cada insercion ===');
-// Un observador puede usar la raiz revelada como contador de sincronizacion.
-// Por eso el witness debe usar SIEMPRE el path del estado mas reciente.
-const raices = [];
+console.log('\n=== E. The Merkle root changes with every insertion ===');
+// An observer can use the revealed root as a synchronization counter.
+// That is why the witness must ALWAYS use the path of the latest state.
+const roots = [];
 for (let i = 0; i < 4; i++) {
-  m.call('emitirCredencial', orgA, b32(0xc0 + i));
-  raices.push(m.estado().credenciales.root().field.toString());
+  m.call('issueCredential', orgA, b32(0xc0 + i));
+  roots.push(m.state().credentials.root().field.toString());
 }
-check('4 inserciones -> 4 raices distintas', new Set(raices).size === 4);
-const hist = [...{ [Symbol.iterator]: () => m.estado().credenciales.history() }];
-check('el historico conserva las raices pasadas', hist.length > 1, `history=${hist.length}`);
-console.log('  -> Guia para app/src/witnesses: NUNCA cachear el path; recalcularlo');
-console.log('     con findPathForLeaf sobre el estado mas reciente antes de cada denuncia.');
+check('4 insertions -> 4 distinct roots', new Set(roots).size === 4);
+const hist = [...{ [Symbol.iterator]: () => m.state().credentials.history() }];
+check('the history keeps the past roots', hist.length > 1, `history=${hist.length}`);
+console.log('  -> Guidance for app/src/witnesses: NEVER cache the path; recompute it');
+console.log('     with findPathForLeaf over the latest state before every report.');
 
-resumen('sec-audit');
+summary('sec-audit');

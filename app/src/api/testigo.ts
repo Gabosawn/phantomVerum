@@ -1,277 +1,281 @@
 /**
- * B3.2–B3.5 + B3.8 — La API de Testigo (firmas congeladas en docs/03 §3.1).
+ * B3.2–B3.5 + B3.8 — The Testigo API (signatures frozen in docs/03 §3.1).
  *
- * Todo lo de acá está escrito contra `EjecutorTestigo`, así que es EL MISMO
- * código en el simulador y contra la red. Lo único que cambia es qué ejecutor
- * se inyecta.
+ * Everything here is written against `TestigoExecutor`, so it is THE SAME
+ * code on the simulator and against the network. The only thing that changes
+ * is which executor is injected.
  */
-import { epocaDeSegundos } from '../witnesses/epoca.js';
-import { hashEvidenciaArchivo, hashEvidenciaBytes } from '../witnesses/evidencia.js';
-import { type Hex32, aHex, comoBytes32, comoHex32 } from '../witnesses/hex.js';
+import { epochOfSeconds } from '../witnesses/epoch.js';
+import { hashEvidenceFile, hashEvidenceBytes } from '../witnesses/evidence.js';
+import { type Hex32, toHex, asBytes32, asHex32 } from '../witnesses/hex.js';
 import {
-  type EstadoPrivadoTestigo,
-  commitmentDeCredencial,
-  conCredencial,
-  limpiarDenunciaActiva,
+  type TestigoPrivateState,
+  credentialCommitment,
+  withCredential,
+  clearActiveReport,
   pureCircuits,
-  stagearDenunciaGuardada,
-  stagearDenunciaNueva,
+  stageStoredReport,
+  stageNewReport,
 } from '../witnesses/index.js';
 import {
-  agregarDenuncia,
-  fijarHojaIndex,
-  leerOCrearSecrets,
-  obtenerDenuncia,
+  addReport,
+  setLeafIndex,
+  readOrCreateSecrets,
+  getReport,
 } from '../witnesses/secrets.js';
 
-import type { EjecutorTestigo } from './ejecutor.js';
-import { EjecutorSimulador, type OpcionesSimulador } from './ejecutor-simulador.js';
-import { EjecutorRed, type OpcionesRed } from './ejecutor-red.js';
-import { CredencialInvalidaError, mapearErrorDeCircuito } from './errores.js';
-import { leerEstadoLedger } from './ledger.js';
+import type { TestigoExecutor } from './executor.js';
+import { SimulatorExecutor, type SimulatorOptions } from './executor-simulator.js';
+import { NetworkExecutor, type NetworkOptions } from './executor-network.js';
+import { InvalidCredentialError, mapCircuitError } from './errors.js';
+import { readLedgerState } from './ledger.js';
 import type {
-  Bytes32Entrada,
-  EstadoLedger,
-  ExportLlaveAutoria,
-  ParamsDenunciar,
-  ParamsEmitirCredencial,
-  ParamsRegistrarOrganizacion,
-  ParamsRevelarAutoria,
-  ResultadoDenunciar,
-  ResultadoEmitirCredencial,
-  ResultadoRevelarAutoria,
-  ResultadoVerificacion,
+  Bytes32Input,
+  LedgerState,
+  AuthorshipKeyExport,
+  ReportParams,
+  IssueCredentialParams,
+  RegisterOrganizationParams,
+  RevealAuthorshipParams,
+  ReportResult,
+  IssueCredentialResult,
+  RevealAuthorshipResult,
+  VerificationResult,
   TxResult,
-} from './tipos.js';
-import { SinSecretsDeLaDenunciaError, exportarLlave, verificarAutoria } from './verificar.js';
+} from './types.js';
+import { MissingReportSecretsError, exportKey, verifyAuthorship } from './verify.js';
 
-export interface ConfigApi {
+export interface ApiConfig {
   /**
-   * Ruta del almacén de secrets. Por defecto, `secrets/denunciante.json`
-   * (o `TESTIGO_SECRETS`). Los tests la pisan para no tocar los secrets reales.
+   * Path of the secrets store. Defaults to `secrets/denunciante.json`
+   * (or `TESTIGO_SECRETS`). Tests override it so they never touch the real
+   * secrets.
    */
-  readonly rutaSecrets?: string;
+  readonly secretsPath?: string;
   /**
-   * Persistir los secrets de cada denuncia en el almacén local. Default `true`.
+   * Persist each report's secrets in the local store. Default `true`.
    *
-   * Apagarlo es casi siempre un error: sin el `secretDenuncia` guardado, esa
-   * denuncia queda SIN forma de revelar autoría, para siempre. Existe solo para
-   * flujos de inspección que no deben escribir en disco.
+   * Turning it off is almost always a mistake: without the stored
+   * `reportSecret`, that report is left with NO way to reveal authorship,
+   * forever. It exists only for inspection flows that must not write to
+   * disk.
    */
-  readonly persistirSecrets?: boolean;
+  readonly persistSecrets?: boolean;
 }
 
-/** Credencial preparada del lado del cliente (mitad local de B3.3). */
-export interface CredencialLocal {
-  /** Lo ÚNICO que se le entrega al emisor. */
+/** Client-side prepared credential (local half of B3.3). */
+export interface LocalCredential {
+  /** The ONLY thing handed to the issuer. */
   readonly credCommitment: Hex32;
-  /** Queda en la máquina del denunciante. El emisor no lo ve nunca (H-4). */
-  readonly credencialSecret: Hex32;
+  /** Stays on the whistleblower's machine. The issuer never sees it (H-4). */
+  readonly credentialSecret: Hex32;
   readonly orgId: Hex32;
 }
 
-export class ApiTestigo {
+export class TestigoApi {
   constructor(
-    readonly ejecutor: EjecutorTestigo,
-    private readonly config: ConfigApi = {},
+    readonly executor: TestigoExecutor,
+    private readonly config: ApiConfig = {},
   ) {}
 
   get contractAddress(): string {
-    return this.ejecutor.contractAddress;
+    return this.executor.contractAddress;
   }
 
-  get modo(): 'simulador' | 'red' {
-    return this.ejecutor.modo;
+  get mode(): 'simulator' | 'network' {
+    return this.executor.mode;
   }
 
   /**
-   * Época en curso según el reloj que ve el ejecutor.
+   * Current epoch according to the clock this executor sees.
    *
-   * Se calcula contra `ejecutor.ahoraSegundos()` y no contra `Date.now()`
-   * porque es el mismo reloj que va a validar `blockTimeGte`/`blockTimeLt`.
+   * Computed against `executor.nowSeconds()` and not against `Date.now()`
+   * because it is the same clock that `blockTimeGte`/`blockTimeLt` will
+   * validate.
    */
-  periodoActual(): bigint {
-    return epocaDeSegundos(this.ejecutor.ahoraSegundos());
+  currentPeriod(): bigint {
+    return epochOfSeconds(this.executor.nowSeconds());
   }
 
   // ── B3.2 ──────────────────────────────────────────────────────────────
 
   /**
-   * Registra una organización con su ancla.
+   * Registers an organization with its anchor.
    *
-   * ⚠️ Sin control de acceso, y está declarado de frente en el deck y el README
-   * (docs/03 §2.6): cualquiera puede registrar una org. Es coherente con el
-   * "emisor mock" del alcance del hackathon.
+   * ⚠️ No access control, declared up-front in the deck and the README
+   * (docs/03 §2.6): anyone can register an org. Consistent with the "mock
+   * issuer" of the hackathon scope.
    */
-  async registrarOrganizacion(p: ParamsRegistrarOrganizacion): Promise<TxResult> {
-    const orgId = comoBytes32(p.orgId, 'orgId');
-    const ancla = comoBytes32(p.ancla, 'ancla');
+  async registerOrganization(p: RegisterOrganizationParams): Promise<TxResult> {
+    const orgId = asBytes32(p.orgId, 'orgId');
+    const anchor = asBytes32(p.anchor, 'anchor');
     try {
-      return await this.ejecutor.llamar('registrarOrganizacion', orgId, ancla);
+      return await this.executor.call('registerOrganization', orgId, anchor);
     } catch (error) {
-      throw mapearErrorDeCircuito(error, 'registrarOrganizacion');
+      throw mapCircuitError(error, 'registerOrganization');
     }
   }
 
   // ── B3.3 ──────────────────────────────────────────────────────────────
 
   /**
-   * Mitad CLIENTE de la emisión: genera (o recupera) el `credencialSecret`
-   * local y devuelve solo el commitment.
+   * CLIENT half of the issuance: generates (or recovers) the local
+   * `credentialSecret` and returns only the commitment.
    *
-   * SEGURIDAD (H-4, docs/03 §3.4): el secret se genera acá, en la máquina del
-   * denunciante, y nunca sale. Al emisor se le pasa `credCommitment`. Si el
-   * emisor generara el secret podría recomputar
-   * `nullifierDe(credSecret, orgId, periodo)` de cualquier empleado y saber
-   * quién denunció en cada período.
+   * SECURITY (H-4, docs/03 §3.4): the secret is generated here, on the
+   * whistleblower's machine, and never leaves it. The issuer is given
+   * `credCommitment`. If the issuer generated the secret it could recompute
+   * `nullifierOf(credSecret, orgId, period)` for any employee and learn who
+   * reported in each period.
    *
-   * También deja la credencial cargada en el estado privado, que es de donde
-   * la leen los witnesses.
+   * It also leaves the credential loaded in the private state, which is
+   * where the witnesses read it from.
    */
-  async prepararCredencialLocal(orgId: Bytes32Entrada): Promise<CredencialLocal> {
-    const orgBytes = comoBytes32(orgId, 'orgId');
-    const secrets = leerOCrearSecrets(orgBytes, this.config.rutaSecrets);
+  async prepareLocalCredential(orgId: Bytes32Input): Promise<LocalCredential> {
+    const orgBytes = asBytes32(orgId, 'orgId');
+    const secrets = readOrCreateSecrets(orgBytes, this.config.secretsPath);
 
-    const ps = await this.ejecutor.leerEstadoPrivado();
-    const conCred = conCredencial(ps, secrets.credencialSecret, secrets.orgId);
-    await this.ejecutor.escribirEstadoPrivado(conCred);
+    const ps = await this.executor.readPrivateState();
+    const withCred = withCredential(ps, secrets.credentialSecret, secrets.orgId);
+    await this.executor.writePrivateState(withCred);
 
     return {
-      credCommitment: aHex(commitmentDeCredencial(conCred)),
-      credencialSecret: secrets.credencialSecret,
+      credCommitment: toHex(credentialCommitment(withCred)),
+      credentialSecret: secrets.credentialSecret,
       orgId: secrets.orgId,
     };
   }
 
   /**
-   * Mitad EMISOR: inserta la hoja en el árbol global.
+   * ISSUER half: inserts the leaf into the global tree.
    *
-   * Recibe el commitment, nunca el secret. El contrato construye la hoja EN
-   * CIRCUITO con el `orgId` que acaba de validar (`hojaDe(orgId,
-   * credCommitment)`), así que no se puede forjar una credencial para una org
-   * no registrada — es el fix de M-1.
+   * Receives the commitment, never the secret. The contract builds the leaf
+   * IN-CIRCUIT with the `orgId` it just validated (`leafOf(orgId,
+   * credCommitment)`), so a credential cannot be forged for an unregistered
+   * org — that is the M-1 fix.
    *
-   * `hojaIndex` sale de `firstFree()` leído ANTES de insertar: es el índice que
-   * va a ocupar la hoja nueva.
+   * `leafIndex` comes from `firstFree()` read BEFORE inserting: it is the
+   * index the new leaf will occupy.
    */
-  async emitirCredencial(p: ParamsEmitirCredencial): Promise<ResultadoEmitirCredencial> {
-    const orgId = comoBytes32(p.orgId, 'orgId');
-    const credCommitment = comoBytes32(p.credCommitment, 'credCommitment');
+  async issueCredential(p: IssueCredentialParams): Promise<IssueCredentialResult> {
+    const orgId = asBytes32(p.orgId, 'orgId');
+    const credCommitment = asBytes32(p.credCommitment, 'credCommitment');
 
-    const antes = await this.ejecutor.leerLedger();
-    const hojaIndex = Number(antes.credenciales.firstFree());
+    const before = await this.executor.readLedger();
+    const leafIndex = Number(before.credentials.firstFree());
 
     let tx: TxResult;
     try {
-      tx = await this.ejecutor.llamar('emitirCredencial', orgId, credCommitment);
+      tx = await this.executor.call('issueCredential', orgId, credCommitment);
     } catch (error) {
-      throw mapearErrorDeCircuito(error, 'emitirCredencial');
+      throw mapCircuitError(error, 'issueCredential');
     }
 
-    // El almacén local solo se toca si la hoja emitida es LA NUESTRA. Este
-    // circuito lo corre el emisor, que puede estar emitiendo para cualquier
-    // empleado: escribir el hojaIndex de otro en nuestro archivo de secrets
-    // sería sencillamente incorrecto.
-    await this.persistirHojaIndexSiEsNuestra(credCommitment, hojaIndex);
+    // The local store is touched only if the issued leaf is OURS. This
+    // circuit is run by the issuer, who may be issuing for any employee:
+    // writing someone else's leafIndex into our secrets file would simply
+    // be wrong.
+    await this.persistLeafIndexIfOurs(credCommitment, leafIndex);
 
-    return { hojaIndex, tx };
+    return { leafIndex, tx };
   }
 
-  private async persistirHojaIndexSiEsNuestra(
+  private async persistLeafIndexIfOurs(
     credCommitment: Uint8Array,
-    hojaIndex: number,
+    leafIndex: number,
   ): Promise<void> {
-    if (this.config.persistirSecrets === false) return;
-    const ps = await this.ejecutor.leerEstadoPrivado();
-    if (ps.credencialSecret === null) return;
-    const nuestro = pureCircuits.credCommitmentDe(ps.credencialSecret);
-    if (aHex(nuestro) !== aHex(credCommitment)) return;
-    fijarHojaIndex(hojaIndex, this.config.rutaSecrets);
+    if (this.config.persistSecrets === false) return;
+    const ps = await this.executor.readPrivateState();
+    if (ps.credentialSecret === null) return;
+    const ours = pureCircuits.credCommitmentOf(ps.credentialSecret);
+    if (toHex(ours) !== toHex(credCommitment)) return;
+    setLeafIndex(leafIndex, this.config.secretsPath);
   }
 
   // ── B3.4 ──────────────────────────────────────────────────────────────
 
   /**
-   * Sella una denuncia.
+   * Seals a report.
    *
-   * Orden de operaciones, y el orden importa:
+   * Order of operations, and the order matters:
    *
-   *  1. hashear la evidencia LOCAL (el archivo no sale de la máquina);
-   *  2. generar un `secretDenuncia` FRESCO y stagearlo en el estado privado
-   *     (los witnesses no toman argumentos: es el único canal);
-   *  3. **PERSISTIR el secret ANTES de emitir la tx**;
-   *  4. recién ahí llamar al circuito.
+   *  1. hash the evidence LOCALLY (the file does not leave the machine);
+   *  2. generate a FRESH `reportSecret` and stage it in the private state
+   *     (witnesses take no arguments: it is the only channel);
+   *  3. **PERSIST the secret BEFORE submitting the tx**;
+   *  4. only then call the circuit.
    *
-   * El paso 3 va antes del 4 a propósito. Si el proceso muere entre el submit
-   * y el guardado, la denuncia queda sellada on-chain y su secret perdido —
-   * y sin ese secret NADIE puede reclamar su autoría, nunca. Persistir de más
-   * (una denuncia que al final no se sella) cuesta una entrada muerta en un
-   * JSON; persistir de menos cuesta la denuncia.
+   * Step 3 goes before step 4 on purpose. If the process dies between the
+   * submit and the save, the report ends up sealed on-chain with its secret
+   * lost — and without that secret NOBODY can ever claim its authorship.
+   * Over-persisting (a report that ends up not sealed) costs a dead entry
+   * in a JSON; under-persisting costs the report.
    *
-   * Errores tipados: `CredencialInvalidaError` y `NullifierRepetidoError`,
-   * los dos en proof time y sin transacción emitida.
+   * Typed errors: `InvalidCredentialError` and `RepeatedNullifierError`,
+   * both at proof time and with no transaction submitted.
    */
-  async denunciar(p: ParamsDenunciar): Promise<ResultadoDenunciar> {
-    const orgId = comoBytes32(p.orgId, 'orgId');
-    const evidenciaHash = await hashDeEvidencia(p.evidencia);
+  async report(p: ReportParams): Promise<ReportResult> {
+    const orgId = asBytes32(p.orgId, 'orgId');
+    const evidenceHash = await hashEvidence(p.evidence);
 
-    const ps = await this.ejecutor.leerEstadoPrivado();
+    const ps = await this.executor.readPrivateState();
 
-    // El witness busca la hoja con el orgId del estado privado y el circuito la
-    // reconstruye con el orgId del argumento. Si difieren, el `checkRoot`
-    // falla igual —cerrado— pero con un error que no dice nada. Este chequeo
-    // es local y sobre datos propios: no es un oráculo de pertenencia.
-    if (ps.orgId !== null && aHex(ps.orgId) !== aHex(orgId)) {
-      throw new CredencialInvalidaError(
-        `la credencial cargada es de la org ${aHex(ps.orgId)} y se está ` +
-          `denunciando a ${aHex(orgId)}`,
-        'denunciar',
+    // The witness looks the leaf up with the private state's orgId and the
+    // circuit rebuilds it with the argument's orgId. If they differ, the
+    // `checkRoot` fails anyway — closed — but with an error that says
+    // nothing. This check is local and over the caller's own data: it is not
+    // a membership oracle.
+    if (ps.orgId !== null && toHex(ps.orgId) !== toHex(orgId)) {
+      throw new InvalidCredentialError(
+        `the loaded credential belongs to org ${toHex(ps.orgId)} and the ` +
+          `report targets ${toHex(orgId)}`,
+        'report',
       );
     }
 
-    const { estado, denuncia } = stagearDenunciaNueva(ps, evidenciaHash);
-    await this.ejecutor.escribirEstadoPrivado(estado);
+    const { state, report } = stageNewReport(ps, evidenceHash);
+    await this.executor.writePrivateState(state);
 
-    // ⚠️ ANTES de la tx. Ver el comentario de arriba.
-    if (this.config.persistirSecrets !== false) {
-      agregarDenuncia(
-        denuncia.denunciaId,
+    // ⚠️ BEFORE the tx. See the comment above.
+    if (this.config.persistSecrets !== false) {
+      addReport(
+        report.reportId,
         {
-          secretDenuncia: denuncia.secretDenuncia,
-          evidenciaHash: denuncia.evidenciaHash,
-          periodo: p.periodo,
+          reportSecret: report.reportSecret,
+          evidenceHash: report.evidenceHash,
+          period: p.period,
         },
-        this.config.rutaSecrets,
+        this.config.secretsPath,
       );
     }
 
     let tx: TxResult;
     try {
-      tx = await this.ejecutor.llamar('denunciar', orgId, p.periodo);
+      tx = await this.executor.call('report', orgId, p.period);
     } catch (error) {
-      // Se saca la denuncia de foco para no dejar un secret "armado" que una
-      // llamada posterior podría usar por error. El registro en el almacén NO
-      // se borra: si la tx en realidad sí entró, borrarlo perdería la autoría.
-      await this.ejecutor.escribirEstadoPrivado(limpiarDenunciaActiva(estado));
-      throw mapearErrorDeCircuito(error, 'denunciar');
+      // The report is taken out of focus so no "armed" secret is left that
+      // a later call could use by mistake. The store record is NOT deleted:
+      // if the tx actually did land, deleting it would lose the authorship.
+      await this.executor.writePrivateState(clearActiveReport(state));
+      throw mapCircuitError(error, 'report');
     }
 
-    // El nullifier se recomputa localmente con el mismo pure circuit que usó
-    // el contrato: sirve para mostrarlo y para que la UI lo contraste.
-    const credencialSecret = estado.credencialSecret;
+    // The nullifier is recomputed locally with the same pure circuit the
+    // contract used: for display and so the UI can cross-check it.
+    const credentialSecret = state.credentialSecret;
     /* c8 ignore next */
-    if (credencialSecret === null) {
-      throw new CredencialInvalidaError('sin credencial en el estado privado', 'denunciar');
+    if (credentialSecret === null) {
+      throw new InvalidCredentialError('no credential in the private state', 'report');
     }
-    const nullifier = pureCircuits.nullifierDe(credencialSecret, orgId, p.periodo);
+    const nullifier = pureCircuits.nullifierOf(credentialSecret, orgId, p.period);
 
-    await this.ejecutor.escribirEstadoPrivado(limpiarDenunciaActiva(estado));
+    await this.executor.writePrivateState(clearActiveReport(state));
 
     return {
-      denunciaId: aHex(denuncia.denunciaId),
-      nullifier: aHex(nullifier),
-      secretDenuncia: aHex(denuncia.secretDenuncia),
-      evidenciaHash: aHex(denuncia.evidenciaHash),
+      reportId: toHex(report.reportId),
+      nullifier: toHex(nullifier),
+      reportSecret: toHex(report.reportSecret),
+      evidenceHash: toHex(report.evidenceHash),
       tx,
     };
   }
@@ -279,141 +283,144 @@ export class ApiTestigo {
   // ── B3.5 ──────────────────────────────────────────────────────────────
 
   /**
-   * Reclama la autoría de una denuncia frente a un fiscal.
+   * Claims the authorship of a report before a prosecutor.
    *
-   * Lee el `secretDenuncia` del almacén y lo stagea. `stagearDenunciaGuardada`
-   * con el 3er argumento hace el MISMO chequeo que la C1 del circuito, pero con
-   * un hash en vez de una prueba: si el almacén no reconstruye ese `denunciaId`
-   * falla al instante y se ahorra ~30 s de proving. No reemplaza al `assert`
-   * del circuito, que es el que realmente vale.
+   * Reads the `reportSecret` from the store and stages it.
+   * `stageStoredReport` with the 3rd argument performs the SAME check as the
+   * circuit's C1, but with a hash instead of a proof: if the store does not
+   * reconstruct that `reportId` it fails instantly and saves ~30 s of
+   * proving. It does not replace the circuit's `assert`, which is the one
+   * that counts.
    *
-   * Error tipado: `NoSosElAutorError`, en proof time y sin tx emitida.
+   * Typed error: `NotTheAuthorError`, at proof time and with no tx
+   * submitted.
    */
-  async revelarAutoria(p: ParamsRevelarAutoria): Promise<ResultadoRevelarAutoria> {
-    const denunciaId = comoBytes32(p.denunciaId, 'denunciaId');
-    const fiscalPk = comoBytes32(p.fiscalPk, 'fiscalPk');
-    const idHex = comoHex32(denunciaId, 'denunciaId');
+  async revealAuthorship(p: RevealAuthorshipParams): Promise<RevealAuthorshipResult> {
+    const reportId = asBytes32(p.reportId, 'reportId');
+    const prosecutorPk = asBytes32(p.prosecutorPk, 'prosecutorPk');
+    const idHex = asHex32(reportId, 'reportId');
 
-    const registro = obtenerDenuncia(idHex, this.config.rutaSecrets);
-    if (registro === null) {
-      throw new SinSecretsDeLaDenunciaError(idHex);
+    const record = getReport(idHex, this.config.secretsPath);
+    if (record === null) {
+      throw new MissingReportSecretsError(idHex);
     }
 
-    const ps = await this.ejecutor.leerEstadoPrivado();
-    let stageado: EstadoPrivadoTestigo;
+    const ps = await this.executor.readPrivateState();
+    let staged: TestigoPrivateState;
     try {
-      // El 3er arg es el chequeo local barato. Un almacén inconsistente sale
-      // por acá como NoSosElAutorError, sin tocar el proof server.
-      stageado = stagearDenunciaGuardada(ps, registro, denunciaId);
+      // The 3rd arg is the cheap local check. An inconsistent store exits
+      // here as NotTheAuthorError, without touching the proof server.
+      staged = stageStoredReport(ps, record, reportId);
     } catch (error) {
-      throw mapearErrorDeCircuito(error, 'revelarAutoria');
+      throw mapCircuitError(error, 'revealAuthorship');
     }
-    await this.ejecutor.escribirEstadoPrivado(stageado);
+    await this.executor.writePrivateState(staged);
 
     let tx: TxResult;
     try {
-      tx = await this.ejecutor.llamar('revelarAutoria', denunciaId, fiscalPk);
+      tx = await this.executor.call('revealAuthorship', reportId, prosecutorPk);
     } catch (error) {
-      await this.ejecutor.escribirEstadoPrivado(limpiarDenunciaActiva(stageado));
-      throw mapearErrorDeCircuito(error, 'revelarAutoria');
+      await this.executor.writePrivateState(clearActiveReport(staged));
+      throw mapCircuitError(error, 'revealAuthorship');
     }
 
-    const autoriaHash = pureCircuits.autoriaDe(
-      comoBytes32(registro.secretDenuncia, 'secretDenuncia'),
-      denunciaId,
-      fiscalPk,
+    const authorshipHash = pureCircuits.authorshipOf(
+      asBytes32(record.reportSecret, 'reportSecret'),
+      reportId,
+      prosecutorPk,
     );
 
-    // Apenas confirma, se saca de foco: que no quede un secret listo para usar.
-    await this.ejecutor.escribirEstadoPrivado(limpiarDenunciaActiva(stageado));
+    // As soon as it confirms, out of focus: no secret left ready to use.
+    await this.executor.writePrivateState(clearActiveReport(staged));
 
-    return { autoriaHash: aHex(autoriaHash), tx };
+    return { authorshipHash: toHex(authorshipHash), tx };
   }
 
   // ── B3.6 / B3.7 / B3.8 ────────────────────────────────────────────────
 
-  /** B3.6 — verificación off-chain contra el ledger que ve este ejecutor. */
-  verificarAutoria(p: ExportLlaveAutoria): Promise<ResultadoVerificacion> {
-    return verificarAutoria(p, this.ejecutor);
+  /** B3.6 — off-chain verification against the ledger this executor sees. */
+  verifyAuthorship(p: AuthorshipKeyExport): Promise<VerificationResult> {
+    return verifyAuthorship(p, this.executor);
   }
 
-  /** B3.7 — estado público del contrato, en la forma de §3.1. */
-  leerEstadoLedger(): Promise<EstadoLedger> {
-    return leerEstadoLedger(this.ejecutor);
+  /** B3.7 — public state of the contract, in the §3.1 shape. */
+  readLedgerState(): Promise<LedgerState> {
+    return readLedgerState(this.executor);
   }
 
-  /** B3.8 — paquete de llave de autoría para un fiscal. 100 % local. */
-  exportarLlave(denunciaId: Bytes32Entrada, fiscalPk: Bytes32Entrada): ExportLlaveAutoria {
-    return exportarLlave(denunciaId, fiscalPk, this.config.rutaSecrets);
+  /** B3.8 — authorship key package for a prosecutor. 100% local. */
+  exportKey(reportId: Bytes32Input, prosecutorPk: Bytes32Input): AuthorshipKeyExport {
+    return exportKey(reportId, prosecutorPk, this.config.secretsPath);
   }
 
-  /** Libera wallet y LevelDB, si el ejecutor tiene algo que liberar. */
-  async cerrar(): Promise<void> {
-    await this.ejecutor.cerrar?.();
+  /** Releases wallet and LevelDB, if the executor has anything to release. */
+  async close(): Promise<void> {
+    await this.executor.close?.();
   }
 }
 
-/** Hashea la evidencia: bytes en memoria o archivo por stream. */
-const hashDeEvidencia = async (
-  evidencia: ParamsDenunciar['evidencia'],
+/** Hashes the evidence: in-memory bytes or a file via stream. */
+const hashEvidence = async (
+  evidence: ReportParams['evidence'],
 ): Promise<Uint8Array> => {
-  if (evidencia instanceof Uint8Array) {
-    return hashEvidenciaBytes(evidencia);
+  if (evidence instanceof Uint8Array) {
+    return hashEvidenceBytes(evidence);
   }
-  // Por stream: una evidencia grande (un PDF escaneado, un dump de mails) no
-  // tiene por qué entrar entera en memoria.
-  return hashEvidenciaArchivo(evidencia.rutaArchivo);
+  // Via stream: a large piece of evidence (a scanned PDF, a mail dump) has
+  // no reason to fit whole in memory.
+  return hashEvidenceFile(evidence.filePath);
 };
 
-// ── B3.1 — construcción ─────────────────────────────────────────────────
+// ── B3.1 — construction ─────────────────────────────────────────────────
 
-export interface ResultadoDeploy {
-  readonly api: ApiTestigo;
+export interface DeployResult {
+  readonly api: TestigoApi;
   readonly contractAddress: string;
-  /** txId del deploy. `undefined` si el ejecutor no lo reporta. */
+  /** txId of the deploy. `undefined` if the executor does not report it. */
   readonly deployTxId: string | undefined;
 }
 
 /**
- * B3.1 — deploy nuevo contra la red activa.
+ * B3.1 — fresh deploy against the active network.
  *
- * Necesita una seed CON tDUST (`DEPLOY_SEED`). No escribe `deployment.json`:
- * eso lo hace el script de deploy de B5.1, que además registra el
- * `compilerVersion` leído de los artefactos.
+ * Needs a seed WITH tDUST (`DEPLOY_SEED`). Does not write `deployment.json`:
+ * that is done by the B5.1 deploy script, which also records the
+ * `compilerVersion` read from the artifacts.
  */
-export const deployContrato = async (
-  opciones: OpcionesRed & ConfigApi = {},
-): Promise<ResultadoDeploy> => {
-  const ejecutor = await EjecutorRed.deployar(opciones);
+export const deployContract = async (
+  options: NetworkOptions & ApiConfig = {},
+): Promise<DeployResult> => {
+  const executor = await NetworkExecutor.deploy(options);
   return {
-    api: new ApiTestigo(ejecutor, opciones),
-    contractAddress: ejecutor.contractAddress,
-    deployTxId: ejecutor.deployTxId,
+    api: new TestigoApi(executor, options),
+    contractAddress: executor.contractAddress,
+    deployTxId: executor.deployTxId,
   };
 };
 
 /**
- * B3.1 — conexión a un contrato ya deployado.
+ * B3.1 — connection to an already deployed contract.
  *
- * Sin `contractAddress` usa la de `deployment.json` (§3.2: la única fuente de
- * la dirección). Es el camino del smoke de re-conexión de B5.4 y el que van a
- * usar `ui/` y `tests/`.
+ * Without `contractAddress` it uses the one from `deployment.json` (§3.2:
+ * the single source of the address). It is the path of the B5.4 re-connect
+ * smoke and the one `ui/` and `tests/` will use.
  */
-export const conectarContrato = async (
+export const connectContract = async (
   contractAddress?: string,
-  opciones: OpcionesRed & ConfigApi = {},
-): Promise<ApiTestigo> =>
-  new ApiTestigo(await EjecutorRed.conectar(contractAddress, opciones), opciones);
+  options: NetworkOptions & ApiConfig = {},
+): Promise<TestigoApi> =>
+  new TestigoApi(await NetworkExecutor.connect(contractAddress, options), options);
 
 /**
- * Mismo API, contra el simulador local: sin red, sin proof server, sin tDUST.
+ * Same API, against the local simulator: no network, no proof server, no
+ * tDUST.
  *
- * Es lo que usa el selftest de B3 y lo que permite que B4/`tests/` corran el
- * E2E completo aunque Preview esté caída (plan B de docs/03 §6).
+ * It is what the B3 selftest uses and what lets B4/`tests/` run the full E2E
+ * even if Preview is down (plan B of docs/03 §6).
  */
-export const conectarSimulador = (
-  opciones: OpcionesSimulador & ConfigApi = {},
-): { api: ApiTestigo; ejecutor: EjecutorSimulador } => {
-  const ejecutor = new EjecutorSimulador(opciones);
-  return { api: new ApiTestigo(ejecutor, opciones), ejecutor };
+export const connectSimulator = (
+  options: SimulatorOptions & ApiConfig = {},
+): { api: TestigoApi; executor: SimulatorExecutor } => {
+  const executor = new SimulatorExecutor(options);
+  return { api: new TestigoApi(executor, options), executor };
 };

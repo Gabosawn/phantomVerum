@@ -1,84 +1,85 @@
-// Conversión hex <-> bytes para los valores de 32 bytes que cruzan la
-// frontera app <-> contrato (docs/03-plan-ejecucion.md §3.1: `Hex32` = 64
-// chars hex en minúscula, SIN prefijo `0x`).
+// Hex <-> bytes conversion for the 32-byte values crossing the app <->
+// contract boundary (docs/03-plan-ejecucion.md §3.1: `Hex32` = 64 lowercase
+// hex chars, WITHOUT the `0x` prefix).
 //
-// Todo lo que se persiste en `secrets/denunciante.json` viaja como Hex32;
-// todo lo que entra a un circuito o a un witness viaja como `Uint8Array` de
-// 32 bytes exactos. Este módulo es el único lugar donde se traduce.
+// Everything persisted in `secrets/denunciante.json` travels as Hex32;
+// everything entering a circuit or a witness travels as a `Uint8Array` of
+// exactly 32 bytes. This module is the only place where the translation
+// happens.
 
 import { randomBytes } from 'node:crypto';
 
-/** 64 caracteres hex en minúscula, sin `0x`. */
+/** 64 lowercase hex characters, without `0x`. */
 export type Hex32 = string;
 
-/** Tamaño de todos los valores del protocolo (Bytes<32> en Compact). */
-export const LARGO_BYTES = 32;
+/** Size of every protocol value (Bytes<32> in Compact). */
+export const BYTE_LENGTH = 32;
 
 const RE_HEX32 = /^[0-9a-f]{64}$/;
 
-export class HexInvalidoError extends Error {
-  constructor(campo: string, valor: unknown) {
-    const visto =
-      typeof valor === 'string' ? `string de ${valor.length} chars` : typeof valor;
-    super(`"${campo}" no es un Hex32 válido (64 chars hex minúscula, sin 0x): ${visto}`);
-    this.name = 'HexInvalidoError';
+export class InvalidHexError extends Error {
+  constructor(field: string, value: unknown) {
+    const seen =
+      typeof value === 'string' ? `string of ${value.length} chars` : typeof value;
+    super(`"${field}" is not a valid Hex32 (64 lowercase hex chars, no 0x): ${seen}`);
+    this.name = 'InvalidHexError';
   }
 }
 
-export function esHex32(valor: unknown): valor is Hex32 {
-  return typeof valor === 'string' && RE_HEX32.test(valor);
+export function isHex32(value: unknown): value is Hex32 {
+  return typeof value === 'string' && RE_HEX32.test(value);
 }
 
-/** Bytes -> Hex32. Exige exactamente 32 bytes: un valor corto sería un bug. */
-export function aHex(bytes: Uint8Array): Hex32 {
-  if (bytes.length !== LARGO_BYTES) {
-    throw new HexInvalidoError('bytes', `Uint8Array de ${bytes.length} bytes`);
+/** Bytes -> Hex32. Requires exactly 32 bytes: a short value would be a bug. */
+export function toHex(bytes: Uint8Array): Hex32 {
+  if (bytes.length !== BYTE_LENGTH) {
+    throw new InvalidHexError('bytes', `Uint8Array of ${bytes.length} bytes`);
   }
-  let salida = '';
-  for (const b of bytes) salida += b.toString(16).padStart(2, '0');
-  return salida;
+  let out = '';
+  for (const b of bytes) out += b.toString(16).padStart(2, '0');
+  return out;
 }
 
 /**
- * Hex32 -> bytes. Valida con regex ANTES de convertir: `Buffer.from(x, 'hex')`
- * trunca en silencio ante caracteres inválidos y devolvería un valor corto que
- * después explota adentro del circuito con un error ilegible.
+ * Hex32 -> bytes. Validates with a regex BEFORE converting: `Buffer.from(x,
+ * 'hex')` silently truncates on invalid characters and would return a short
+ * value that later blows up inside the circuit with an unreadable error.
  */
-export function aBytes32(hex: string, campo = 'hex'): Uint8Array {
-  if (!esHex32(hex)) throw new HexInvalidoError(campo, hex);
-  const bytes = new Uint8Array(LARGO_BYTES);
-  for (let i = 0; i < LARGO_BYTES; i++) {
+export function toBytes32(hex: string, field = 'hex'): Uint8Array {
+  if (!isHex32(hex)) throw new InvalidHexError(field, hex);
+  const bytes = new Uint8Array(BYTE_LENGTH);
+  for (let i = 0; i < BYTE_LENGTH; i++) {
     bytes[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   }
   return bytes;
 }
 
-/** Acepta cualquiera de las dos representaciones y devuelve bytes. */
-export function comoBytes32(valor: Uint8Array | Hex32, campo = 'valor'): Uint8Array {
-  if (typeof valor === 'string') return aBytes32(valor, campo);
-  if (valor.length !== LARGO_BYTES) throw new HexInvalidoError(campo, valor);
-  return valor;
+/** Accepts either representation and returns bytes. */
+export function asBytes32(value: Uint8Array | Hex32, field = 'value'): Uint8Array {
+  if (typeof value === 'string') return toBytes32(value, field);
+  if (value.length !== BYTE_LENGTH) throw new InvalidHexError(field, value);
+  return value;
 }
 
-/** Acepta cualquiera de las dos representaciones y devuelve Hex32. */
-export function comoHex32(valor: Uint8Array | Hex32, campo = 'valor'): Hex32 {
-  if (typeof valor === 'string') {
-    if (!esHex32(valor)) throw new HexInvalidoError(campo, valor);
-    return valor;
+/** Accepts either representation and returns Hex32. */
+export function asHex32(value: Uint8Array | Hex32, field = 'value'): Hex32 {
+  if (typeof value === 'string') {
+    if (!isHex32(value)) throw new InvalidHexError(field, value);
+    return value;
   }
-  return aHex(valor);
+  return toHex(value);
 }
 
 /**
- * 32 bytes de entropía criptográfica del sistema.
+ * 32 bytes of cryptographic system entropy.
  *
- * SEGURIDAD (docs/03 §3.2): los secrets del protocolo se generan SIEMPRE acá
- * y NUNCA se derivan de una password, una seed mnemónica ni de la evidencia.
- * La entropía de `secretDenuncia` es lo único que impide invertir
- * `denunciaId = H(dom ‖ evidenciaHash ‖ secretDenuncia)` por fuerza bruta:
- * `evidenciaHash` es enumerable por el empleador, porque los documentos
- * denunciados son suyos y puede hashearlos todos.
+ * SECURITY (docs/03 §3.2): protocol secrets are ALWAYS generated here and
+ * NEVER derived from a password, a mnemonic seed or the evidence. The entropy
+ * of `reportSecret` is the only thing preventing a brute-force inversion of
+ * `reportId = H(dom ‖ evidenceHash ‖ reportSecret)`: `evidenceHash` is
+ * enumerable by the employer, who owns the reported documents and can hash
+ * them all.
  */
-export function bytesAleatorios32(): Uint8Array {
-  return Uint8Array.from(randomBytes(LARGO_BYTES));
+export function randomBytes32(): Uint8Array {
+  return Uint8Array.from(randomBytes(BYTE_LENGTH));
 }

@@ -72,9 +72,10 @@ export function Emitir() {
           >
             Cada hoja es{" "}
             <code style={{ font: `500 12.5px ${MONO}`, color: "var(--pv-accent)" }}>
-              H(dom ‖ orgId ‖ credencialSecret)
+              H(dom ‖ orgId ‖ credCommitment)
             </code>
-            . Conocer las hojas no le sirve a la empresa: el circuito prueba pertenencia sin revelar
+            . El empleado deriva el commitment en su máquina y entrega sólo eso: la empresa nunca ve
+            el secret, y conocer las hojas no le sirve — el circuito prueba pertenencia sin revelar
             cuál.
           </div>
         </div>
