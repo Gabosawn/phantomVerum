@@ -5,17 +5,17 @@
   "type": "module",
   "description": "PhantomVerum — Cliente (local, privado) + Explorer (público) + Sistema visual",
   "scripts": {
-    "dev": "npm run build:shared && concurrently -n cliente,explorer,sistema -c magenta,cyan,gray \"npm:dev:cliente\" \"npm:dev:explorer\" \"npm:dev:sistema\"",
-    "dev:cliente": "vite --config vite.cliente.config.ts",
-    "dev:explorer": "vite --config vite.explorer.config.ts",
-    "dev:sistema": "vite --config vite.sistema.config.ts",
-    "build": "npm run build:shared && tsc --noEmit && npm run build:cliente && npm run build:explorer && npm run build:sistema",
-    "build:cliente": "vite build --config vite.cliente.config.ts",
-    "build:explorer": "vite build --config vite.explorer.config.ts",
-    "build:sistema": "vite build --config vite.sistema.config.ts",
+    "dev": "npm run build:shared && node ../node_modules/concurrently/dist/bin/concurrently.js -n cliente,explorer,sistema -c magenta,cyan,gray \"npm:dev:cliente\" \"npm:dev:explorer\" \"npm:dev:sistema\"",
+    "dev:cliente": "node ../node_modules/vite/bin/vite.js --config vite.cliente.config.ts",
+    "dev:explorer": "node ../node_modules/vite/bin/vite.js --config vite.explorer.config.ts",
+    "dev:sistema": "node ../node_modules/vite/bin/vite.js --config vite.sistema.config.ts",
+    "build": "npm run build:shared && node ../node_modules/typescript/lib/tsc.js --noEmit && npm run build:cliente && npm run build:explorer && npm run build:sistema",
+    "build:cliente": "node ../node_modules/vite/bin/vite.js build --config vite.cliente.config.ts",
+    "build:explorer": "node ../node_modules/vite/bin/vite.js build --config vite.explorer.config.ts",
+    "build:sistema": "node ../node_modules/vite/bin/vite.js build --config vite.sistema.config.ts",
     "build:shared": "npm run build --workspace=@phantomtrace/shared",
-    "test": "npm run build:shared && vitest run",
-    "test:watch": "vitest"
+    "test": "npm run build:shared && node ../node_modules/vitest/vitest.mjs run",
+    "test:watch": "node ../node_modules/vitest/vitest.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.1.0",

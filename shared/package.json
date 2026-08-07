@@ -5,7 +5,7 @@
   "type": "module",
   "description": "PhantomVerum — la implementación TS única y verificada de los cinco pure circuits",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "node ../node_modules/typescript/lib/tsc.js -p tsconfig.json"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "0.16.0"
