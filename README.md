@@ -91,6 +91,11 @@ denunciante dice explícitamente qué NO sale de la máquina.
 
 ## Plan de desarrollo — 4 bloques independientes
 
+> **Versión completa y actualizada:** [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) —
+> rubric oficial del evento, decisiones técnicas validadas contra el compilador
+> (Opción A Merkle ya compila), contratos de datos entre bloques (API de `app/`,
+> formatos), **Bloque E — Entrega** (deck/video/demo) y timeline horario.
+
 Los bloques **no se bloquean entre sí**: cada uno trabaja contra el spec de
 [`docs/01-arquitectura.md`](docs/01-arquitectura.md) (que define nombres de
 circuitos, estado del ledger y tipos) y contra mocks de las capas vecinas.
@@ -155,3 +160,4 @@ spec. **Entregable:** `npm test` verde + `npm run simulate` con un comando.
 | [`docs/00-idea.md`](docs/00-idea.md) | La idea, el problema y el diferencial |
 | [`docs/01-arquitectura.md`](docs/01-arquitectura.md) | Actores, flujo, spec de los 3 circuitos, estado del ledger |
 | [`docs/02-entorno.md`](docs/02-entorno.md) | Setup del entorno: toolchain, servicios, checklist |
+| [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) | Plan de ejecución mejorado: rubric oficial, decisiones validadas contra el compilador, contratos de datos entre bloques, bloque de entrega y timeline horario |

@@ -1,0 +1,306 @@
+# 03 — Plan de ejecución mejorado
+
+> Extiende el plan de 4 bloques del README con lo que le faltaba: el rubric
+> oficial del evento, las decisiones técnicas ya validadas contra el compilador
+> real, los contratos de datos entre bloques, el bloque de entrega (deck/video)
+> y un timeline horario. Todo lo afirmado acá fue verificado el vie 7/8:
+> contra el compilador 0.31.1 compilando contratos de prueba, contra la
+> compatibility matrix oficial, contra GitHub/npm, y contra las reglas
+> publicadas del evento.
+
+---
+
+## 0. Lo que manda: el rubric oficial de BA 2026
+
+Fuente: [reglas oficiales](https://hackbuenosaires.com/rules) ·
+[PDF vinculante](https://mpc.midnight.network/hubfs/Midnight_Hack_Buenos_Aires_Official_Rules.pdf)
+
+| Criterio | Peso |
+|---|---|
+| **Engineering & Implementation** | **40 %** |
+| QA & Reliability | 15 % |
+| Product & Vision | 15 % |
+| UX & Design | 15 % |
+| Communication | 10 % |
+| BizDev & Viability | **5 %** |
+
+**Lectura:** 55 % del puntaje es Engineering + QA. Cada hora en deploy real,
+tests y demo funcional rinde ~8× más que una hora en slides de negocio.
+BizDev = **una sola slide**.
+
+**Gate de descalificación explícito:** *"if the submitted Compact contract
+does not compile, the project is automatically disqualified."* Además: repo
+público + deck + demo/video antes del sáb 13:00 ART (entrega incompleta = DQ),
+topic `midnightntwrk` obligatorio, Apache 2.0, README claro.
+
+**Evidencia de qué gana:** Dawn ganó el premio grande ($3.500) con deploy real
+en testnet + Lace integrada; depapp ganó solo Best Tutorial ($500) con
+transaction hashes *mockeados*. La diferencia fue el deploy real. Es el 40 %.
+
+---
+
+## 1. Anti-DQ checklist — hacer primero (≈1 h)
+
+| # | Ítem | Estado verificado | Acción |
+|---|---|---|---|
+| 1 | Topic `midnightntwrk` | ❌ `repositoryTopics: null` | `gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact` |
+| 2 | Node ≥ 22 | ❌ instalado v20.19.4 | `nvm install 22 && nvm use 22` **antes** del primer `npm install` |
+| 3 | Deps `@midnight-ntwrk/*` | ❌ ningún package.json las declara | Pinnear exacto (verificado contra matrix Preview): midnight-js **4.1.1**, compact-runtime **0.16.0**, dapp-connector-api **4.0.1**, testkit-js **4.1.1**. `npm install` + commitear lockfile |
+| 4 | Scripts npm rotos | ❌ (ver §1.1) | Arreglar antes de que exploten en integración |
+| 5 | tDUST del faucet Preview | pendiente | Pedir HOY (los faucets se caen/rate-limitean) |
+| 6 | `.env.example` | ❌ no existe (el .gitignore lo permite) | Crear con `DEPLOY_SEED=`, `NETWORK=preview` |
+| 7 | Proof server pinneado | ⚠️ corre `:latest` | Usar `:8.1.0` (el de la matrix Preview) |
+| 8 | Licencia Apache 2.0 | ✅ | — |
+| 9 | Repo público | ✅ | — |
+| 10 | Commits post-kickoff | ✅ todos de hoy, 11:14+ | Agregar 1 línea al README declarando `.agents/` como tooling de IA de terceros, no código del producto |
+
+### 1.1 Scripts npm rotos (verificados)
+
+- `package.json` raíz: `"build": "npm run build --workspaces"` falla porque
+  `contracts/` no tiene script `build` → usar `--workspaces --if-present`.
+- `app/` y `tests/` no tienen `"type": "module"` pero el tsconfig emite ES2022
+  → `node dist/...` tira `Cannot use import statement outside a module`.
+  Además cambiar a `module`/`moduleResolution: NodeNext` en los workspaces
+  Node (con `bundler` los imports relativos sin `.js` rompen en runtime).
+- `tests/`: `"simulate": "node dist/simulation/e2e.js"` pero nada genera ese
+  `dist/` → agregar script `build`.
+- `"lint"` invoca eslint que no está instalado y con sintaxis de eslint 8 →
+  borrarlo (con 24 h no se instala un linter).
+
+---
+
+## 2. Decisiones técnicas — ya validadas compilando contra 0.31.1
+
+Un agente escribió y compiló contratos de prueba para cada punto del spec
+(§3–§5 de `01-arquitectura.md`). Resultados:
+
+### 2.1 La Opción A (Merkle) VA — y ya existe compilando
+
+- `HistoricMerkleTree<8, Bytes<32>>` + `merkleTreePathRoot` + `checkRoot`
+  existen en 0.31.1. **El contrato completo de la Opción A compila y genera
+  claves PLONK (46 s).** También la B (26 s). No hay bloqueo técnico.
+- **Variante elegida: árbol global con `orgId` dentro de la hoja**
+  (`hoja = H(dom ‖ orgId ‖ credSecret)`, construida **en circuito** — el
+  witness solo aporta los hermanos, no puede mentir sobre qué hoja prueba).
+  Probar membership en el árbol global prueba pertenencia *a esa org*: la
+  semántica multi-org se conserva.
+- Por qué no "raíz por-org en el Map" (más literal al §3): compila igual,
+  pero el ledger TS generado no expone helpers de path para esa forma —
+  habría que reimplementar el árbol off-chain a mano (3–4 h de riesgo).
+  Con el árbol global, el TS generado **regala** `findPathForLeaf()`:
+  el witness del path son ~5 líneas.
+- `HistoricMerkleTree` (no `MerkleTree`) es obligatorio: con el histórico,
+  los paths emitidos siguen válidos después de nuevas inserciones.
+- **B queda congelada como red de seguridad**: ambos contratos existen;
+  el fallback es cambiar un path de artefacto, no reescribir.
+
+### 2.2 Domain separation — obligatoria, no opcional
+
+`nullifier` y `autoria` comparten shape y el mismo `secret` en posición 0.
+Un atacante que registra una org con `orgId = denunciaId` fuerza una colisión
+cruzada. Solución validada: tag de dominio en posición 0
+(`pad(32, "testigo:nullifier:v1")`, etc.) en los 4 hashes. Un juez técnico
+que pregunta por esto recibe respuesta con el tag en el código.
+
+### 2.3 Reglas de `disclose()` (difieren del pseudocódigo del spec)
+
+- **Toda** operación de ledger exige `disclose()` en sus argumentos —
+  incluso params públicos de `export circuit` (el compilador los trata como
+  potencialmente-witness). Esto aplica a `insert`, `lookup`, `member`,
+  `checkRoot`.
+- Los `assert` sobre comparaciones derivadas de witness **no** llevan
+  `disclose()` (la C1 de `revelarAutoria` va limpia).
+
+### 2.4 Ventaja para la demo: pure circuits exportados
+
+`denunciaIdDe`, `nullifierDe`, `autoriaDe`, `hojaDe` como
+`export pure circuit` → aparecen en el TS generado como funciones puras.
+La app calcula `denunciaId` y la verificación del fiscal **localmente, sin
+proof server**. `verificarAutoria` off-chain sale gratis.
+
+### 2.5 Trampas de sintaxis 0.23 (para no perder tiempo)
+
+`goes_left` es snake_case (única inconsistencia del stdlib) ·
+`MerkleTree.root()` es runtime-only, en circuito se usa `checkRoot(digest)` ·
+`firstFree()` no existe in-circuit · `Opaque<"string">` **no es hasheable**
+(`periodo` queda `Bytes<32>`; `Uint<32>` con cast también funciona) ·
+`pad(32, ...)` exige literales → los tags de dominio van como circuits helper.
+
+### 2.6 Endurecimientos incluidos + debilidad a declarar
+
+- Guards de idempotencia: `Set.insert` es idempotente, sin
+  `assert(!member(...))` un re-envío pasaría en silencio. Incluidos en
+  denuncias, nullifiers y autorías.
+- `assert(organizaciones.member(orgId))` antes del `lookup` (error legible).
+- **Declarar de frente** (deck + README): `registrarOrganizacion` /
+  `emitirCredencial` no tienen control de acceso — coherente con "emisor
+  mock", igual que declaramos el anti-spam débil de B.
+
+Los contratos de referencia (A, B y probes por punto) están compilados en el
+scratchpad de la sesión; portarlos a `contracts/src/` es el primer ítem del
+Bloque A.
+
+---
+
+## 3. Contratos de datos entre bloques — congelar ANTES de arrancar
+
+El plan original dice "mocks + integración al final" pero no define contra qué
+mockear. Esto es lo que faltaba. **Congelado acá; si hay que cambiarlo, se
+avisa a todos los bloques.**
+
+### 3.1 API de `app/` (lo que C y D mockean)
+
+```ts
+type Hex32 = string;            // 64 chars hex, sin 0x
+type TxResult = { txId: string; blockHeight?: number };
+
+registrarOrganizacion(p: { orgId: Hex32; ancla: Hex32 }): Promise<TxResult>;
+
+emitirCredencial(p: { orgId: Hex32 }): Promise<{ credencialSecret: Hex32; hojaIndex: number; tx: TxResult }>;   // solo Opción A
+
+denunciar(p: { orgId: Hex32; periodo: string; evidencia: Uint8Array }):
+  Promise<{ denunciaId: Hex32; nullifier: Hex32; tx: TxResult }>;
+  // hashea la evidencia LOCAL; lanza CredencialInvalidaError | NullifierRepetidoError (fallan en proof time, sin tx)
+
+revelarAutoria(p: { denunciaId: Hex32; fiscalPk: Hex32 }):
+  Promise<{ autoriaHash: Hex32; tx: TxResult }>;
+  // lanza NoSosElAutorError (proof time, sin tx)
+
+verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }>;
+  // 100 % off-chain: recomputa con los pure circuits + lee el ledger vía indexer
+
+leerEstadoLedger(): Promise<{ organizaciones: number; denuncias: Hex32[]; nullifiers: number; autorias: Hex32[] }>;
+  // para el panel de la UI; vía indexer GraphQL + deserializador generado
+```
+
+### 3.2 Formatos que cruzan fronteras
+
+- **Secrets del denunciante** → `secrets/denunciante.json` (ya ignorado por
+  git): `{ version: 1, secretPersonal, credencialSecret, orgId, hojaIndex }`.
+- **Export de llave de autoría** (lo que la UI exporta y el fiscal carga) →
+  `ExportLlaveAutoria = { version: 1, denunciaId, evidenciaHash, secret,
+  fiscalPk, autoriaHash }`. ⚠️ Limitación declarada: el fiscal aprende
+  `secret` — aceptable para el MVP, roadmap: prueba ZK al fiscal.
+- **Dirección del contrato** → `app/src/config/deployment.json` commiteado:
+  `{ network: "preview", contractAddress, deployTxId, deployedAt,
+  compilerVersion: "0.31.1" }`. `ui/` y `tests/` importan de acá. Nunca de
+  una env var suelta.
+- **Seed de deploy** → `.env` (`DEPLOY_SEED=`), nunca commiteada;
+  `.env.example` sí.
+
+### 3.3 Mecanismo de tests del Bloque D (decidido)
+
+Vitest contra el **contrato compilado real** vía
+`@midnight-ntwrk/compact-runtime` (simulador local, sin red y sin proof
+server) — no mocks puros. Los tests de circuito prueban el `.compact` de
+verdad y sobreviven a la integración.
+
+---
+
+## 4. Bloques revisados
+
+Cada bloque es ejecutable por una persona o por un agente supervisado; no se
+bloquean entre sí porque §3 ya congela las interfaces.
+
+### Bloque A — Contratos (`contracts/`) — riesgo ya quemado
+
+- [ ] Portar el contrato Opción A validado a `contracts/src/testigo.compact`
+      (adaptar nombres si hace falta), `compact compile` verde **en el repo**
+- [ ] Script `compile` en contracts/package.json + gate en CI o pre-push
+      (main siempre compila = anti-DQ automático)
+- [ ] Congelar B en `contracts/src/fallback/` (compilada, sin usar)
+- **Entregable:** compile verde commiteado + claves generadas. Es el gate del
+  40 % — va primero y hoy.
+
+### Bloque B — Wiring TS (`app/`)
+
+- [ ] Deps pinneadas (§1) + config Preview (`rpc.preview.midnight.network`,
+      indexer v4, proof server local :6300)
+- [ ] Witnesses: `credencialPath()` = `ledger.credenciales.findPathForLeaf(hoja).path`
+      (~5 líneas; manejar el `undefined` = "no sos empleado")
+- [ ] Los 5 métodos de §3.1 + persistencia §3.2
+- [ ] `verificarAutoria` con pure circuits (sin proof server — gratis)
+- [ ] Deploy a Preview + `deployment.json` commiteado **esta noche** (§6)
+- **Entregable:** E2E de los 4 tiempos por CLI contra Preview; el caso
+  "secret ajeno" falla en proof time sin emitir tx.
+
+### Bloque C — UI (`ui/`)
+
+- [ ] Las 3 vistas del README, mockeando §3.1 hasta integrar
+- [ ] **Panel split "qué ve la cadena / qué nunca sale de tu máquina"** en la
+      vista Denunciante — es el artefacto que un juez de privacidad busca
+      (15 % UX se gana acá, no en pulido cosmético)
+- [ ] **Pantalla de verificación dual** en la vista Fiscal: misma prueba,
+      clave del fiscal → ✅ / clave del empleador → ❌. Es EL momento del video
+- **Entregable:** 3 vistas contra `app/` real. Legible y proyectable.
+
+### Bloque D — Tests (`tests/`)
+
+- [ ] Suite por circuito contra el contrato compilado (§3.3), tabla del README
+      + 2 casos nuevos: re-envío de denuncia idéntica falla (guard);
+      colisión nullifier/autoria imposible (domain separation)
+- [ ] `npm run simulate`: los 4 tiempos imprimiendo el ledger en cada paso
+- **Entregable:** `npm test` verde visible en README/video (QA = 15 % y casi
+  nadie lo muestra).
+
+### Bloque E — Entrega (NUEVO — antes no tenía owner ni horario)
+
+- [ ] **Deck** (~9 slides, estructura ya escrita en `contexto-hackathon.md`)
+      con dos correcciones obligatorias:
+      1. Prior art exacto: **depapp ganó Best Tutorial ($500); el premio
+         grande "Protect That Data" fue de Dawn**. La tabla tiene que decirlo
+         bien — la precisión fáctica es credibilidad.
+      2. Framing del claim, inatacable: *"el primitivo designated-verifier
+         existe como librería circom; nadie lo integró en un sistema de
+         denuncias funcionando — la autoría diferida como producto solo
+         existe en papers. Nosotros somos los primeros en shippearla, y en
+         Midnight."* Bonus: Dawn declara literal *"your identity is never
+         revealed"* — citarlo como estado del arte a superar.
+      3. Slide de limitaciones honestas (emisor mock, sin access control en
+         registro, veracidad, metadata off-chain) — la honestidad preventiva
+         desarma al juez técnico. BizDev: UNA slide (5 %).
+- [ ] **Video ≤ 3 min** — guión con timestamps:
+      0:00–0:20 hook (SEC: probar que fuiste el primero sin quemarte) ·
+      0:20–0:40 tabla prior art, columna "¿autoría diferida?" toda en ❌ ·
+      0:40–2:20 los 4 tiempos EN VIVO: T2 con split-screen
+      cadena/máquina + timer de proving; T3 alteración rechazada;
+      **T4 clímax: dos ventanas FISCAL ✅ / EMPLEADOR ❌** ·
+      2:20–2:45 ingeniería (compile verde, address en explorer, tests) ·
+      2:45–3:00 cierre: "el buzón es plomería; la autoría diferida es el
+      producto".
+- [ ] Grabar contra la demo **congelada** (sáb 10:30), nunca a las 12:30.
+- [ ] README final: quitar checkboxes vacías y `deck/` fantasma; agregar
+      screenshots + address del contrato + cómo correr todo.
+
+---
+
+## 5. Timeline (vie tarde → sáb 13:00 ART)
+
+| Hora límite | Hito (verde = commiteado y pusheado) |
+|---|---|
+| **vie 15:30** | §1 completo: topic, Node 22, deps + lockfile, scripts arreglados, `.env.example`, tDUST pedido. §3 congelado (este doc). |
+| **vie 17:00** | **Bloque A entregado: `compact compile` verde en el repo** (gate asegurado, decisión A confirmada). Arrancan B/C/D/E en paralelo. |
+| **vie 21:00** | B: 4 tiempos E2E contra **undeployed/local**. D: suite de circuitos verde. |
+| **vie 24:00** | **Deploy a Preview + `deployment.json` commiteado + E2E contra Preview.** Si falla acá, queda toda la mañana para el plan B — por eso va hoy. |
+| **sáb 09:00** | UI integrada a `app/` real. `npm run simulate` verde contra Preview. |
+| **sáb 10:30** | **Feature freeze.** Se graba el video sobre este estado. Deck cerrado. |
+| **sáb 12:00** | Video subido, README final, tag de release. 1 h de buffer. |
+| **sáb 13:00** | Submit. **Ninguna operación contra Preview después de sáb 11:00.** |
+
+**Prioridad si hay que sacrificar:** compile gate > E2E CLI contra Preview >
+video/deck > UI pulida > tests exhaustivos.
+
+---
+
+## 6. Integración y plan B
+
+**Orden de integración:** A→B (contrato real reemplaza mock) → B+D (simulate
+contra red) → B+C (UI contra app real). Smoke test tras cada paso = el script
+E2E de los 4 tiempos.
+
+**Plan B si Preview falla** (RPC caído, faucet seco, tx que no confirma):
+la demo cae a local/undeployed (node `ws://localhost:9944` + indexer `:8088`,
+ya documentados en AGENTS.md) y el video se graba con lo que esté verde.
+Tener proofs pre-generadas + video pre-grabado como fallback de la demo en
+vivo; mostrar al menos UNA generación de prueba en vivo con timer si tarda
+< 30 s.
