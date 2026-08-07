@@ -5,6 +5,7 @@ import {
   LineaFormula,
   MONO,
   PasosProof,
+  Rastro,
   Rotulo,
   SG,
   Tarjeta,
@@ -34,7 +35,7 @@ export function Revelar() {
         <div style={{ padding: "18px 20px" }}>
           {!e.llave ? (
             <Dropzone
-              titulo="Cargar phantomverum-autoria.key"
+              titulo="Cargar phantom-trace-autoria.key"
               sub="el que descargaste al denunciar"
               accept=".key,application/json"
               onArchivo={e.cargarLlave}
@@ -111,6 +112,7 @@ export function Revelar() {
           <Rotulo color="var(--pv-pos)" tracking=".16em">
             Prueba generada · designada a {e.verificador.nombre}
           </Rotulo>
+          <Rastro estado="revelado" ancho={200} alto={64} />
           <div
             style={{
               font: `600 clamp(24px, 2.6vw, 34px)/1.15 ${SG}`,

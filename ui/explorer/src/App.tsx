@@ -11,7 +11,7 @@ import { Sello } from "./vistas/Sello";
 
 export function App() {
   const e = useExplorer();
-  const tema = useTema("explorer", "claro");
+  const tema = useTema("explorer", "oscuro");
 
   return (
     <div

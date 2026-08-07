@@ -42,8 +42,8 @@ npm run dev --workspace=ui         # starts the two apps + the visual system
 
 | URL | What it is |
 |---|---|
-| `localhost:3000` | **PhantomVerum Client** — runs on your machine. Dark. Has a proof server |
-| `localhost:3001` | **PhantomVerum Explorer** — the public ledger. Light. **No** proof server |
+| `localhost:3000` | **Phantom Trace Client** — runs on your machine. Dark. Has a proof server |
+| `localhost:3001` | **Phantom Trace Explorer** — the public ledger. Dark. **No** proof server |
 | `localhost:3002` | Visual system (palette, typography, assets) — reference for the deck |
 
 They are **two distinct origins on purpose**: the browser gives each its own
@@ -90,7 +90,7 @@ phantomtrace/
 Midnight's dual ledger is not explained with a sign: it translates into **two
 separate programs**, with opposite visual registers and no shared state.
 
-**PhantomVerum Client** — dark, runs on your machine, has a proof server and
+**Phantom Trace Client** — dark, runs on your machine, has a proof server and
 keeps the witnesses.
 
 | View | What it does |
@@ -99,7 +99,7 @@ keeps the witnesses.
 | **Report** (T2) | You load the evidence — hashed **here**, with Web Crypto — pick org and period, and two hashes come out |
 | **Reveal authorship** (T4) | You load your key, choose before whom, and the proof gets bound to that public key |
 
-**PhantomVerum Explorer** — light, public, **no proof server**, and it says so
+**Phantom Trace Explorer** — dark, public, **no proof server**, and it says so
 in the footer: there is nothing private to process.
 
 | View | What it does |

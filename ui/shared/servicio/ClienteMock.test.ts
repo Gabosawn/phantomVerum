@@ -146,7 +146,7 @@ describe("T2 · denunciar", () => {
     const evidenciaHash = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
     expect(c.obtenerWitnesses()?.evidenciaHash).toBe(evidenciaHash);
     expect(r.denunciaId).toBe(
-      "3ab5b5b6dd9be079019eb9a9bac9e939966bdbc0405c16313cb9aa1d1b6d50f4",
+      "56e4da144e489f73cfc304cc58b10be3511fc93e936f5c6561f1700a6c57336b",
     );
   });
 

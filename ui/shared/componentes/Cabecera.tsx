@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { MONO, SG } from "./base";
 
 /**
- * La línea violeta de 3 px del borde inferior es lo ÚNICO que las dos apps
+ * La línea Pulse de 3 px del borde inferior es lo ÚNICO que las dos apps
  * comparten visualmente. Todo lo demás es opuesto a propósito.
  */
 export function Cabecera({
@@ -19,7 +19,7 @@ export function Cabecera({
   return (
     <header
       style={{
-        borderBottom: "2px solid var(--pv-violeta)",
+        borderBottom: "2px solid var(--pv-pulse)",
         background: "var(--pv-surface)",
         flex: "none",
       }}
@@ -36,21 +36,21 @@ export function Cabecera({
           }}
         >
           <img
-            src="/marca.svg"
+            src="/isotipo.png"
             alt=""
             width={29}
             height={29}
             style={{ display: "block", flex: "none" }}
           />
           <div style={{ font: `600 19px/1 ${SG}`, letterSpacing: "-.02em" }}>
-            Phantom<span style={{ color: "var(--pv-violeta)" }}>Verum</span>
+            Phantom <span style={{ color: "var(--pv-pulse)" }}>Trace</span>
           </div>
           <div
             style={{
               font: `600 9px/1.3 ${MONO}`,
               letterSpacing: ".14em",
               textTransform: "uppercase",
-              color: "var(--pv-violeta)",
+              color: "var(--pv-pulse)",
               border: "1px solid var(--pv-h40)",
               padding: "5px 7px",
             }}
@@ -132,7 +132,7 @@ export function Pestana({
       <span
         style={{
           height: 3,
-          background: activa ? "var(--pv-violeta)" : "transparent",
+          background: activa ? "var(--pv-pulse)" : "transparent",
           alignSelf: "stretch",
           marginTop: 2,
         }}

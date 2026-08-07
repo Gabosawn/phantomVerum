@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "PhantomVerum — la implementación TS única y verificada de los cinco pure circuits",
+  "description": "Phantom Trace — la implementación TS única y verificada de los cinco pure circuits",
   "scripts": {
     "build": "node ../node_modules/typescript/lib/tsc.js -p tsconfig.json"
   },

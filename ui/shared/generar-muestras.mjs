@@ -27,7 +27,7 @@ function cuerpo(monto) {
     "",
     "Firma: Direccion de Compras y Contrataciones.",
     "",
-    "-- documento de muestra, PhantomVerum / Midnight Hack BA 2026 --",
+    "-- documento de muestra, Phantom Trace / Midnight Hack BA 2026 --",
   ];
 }
 

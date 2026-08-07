@@ -1,7 +1,8 @@
 import type { CSSProperties, ReactNode } from "react";
 
-export const MONO = "IBM Plex Mono, ui-monospace, monospace";
+export const MONO = "JetBrains Mono, ui-monospace, monospace";
 export const SG = "Space Grotesk, system-ui, sans-serif";
+export const INTER = "Inter, system-ui, sans-serif";
 
 /** Rótulo chico versalita — el label de sistema del diseño. */
 export function Rotulo({
@@ -202,44 +203,53 @@ export function BarraCensura({
 }
 
 /**
- * Sello octogonal — la silueta del logo. Aparece UNA sola vez por pantalla,
+ * Sello — el isotipo de Phantom Trace. Aparece UNA sola vez por pantalla,
  * cuando algo quedó sellado on-chain.
  */
-export function SelloZK({ tamano = 88 }: { tamano?: number }) {
+export function SelloZK({ tamano = 84 }: { tamano?: number }) {
   return (
     <div
       style={{
         width: tamano,
-        height: tamano,
-        clipPath: "polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%)",
-        background: "var(--pv-violeta)",
+        flex: "none",
         display: "flex",
         flexDirection: "column",
+        gap: 8,
         alignItems: "center",
-        justifyContent: "center",
-        color: "#151520",
-        textAlign: "center",
-        flex: "none",
       }}
     >
-      <div style={{ font: `600 8px/1.2 ${MONO}`, letterSpacing: ".12em" }}>SELLADO</div>
-      <div style={{ font: `700 21px/1 ${SG}`, margin: "3px 0 2px", letterSpacing: "-.03em" }}>
-        ZK
+      <img
+        src="/isotipo.png"
+        alt=""
+        width={tamano}
+        height={tamano}
+        style={{ display: "block", boxShadow: "0 0 0 1px var(--pv-h22)" }}
+      />
+      <div
+        style={{
+          font: `600 7.5px/1.3 ${MONO}`,
+          letterSpacing: ".12em",
+          textAlign: "center",
+          color: "var(--pv-muted)",
+        }}
+      >
+        SELLADO
+        <br />
+        ZK · MIDNIGHT
       </div>
-      <div style={{ font: `500 7.5px/1.2 ${MONO}`, letterSpacing: ".08em" }}>MIDNIGHT</div>
     </div>
   );
 }
 
 /**
- * El bloque de fórmula con la línea violeta: exactamente qué valores cruzan.
+ * El bloque de fórmula con la línea Pulse: exactamente qué valores cruzan.
  * En el Cliente siempre precede al botón que firma.
  */
 export function LineaFormula({ titulo, children }: { titulo: ReactNode; children: ReactNode }) {
   return (
     <div
       style={{
-        borderLeft: "2px solid var(--pv-violeta)",
+        borderLeft: "2px solid var(--pv-pulse)",
         padding: "4px 0 4px 18px",
         display: "flex",
         flexDirection: "column",
@@ -265,7 +275,7 @@ export function PasosProof({ titulo, pasos }: { titulo: ReactNode; pasos: string
   return (
     <div
       style={{
-        border: "1.5px solid var(--pv-violeta)",
+        border: "1.5px solid var(--pv-pulse)",
         background: "var(--pv-card)",
         padding: "20px 22px",
         display: "flex",
@@ -292,6 +302,39 @@ export function PasosProof({ titulo, pasos }: { titulo: ReactNode; pasos: string
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * El rastro — lo único propio de Phantom Trace. Un trazo punteado que asciende
+ * y termina en un punto Pulse: el momento revelado. Latente en Steel (existe,
+ * anónimo, sin revelar); revelado en Pulse (el denunciante apareció).
+ */
+export function Rastro({
+  estado = "revelado",
+  ancho = 200,
+  alto = 64,
+}: {
+  estado?: "latente" | "revelado";
+  ancho?: number;
+  alto?: number;
+}) {
+  const punta = estado === "revelado" ? "var(--pv-pulse)" : "var(--pv-dim)";
+  const puntos = ["var(--pv-steel)", "var(--pv-steel)", "var(--pv-steel)", "var(--pv-steel)", "var(--pv-accent)"];
+  const xs = [8, 28, 48, 68, 88, ancho - 10];
+  const ys = [alto - 8, alto - 16, alto - 22, alto - 27, alto - 31, 12];
+  return (
+    <svg
+      viewBox={`0 0 ${ancho} ${alto}`}
+      width="100%"
+      style={{ display: "block", maxWidth: ancho }}
+      aria-hidden="true"
+    >
+      {xs.slice(0, 5).map((x, i) => (
+        <circle key={i} cx={x} cy={ys[i]} r={3.5} fill={puntos[i]} />
+      ))}
+      <circle cx={xs[5]} cy={ys[5]} r={6.5} fill={punta} />
+    </svg>
   );
 }
 
