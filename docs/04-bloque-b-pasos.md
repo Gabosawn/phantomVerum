@@ -21,16 +21,39 @@ F5.0 (seed+faucet) — arranca apenas termina F0, corre en paralelo a todo
 
 ---
 
+## Estado — actualizado vie 7/8 ~14:15
+
+| Fase | Estado |
+|---|---|
+| **A' — contrato** | ✅ **cerrada completa** (A.1–A.6, incluido el smoke del TS generado y round-trip de los 4 tiempos en simulador) |
+| **F0 — toolchain** | 🟡 en curso (0.1–0.2 listos, agente retomó desde 0.3) |
+| **B1–B5** | ⬜ sin arrancar (`app/src/` solo tiene `.gitkeep`) |
+
+**El gate anti-DQ está pasado desde clone limpio:** `compact compile` sin
+`output/` previo, ~30 s, 8 claves (4 circuitos × 2). Verificado corriendo el
+comando, no asumido.
+
+> ✅ **Resuelto:** la rama `feat/bloque-b-wiring` está pusheada a `origin` —
+> el contrato ya vive en el remoto (`2e6fbf7`+). `origin/main` tiene los docs
+> del plan (`4a3673d`). Cuando F0 cierre y el E2E local pase, se mergea la
+> rama a `main` para que el clone de los jueces compile siempre.
+>
+> ⚠️ Pendiente que solo puede hacer Gabriel (requiere admin): el topic del
+> repo — `gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk`
+> (el intento con permisos de colaborador dio 404).
+
+---
+
 ## Fase 0 — Toolchain y scaffolding (owner: agente W-scaffold)
 
 Toca: `package.json` raíz, `app/package.json`, `tests/package.json`,
 `app/tsconfig.json`, `tests/tsconfig.json`, `.env.example`, docker.
 **No toca `contracts/`.**
 
-- [ ] **0.1** Rama `feat/bloque-b-wiring` creada. ✓ `git branch --show-current`
-- [ ] **0.2** Node ≥ 22 disponible. Preferencia: `nvm install 22`; si no hay
+- [x] **0.1** Rama `feat/bloque-b-wiring` creada. ✓ `git branch --show-current`
+- [x] **0.2** Node ≥ 22 disponible. Preferencia: `nvm install 22`; si no hay
       nvm, binario oficial a `~/.local/node-v22` + PATH documentado en
-      `docs/02-entorno.md`. ✓ `node --version` ≥ 22, y `npm --version` responde.
+      `docs/02-entorno.md`. ✓ **v22.23.2** verificado.
 - [ ] **0.3** Verificar versiones publicadas HOY con `npm view <pkg> version`
       para cada paquete (no confiar en la lista de memoria):
       `@midnight-ntwrk/midnight-js-contracts`, `-network-id`,
@@ -60,6 +83,7 @@ Toca: `package.json` raíz, `app/package.json`, `tests/package.json`,
 - [ ] **0.8** Proof server pinneado: bajar `midnightntwrk/proof-server:8.1.0`,
       recrear el container con ese tag (mismo puerto 6300).
       ✓ `curl -s localhost:6300/health` → `ok` y `docker ps` muestra `:8.1.0`.
+      **Estado:** corriendo pero en `:latest` — falta el pin.
 - [ ] **0.9** `npm install` en raíz (con Node 22 activo) y commitear
       `package-lock.json`. ✓ `npm ls --depth=0 --workspace=app` sin errores.
 
@@ -68,26 +92,30 @@ Toca: `package.json` raíz, `app/package.json`, `tests/package.json`,
 Toca: solo `contracts/`. Prerequisito de B2/B3 (los tipos TS generados salen
 de acá).
 
-- [ ] **A.1** Portar el contrato Opción A validado (scratchpad
+- [x] **A.1** Portar el contrato Opción A validado (scratchpad
       `spec-validation/src/testigo_a2.compact`) a
       `contracts/src/testigo.compact`. Revisar contra el spec §3–§4:
       mismos nombres de circuitos y ledger, domain separation, guards.
-      ✓ diff semántico contra el spec revisado a mano.
-- [ ] **A.2** Portar la Opción B a `contracts/src/fallback/testigo-b.compact`
-      (congelada, no se compila por default). ✓ archivo presente.
-- [ ] **A.3** `contracts/package.json`: script
+      ✓ commit `7c51fb0`, 188 líneas.
+- [x] **A.2** Portar la Opción B a `contracts/src/fallback/testigo-b.compact`
+      (congelada, no se compila por default). ✓ commit `91e10aa`, 138 líneas.
+- [x] **A.3** `contracts/package.json`: script
       `compile` = `compact compile src/testigo.compact output/` (CON claves —
       el deploy real las necesita) y `compile:fast` = con `--skip-zk` para
-      iteración. ✓ `npm run compile --workspace=contracts` exit 0.
-- [ ] **A.4** Compilar y verificar artefactos: `output/contract/index.cjs` +
+      iteración. ✓ commit `4f4d99e`; además `check:fallback`, `format`, `clean`.
+- [x] **A.4** Compilar y verificar artefactos: `output/contract/index.cjs` +
       tipos, `output/keys/*.prover|.verifier`, `output/zkir/`.
-      ✓ `ls contracts/output/keys | wc -l` = 8 (4 circuitos × 2).
+      ✓ **8/8 claves** (`registrarOrganizacion`, `emitirCredencial`,
+      `denunciar`, `revelarAutoria` × prover/verifier) + `output/contract/index.d.ts`.
       Nota: `output/` está gitignoreado — solo se commitea el `.compact`.
-- [ ] **A.5** Gate anti-DQ: `contracts/` compila desde clone limpio.
-      ✓ en un dir temporal: clonar la rama, `npm run compile` verde.
+- [x] **A.5** Gate anti-DQ: `contracts/` compila desde clone limpio.
+      ✓ verificado en dir temporal **sin `output/` previo: 34 s, 8 claves**.
+      ⚠️ Vale solo para *esta rama*: el `.compact` todavía no está en ningún
+      remoto — ver el aviso del encabezado.
 - [ ] **A.6** Smoke del TS generado: script mínimo que importa el módulo
       generado y llama los pure circuits (`denunciaIdDe`, `nullifierDe`,
       `autoriaDe`, `hojaDe`) con valores dummy. ✓ imprime 4 hashes de 32 bytes.
+      **Único pendiente de A'.**
 
 ## Fase B1 — Config y providers (`app/src/config/`)
 
