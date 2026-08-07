@@ -1,9 +1,21 @@
-# AGENTS.md — Midnight Hack BA 2026
+# AGENTS.md — PhantomTrace (Testigo)
 
 ## Stack
 - Compact (contratos) + TypeScript/React (dApp) + midnight-js (SDK)
 - Node 22+ · Compilador Compact 0.5.1 · Proof server local (Docker)
 - Red objetivo: **Preview** (no devnet/testnet)
+
+## Estructura del monorepo (npm workspaces)
+```
+contracts/   → @phantomtrace/contracts  (Compact, compilar con compact compile)
+app/         → @phantomtrace/app        (wiring TS: witnesses, scripts, config)
+ui/          → @phantomtrace/ui         (React + Vite, 3 vistas)
+tests/       → @phantomtrace/tests      (Vitest + simulación E2E)
+```
+- `npm install` en raíz instala todas las workspaces
+- `npm run compile` — compila contratos
+- `npm test` — corre tests
+- `npm run simulate` — simulación E2E
 
 ## Toolchain verificada
 - `compact` vive en `~/.local/bin/compact` (NO `~/.compact/bin`)
@@ -17,7 +29,7 @@
   - `ss -tlnp | grep 6300` (proof server escuchando)
   - `curl -s http://localhost:6300/health` (o probar un deploy local)
 
-## Servicios (slide 15 oficial)
+## Servicios
 - Node: ws://localhost:9944 (local) · wss://rpc.preview.midnight.network (preview)
 - Indexer: http://localhost:8088/api/v4/graphql (local) · https://indexer.preview.midnight.network/api/v4/graphql
   **NO HAY READS SIN INDEXER** — todo queryContractState/balances va por GraphQL del indexer
@@ -31,19 +43,18 @@
 - Regla de oro: `disclose()` solo lo minimo (✅/hash/nullifier). Nunca evidencia ni identidad
 - `assert` falla local en proof time — nada invalido llega a la chain
 
-## Reglas del evento (no negociables)
-- **Codigo 100% net-new desde 7/8 10:00** — NO copiar de repos existentes (ni del prior art)
-- Contrato DEBE compilar al entregar → commitear SOLO estados verdes; tag "ultima-verde" siempre
-- Commits usan **Conventional Commits** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`) con ID de task (`feat(T2): nullifier por periodo`)
-- **El committer SIEMPRE es la persona, nunca el agente** — `git commit --author="Nombre <email>"` o configurar `user.name`/`user.email` antes de commitear
-- Congelar contrato temprano; frontend despues; nunca al reves
-- Tests por circuit (5-6) — QA vale 15%, casi nadie los hace
-- Repo publico, licencia Apache 2.0, label/topic `midnightntwrk`
+## Convenciones
+- Commits con **Conventional Commits** (`feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`)
+- `main` siempre compila — commitear solo estados verdes
+- Adaptar SINTAXIS del spec a la version instalada de Compact, nunca la SEMANTICA (ver `docs/01-arquitectura.md` §8)
+- Tests por circuit — ver suite en README.md
 
 ## Docs (fuente de verdad)
+- `docs/00-idea.md` — la idea y el diferencial
+- `docs/01-arquitectura.md` — spec de los 3 circuitos y el ledger (LEER ANTES de codear)
+- `docs/02-entorno.md` — setup de toolchain y servicios
 - https://docs.midnight.network — anti-bot: usa `<ruta>.md` o `llms.txt` (Mintlify)
 - Ejemplos: github.com/midnightntwrk (create-mn-app, example-zkloan, example-private-party)
-- Guia evento: https://midnightfoundation.notion.site/Hack-Buenos-Aires-Hacker-Guide-3a04057b9f2380e8a43afe3836f440e7
 
 ## OpenCode Skills (instalados en el repo)
 - `compact` — lenguaje de contratos · `midnight-js` — SDK frontend

@@ -1,0 +1,10 @@
+{
+  "name": "@phantomtrace/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Contratos Compact — Testigo (Midnight Hack BA 2026)",
+  "scripts": {
+    "compile": "compact compile src/testigo.compact output/",
+    "clean": "rm -rf output/ zkir/"
+  }
+}

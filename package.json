@@ -1,0 +1,24 @@
+{
+  "name": "phantomtrace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Testigo — Denuncias de corrupción con anonimato reversible (Midnight Hack BA 2026)",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "contracts",
+    "app",
+    "ui",
+    "tests"
+  ],
+  "scripts": {
+    "compile": "npm run compile --workspace=contracts",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspace=tests",
+    "simulate": "npm run simulate --workspace=tests",
+    "lint": "eslint . --ext .ts,.tsx",
+    "clean": "rm -rf node_modules contracts/node_modules app/node_modules ui/node_modules tests/node_modules"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

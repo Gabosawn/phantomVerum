@@ -1,12 +1,5 @@
 # 00 — Testigo: la idea
 
-> **Estado:** DEFINITIVO (6/8/2026). Versión operativa del documento canónico
-> `../../docs/08-idea-final.md`; el razonamiento completo está en
-> `../../docs/07-veredicto.md` y los tres reportes de `../../docs/research/`.
-> Este doc alcanza para trabajar; aquellos, para el Q&A profundo.
-
----
-
 ## 1. La idea en una frase
 
 **Testigo** es un sistema de denuncias de corrupción donde el denunciante
@@ -52,16 +45,14 @@ Tres circuitos Compact sobre el modelo dual-ledger de Midnight (detalle en
    verifier*): mostrada a cualquier otro — por ejemplo al empleador — no prueba
    nada.
 
-**Demo de cuatro tiempos:** (1) la organización se registra → (2) un empleado
+**Flujo de cuatro tiempos:** (1) la organización se registra → (2) un empleado
 denuncia y la empresa mira el ledger sin poder saber quién fue → (3) la empresa
 intenta alterar la evidencia y no puede → (4) meses después, el denunciante
-prueba autoría ante el fiscal y obtiene protección legal. **El tiempo 4 es el
-que ningún otro proyecto puede mostrar; el deck arranca por ahí.**
+prueba autoría ante el fiscal y obtiene protección legal.
 
 ## 4. El diferencial — verificado, no supuesto
 
-Tres investigaciones con fuentes (`../../docs/research/`) dejaron esto en claro:
-**la idea base ya existe; el diferencial, no — en ninguna chain.**
+**La idea base ya existe; el diferencial, no — en ninguna chain.**
 
 | Proyecto | Dónde | ¿Buzón anónimo? | ¿Autoría diferida? |
 |---|---|---|---|
@@ -73,55 +64,22 @@ Tres investigaciones con fuentes (`../../docs/research/`) dejaron esto en claro:
 | Papers académicos 2023–2025 | MDPI, PriRPT | — | ✅ solo en teoría |
 
 La revelación de autoría diferida existe únicamente en papers. **Nadie la
-shippeó. Nosotros la shippeamos**, con el refinamiento que la literatura
-recomienda (designated verifier). La frase del pitch:
-
-> *"Todos los sistemas de denuncia existentes hacen el anonimato permanente.
-> Testigo lo hace reversible — solo por el denunciante, solo ante la autoridad
-> que él elija. Que es lo que la protección legal de denunciantes exige en la
-> práctica."*
-
-**El deck cita el prior art de frente** — los jueces incluyen a gente que lo
-conoce (depapp ganó el challenge de la propia red) — y marca la línea exacta
-que nadie cruzó.
+shippeó.** Acá se shippea, con el refinamiento que la literatura recomienda
+(designated verifier).
 
 Segundo diferencial verificado: **el anonimato aguanta la pregunta difícil.**
 Las transacciones de Midnight no tienen `msg.sender` — los contract calls se
-autorizan por prueba ZK y los fees se pagan shielded. La respuesta completa
-para el jurado de IOG está en `04-pitch-y-qa.md §Q1`, con límites honestos
-(indexer, IP) y mitigaciones.
+autorizan por prueba ZK y los fees se pagan shielded. Límites honestos: el
+indexer ve viewing key e IP (mitigación: proof server local, Tor/nodo propio).
 
-## 5. Encaje con las reglas
-
-Enunciado oficial: *"prove compliance, identity, and eligibility without
-exposing sensitive user data"*. Testigo prueba **elegibilidad** dos veces sin
-exponer datos: pertenezco a la organización (sin revelar quién soy) y soy el
-autor original — elegible para protección legal o recompensa (sin revelar
-evidencia ni secret hasta que yo decida, solo ante quien yo decida).
-
-| Criterio | Peso | Cómo lo atacamos |
-|---|---|---|
-| Engineering & Implementation | 40 % | Dual-ledger de manual; 3 circuitos acotados que compilan; repo prolijo, topics y atribución |
-| QA & Reliability | 15 % | Tests y archivos de simulación que pasan (T8) — la mayoría deja estos puntos en la mesa |
-| Product & Vision | 15 % | Ítem #1 de governance del Request for Startups; 1 dApp construida contra 19 pedidas |
-| UX & Design | 15 % | Frontend conectado E2E: vistas organización, denunciante y fiscal |
-| Communication | 10 % | Demo de 4 tiempos con villano, video de 3 min ensayado, deck |
-| BizDev & Viability | 5 % | Verificador con nombre: fiscalías, recompensas tipo SEC, Directiva UE, compliance |
-
-Gates duros (checklist completo en `06-reglas-checklist.md`): si no compila →
-descalificación automática; código 100 % nuevo desde el 7/8 10:00; Apache 2.0 +
-repo público + label `midnightntwrk`; Beginner Track sin footprint previo;
-entrega repo + deck + video antes del sábado 13:00.
-
-## 6. Honestidad — qué NO es (para el deck y el Q&A)
+## 5. Qué NO es (limitaciones declaradas)
 
 - **El emisor de credenciales es mock**, igual que en todos los proyectos
-  comparables. Se declara: el hackathon valida el flujo ZK; la integración con
-  un directorio corporativo real es roadmap.
+  comparables. El sistema valida el flujo ZK; la integración con un directorio
+  corporativo real es roadmap.
 - **No prueba que la denuncia sea verdadera.** Prueba que viene de adentro y
   que no fue alterada. La veracidad del contenido es un problema humano.
 - **El anonimato on-chain está verificado; el off-chain tiene límites
   conocidos** (indexer ve viewing key e IP). Mitigaciones declaradas: proof
   server local, Tor/nodo propio, roadmap de fee-sponsor vía
-  `Transaction.merge`. Decirlo antes de que lo pregunten suma puntos de
-  Engineering.
+  `Transaction.merge`.

@@ -56,7 +56,7 @@ máquina del denunciante (salvo hacia su proof server local).
 ### 4.1 `registrarOrganizacion(orgId, ancla)` — trivial
 
 Inserta `orgId → ancla` en `organizaciones`. Falla si ya existe. Sin witnesses.
-Es casi el contrato backup de T1 — sirve de andamio.
+Sirve de andamio para el resto del contrato.
 
 ### 4.2 `denunciar` — el corazón
 
@@ -107,10 +107,10 @@ el hash de autoría). Mostrado al empleador, el registro no prueba nada — no
 puede distinguir quién lo generó ni replayearlo. Es el delta chico sobre el
 circuito base que ningún juez vio nunca shipped.
 
-## 5. La credencial — decisión ABIERTA hasta T2, con preferencia
+## 5. La credencial — dos opciones, en orden de preferencia
 
 El emisor es **mock declarado** (como en todos los proyectos comparables). Lo
-que hay que decidir el viernes, con el template oficial a la vista, es el
+que hay que decidir al implementar, con la stdlib instalada a la vista, es el
 mecanismo de verificación en circuito. Dos opciones, en orden de preferencia:
 
 **Opción A — Merkle membership (preferida, estándar del ecosistema):**
@@ -129,8 +129,8 @@ Anonimato perfecto dentro de la org; **debilidad declarada:** quien tenga el
 secret puede generar N nullifiers con N secrets personales (anti-spam débil) y
 no hay revocación. Se presenta como límite del mock del emisor, no del diseño.
 
-**Regla de decisión:** si a las 16:00 del viernes la Opción A no compila, se
-congela la B y la A pasa a roadmap. La decisión se anota en `DESVIOS.md`.
+**Regla de decisión:** se intenta la Opción A primero. Si no compila en un
+tiempo razonable, se congela la B y la A pasa a roadmap.
 
 ## 6. Qué resuelve y qué NO resuelve cada mecanismo
 
@@ -148,7 +148,7 @@ congela la B y la A pasa a roadmap. La decisión se anota en `DESVIOS.md`.
 ## 7. Fuera de alcance (no implementar)
 
 - Emisor de credenciales real (directorio corporativo, firma del empleador) → roadmap.
-- Cifrado E2E de la evidencia hacia el fiscal → **T12 stretch**, si sobra tiempo.
+- Cifrado E2E de la evidencia hacia el fiscal → stretch, si sobra tiempo.
 - Revocación de credenciales.
 - Recompensas on-chain / tokens.
 - Multi-chain, indexer propio, fee-sponsor (→ roadmap en el deck).
@@ -159,15 +159,14 @@ El pseudocódigo de abajo es **ilustrativo**. La sintaxis cambia entre versiones
 (p. ej. `disclose()` es obligatorio para publicar valores derivados de
 witnesses). **Procedimiento obligatorio, en este orden:**
 
-1. Compilar el **template oficial sin tocarlo** (T0).
+1. Compilar un **template oficial sin tocarlo** primero.
 2. Leer qué sintaxis usa *ese* template: `pragma`, imports de la standard
    library, tipos, firma de los hashes.
 3. Adaptar esta especificación a esa sintaxis. **Adaptá la sintaxis, nunca la
    semántica.**
-4. Anotar cualquier desvío en `docs/DESVIOS.md`.
 
 No inventes API. Si `persistentHash` no existe con ese nombre o aridad, usá lo
-que exponga la standard library instalada. Verificar también en T0: si Compact
+que exponga la standard library instalada. Verificar también: si Compact
 expone tiempo/altura de bloque (para el sellado) o si el timestamp fino queda
 como orden de inclusión + `periodo` como input público.
 

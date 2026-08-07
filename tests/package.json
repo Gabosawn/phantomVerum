@@ -1,0 +1,17 @@
+{
+  "name": "@phantomtrace/tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tests y simulación E2E — Testigo (Midnight Hack BA 2026)",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "simulate": "node dist/simulation/e2e.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0",
+    "vitest": "^2.0.0"
+  }
+}

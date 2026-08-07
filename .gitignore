@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Compact compiler output
+contracts/output/
+contracts/zkir/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-data/
+
+# Logs
+*.log
+
+# Keys / credentials (NUNCA commitear)
+*.key
+*.pem
+secrets/

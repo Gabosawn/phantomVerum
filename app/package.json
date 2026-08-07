@@ -1,0 +1,18 @@
+{
+  "name": "@phantomtrace/app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Wiring TypeScript — witnesses, deploy, scripts CLI (Midnight Hack BA 2026)",
+  "scripts": {
+    "build": "tsc",
+    "registrar-org": "node dist/scripts/registrar-org.js",
+    "denunciar": "node dist/scripts/denunciar.js",
+    "revelar-autoria": "node dist/scripts/revelar-autoria.js",
+    "verificar-autoria": "node dist/scripts/verificar-autoria.js"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^22.0.0"
+  }
+}
