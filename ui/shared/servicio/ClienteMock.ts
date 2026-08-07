@@ -182,7 +182,7 @@ export class ClienteMock implements TestigoClient {
     if (!(p.orgId in this.ledger.organizaciones)) {
       throw new OrganizationNotRegisteredError();
     }
-    const hoja = await leafOf(p.orgId, p.credCommitment);
+    const hoja = leafOf(p.orgId, p.credCommitment);
     const hojaIndex = this.ledger.credenciales.indexOf(hoja);
     if (hojaIndex === -1) this.ledger.credenciales.push(hoja);
     return {
@@ -217,18 +217,18 @@ export class ClienteMock implements TestigoClient {
     // es pertenencia de la hoja al set de credenciales emitidas. La semántica
     // que se demuestra es la misma: probás que sos de adentro sin decir quién.
     // The leaf is rebuilt from the COMMITMENT, exactly like the circuit does.
-    const hoja = await leafOf(p.orgId, await credCommitmentOf(w.credencialSecret));
+    const hoja = leafOf(p.orgId, credCommitmentOf(w.credencialSecret));
     if (!this.ledger.credenciales.includes(hoja)) {
       throw new CredencialInvalidaError();
     }
 
     // C2 — el nullifier usa el secret de la CREDENCIAL, no el personal.
-    const nullifier = await nullifierOf(w.credencialSecret, p.orgId, p.periodo);
+    const nullifier = nullifierOf(w.credencialSecret, p.orgId, BigInt(p.periodo));
     if (this.ledger.nullifiers.includes(nullifier)) {
       throw new NullifierRepetidoError();
     }
 
-    const denunciaId = await reportIdOf(evidenciaHash, w.secretPersonal);
+    const denunciaId = reportIdOf(evidenciaHash, w.secretPersonal);
     if (this.ledger.denuncias.includes(denunciaId)) {
       throw new DenunciaRepetidaError();
     }
@@ -253,7 +253,7 @@ export class ClienteMock implements TestigoClient {
     }
 
     // C1 — assert(reportIdOf(ev, secret) == reportId, "not the author").
-    const recomputado = await reportIdOf(w.evidenciaHash, w.secretPersonal);
+    const recomputado = reportIdOf(w.evidenciaHash, w.secretPersonal);
     if (recomputado !== p.denunciaId) {
       throw new NoSosElAutorError();
     }
@@ -263,7 +263,7 @@ export class ClienteMock implements TestigoClient {
       throw new ReportDoesNotExistError();
     }
 
-    const autoriaHash = await authorshipOf(w.secretPersonal, p.denunciaId, p.fiscalPk);
+    const autoriaHash = authorshipOf(w.secretPersonal, p.denunciaId, p.fiscalPk);
     // assert(!authorships.member(...), "authorship already revealed to this prosecutor")
     if (this.ledger.autorias.includes(autoriaHash)) {
       throw new AuthorshipAlreadyRevealedError();
@@ -282,7 +282,7 @@ export class ClienteMock implements TestigoClient {
    * verifier — con otra clave da otro hash, y no hay nada que hacer al respecto.
    */
   async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
-    const recomputado = await authorshipOf(p.secret, p.denunciaId, p.fiscalPk);
+    const recomputado = authorshipOf(p.secret, p.denunciaId, p.fiscalPk);
     return {
       ok: recomputado === p.autoriaHash,
       enLedger: this.ledger.autorias.includes(p.autoriaHash),

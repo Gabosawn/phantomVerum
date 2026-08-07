@@ -34,7 +34,7 @@ export const DENUNCIA_DEMO: Hex32 =
 
 /** nullifierOf(credSecret de la demo, ORG_ID, DEMO_EPOCH). */
 export const NULLIFIER_DEMO: Hex32 =
-  "a17c408172b01b039291ba8060b189d23d6e844421d5c6aebdb579e05bdfdb28";
+  "a1654dee6068682d6a652bf6baa4be8f3507705f97c4605e1c74eaa05c6f670d";
 
 /** authorshipOf(secret, DENUNCIA_DEMO, pk de la Fiscalía). */
 export const AUTORIA_DEMO_PIA: Hex32 =

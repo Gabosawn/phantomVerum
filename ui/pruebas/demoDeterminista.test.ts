@@ -15,11 +15,25 @@
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import {
+  StateBoundedMerkleTree,
+  convertFieldToBytes,
+  valueToBigInt,
+} from "@midnight-ntwrk/compact-runtime";
 import { describe, expect, it } from "vitest";
 
-import { authorshipOf, hashDeArchivo, nullifierOf, reportIdOf } from "../shared/cripto";
-import { DEMO_EPOCH, ORG_ID, PK_ACME_LEGAL, VERIFICADORES } from "../shared/demo";
-import { EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "../cliente/src/demoPrivado";
+import {
+  authorshipOf,
+  bytesToHex,
+  credCommitmentOf,
+  hashDeArchivo,
+  leafHashOf,
+  leafOf,
+  nullifierOf,
+  reportIdOf,
+} from "../shared/cripto";
+import { ANCLA, DEMO_EPOCH, ORG_ID, PK_ACME_LEGAL, VERIFICADORES } from "../shared/demo";
+import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "../cliente/src/demoPrivado";
 import { AUTORIA_DEMO_PIA, DENUNCIA_DEMO, NULLIFIER_DEMO } from "../explorer/src/ledgerFixture";
 
 const muestra = (nombre: string) =>
@@ -39,33 +53,47 @@ describe("el fixture del Explorer corresponde a las muestras reales", () => {
   });
 
   it("DENUNCIA_DEMO se deriva de esa evidencia y del secret de demo", async () => {
-    expect(await reportIdOf(await evOriginal(), SECRET_PERSONAL_DEMO)).toBe(DENUNCIA_DEMO);
+    expect(reportIdOf(await evOriginal(), SECRET_PERSONAL_DEMO)).toBe(DENUNCIA_DEMO);
   });
 
-  it("NULLIFIER_DEMO usa el secret de la CREDENCIAL, como el circuito", async () => {
+  it("NULLIFIER_DEMO usa el secret de la CREDENCIAL, como el circuito", () => {
     // The period is the demo's EPOCH INDEX — floor(unixSeconds / 86400) —
     // exactly what the contract's C0 pins to the block time.
-    expect(await nullifierOf(EMPLEADO_DEMO.credencialSecret, ORG_ID, DEMO_EPOCH)).toBe(
+    expect(nullifierOf(EMPLEADO_DEMO.credencialSecret, ORG_ID, BigInt(DEMO_EPOCH))).toBe(
       NULLIFIER_DEMO,
     );
   });
 
-  it("AUTORIA_DEMO_PIA está designada a la clave de la Fiscalía", async () => {
-    expect(await authorshipOf(SECRET_PERSONAL_DEMO, DENUNCIA_DEMO, pkPia)).toBe(AUTORIA_DEMO_PIA);
+  it("AUTORIA_DEMO_PIA está designada a la clave de la Fiscalía", () => {
+    expect(authorshipOf(SECRET_PERSONAL_DEMO, DENUNCIA_DEMO, pkPia)).toBe(AUTORIA_DEMO_PIA);
+  });
+});
+
+describe("el ancla de ACME es la raíz de su árbol de credenciales", () => {
+  it("ANCLA se deriva del DIRECTORIO público, con las mismas hojas que el circuito", () => {
+    // Same construction as the contract's registerOrganization: one leaf per
+    // credential commitment, inserted in order at indexes 0..N-1, root read
+    // through the exact field→Bytes<32> encoding.
+    const leaves = DIRECTORIO.map((empleado) =>
+      leafOf(ORG_ID, credCommitmentOf(empleado.credencialSecret)),
+    );
+    let tree = new StateBoundedMerkleTree(8);
+    leaves.forEach((leaf, i) => {
+      tree = tree.update(BigInt(i), leafHashOf(leaf)).rehash();
+    });
+    const root = tree.root();
+    const ancla = bytesToHex(convertFieldToBytes(32, valueToBigInt(root.value), "demo"));
+    expect(ancla).toBe(ANCLA);
   });
 });
 
 describe("los dos veredictos del video", () => {
   it("T3 — el PDF alterado no reproduce la denuncia sellada", async () => {
-    expect(await reportIdOf(await evAlterada(), SECRET_PERSONAL_DEMO)).not.toBe(DENUNCIA_DEMO);
+    expect(reportIdOf(await evAlterada(), SECRET_PERSONAL_DEMO)).not.toBe(DENUNCIA_DEMO);
   });
 
-  it("T4 — con la clave del empleador el hash no es el que está en la cadena", async () => {
-    const conClaveDelEmpleador = await authorshipOf(
-      SECRET_PERSONAL_DEMO,
-      DENUNCIA_DEMO,
-      PK_ACME_LEGAL,
-    );
+  it("T4 — con la clave del empleador el hash no es el que está en la cadena", () => {
+    const conClaveDelEmpleador = authorshipOf(SECRET_PERSONAL_DEMO, DENUNCIA_DEMO, PK_ACME_LEGAL);
     expect(conClaveDelEmpleador).not.toBe(AUTORIA_DEMO_PIA);
   });
 });

@@ -3,13 +3,12 @@
  * different value on every run, and nothing can be asserted about it.
  */
 
-import { EPOCH, EPOCH_NEXT, NEXT_TIME, NOW } from "./contract-surface.js";
-import { credCommitmentOf, leafOf } from "./crypto.js";
+import { EPOCH_DURATION } from "./contract-surface.js";
+import { credCommitmentOf, periodHex32 } from "./crypto.js";
+import { GENESIS_BLOCK_TIME } from "./types.js";
 import type { Actor, Hex32, TestigoHarness } from "./types.js";
 
 const byte = (n: number): Hex32 => n.toString(16).padStart(2, "0").repeat(32);
-
-export { EPOCH, EPOCH_NEXT, NEXT_TIME, NOW };
 
 // ── organizations ───────────────────────────────────────────────────────────────────────
 
@@ -26,6 +25,21 @@ export const BETA_ANCHOR: Hex32 = byte(0xb2);
 export const PROSECUTOR_PK: Hex32 = byte(0xf1);
 /** The employer, who intercepts the proof and cannot use it. */
 export const EMPLOYER_PK: Hex32 = byte(0xe1);
+
+// ── periods ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The epoch INDEX (`Uint<64>` → `bigint`) the demo runs in: `floor(GENESIS_BLOCK_TIME /
+ * EPOCH_DURATION)`. `GENESIS_BLOCK_TIME` is exactly divisible, so this is the first window's
+ * index and `report`'s C0 window (start <= blockTime < end) is load-bearing from the start.
+ */
+export const AUGUST = BigInt(GENESIS_BLOCK_TIME) / EPOCH_DURATION;
+/** The next epoch. Callers must advance the harness clock first (`advanceTime(EPOCH_DURATION)`). */
+export const SEPTEMBER = AUGUST + 1n;
+
+/** The little-endian `Bytes<32>` encoding of the epoch index, for hash-operand comparisons. */
+export const AUGUST_HEX = periodHex32(AUGUST);
+export const SEPTEMBER_HEX = periodHex32(SEPTEMBER);
 
 // ── actors ──────────────────────────────────────────────────────────────────────────────
 
@@ -89,11 +103,6 @@ export function claimingOrg(actor: Actor, orgId: Hex32): Actor {
   return { ...actor, orgId };
 }
 
-/** Leaf the circuit builds for this employee in `orgId` (`leafOf(org, credCommitmentOf(sec))`). */
-export function leafFor(orgId: Hex32, credentialSecret: Hex32): Hex32 {
-  return leafOf(orgId, credCommitmentOf(credentialSecret));
-}
-
 // ── base scenario ───────────────────────────────────────────────────────────────────────
 
 /**
@@ -101,7 +110,6 @@ export function leafFor(orgId: Hex32, credentialSecret: Hex32): Hex32 {
  * The impostor is deliberately left out of the tree.
  */
 export function baseScenario<T extends TestigoHarness>(h: T): T {
-  h.setBlockTime(NOW);
   h.registerOrganization(ACME, ACME_ANCHOR);
   h.registerOrganization(BETA, BETA_ANCHOR);
   h.issueCredential(ACME, credCommitmentOf(EMPLOYEE_A.credentialSecret));
