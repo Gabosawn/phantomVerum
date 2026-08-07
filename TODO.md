@@ -26,6 +26,15 @@ Findings from bringing up the monorepo (`npm install`, `npm run compile`, `npm t
 - [ ] **P2** README / docs still mention `index.cjs` in places
 - [ ] **P2** Document full Docker image name (`docker.io/midnightntwrk/...`) for podman short-name issues
 
+## Local deploy (plan: docs/05-deploy-local.md)
+
+- [ ] **P1** Write `app/src/scripts/deploy.ts` (B5.1) — does not exist; API
+      (`deployContract` + `writeDeployment`) is ready, just no CLI wrapper
+- [ ] **P1** Verify local genesis-funded seed (`LOCAL.faucet` is `undefined`)
+- [ ] **P1** Bring up local devnet + `NETWORK=local` deploy → commit `deployment.json`
+- [ ] **P1** `NETWORK=local npm run e2e -- --network` green (4 acts, real proving)
+- [ ] **P2** Only after local green: deploy to Preview (docs/05 §8)
+
 ## Broader review (after green)
 
 - [ ] End-to-end coherence: idea ↔ architecture ↔ Compact ↔ app wiring ↔ UI ↔ tests
