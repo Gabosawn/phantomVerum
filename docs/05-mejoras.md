@@ -387,6 +387,86 @@ indexer v4 actual de Preview: no gastar tiempo en el workaround.
 
 ---
 
+## 7-bis. 🔴 EL RIESGO REAL NO ES CRIPTOGRÁFICO — es de red y timing
+
+**Medido contra Preview ahora mismo, no inferido:**
+
+```
+1000 bloques consecutivos (~100 min de chain time):
+  bloques con transacciones:  129   (87 % VACÍOS)
+  transacciones totales:      141   (~1,4 tx/min en TODA la red)
+  contract calls encontradas:   0   (en ~2000 bloques escaneados)
+```
+
+**El conjunto de anonimato por bloque es ≈ 1.** Una denuncia será, con altísima
+probabilidad, la única transacción de su bloque y la única contract call de la
+hora. Correlacionar contra fichajes, VPN corporativa o "quién estaba en la
+oficina" es trivial.
+
+**Esto es más grave que cualquier fuga criptográfica del contrato**, y hay que
+decirlo en el deck antes de que lo pregunte un juez.
+
+### El mempool público está abierto en el RPC oficial
+
+`author_pendingExtrinsics` responde HTTP 200 en `rpc.preview.midnight.network`
+(verificado). No hace falta correr un nodo: el endpoint oficial sirve el pool de
+transacciones pendientes a cualquiera. La doc de Midnight recomienda
+`--rpc-methods Safe`, que el endpoint público **no** aplica.
+
+### Lo que SÍ está bien por diseño
+
+**La fee NO revela quién paga.** `DustSpend` tiene exactamente cuatro campos
+(`newCommitment`, `oldNullifier`, `proof`, `vFee`) — **sin owner, sin address**.
+El gasto de DUST se autoriza por prueba ZK. Confirmado por introspección del
+indexer: `DustSpendProcessed` y `DustOutput` no exponen address.
+
+⚠️ **Pero cualquier movimiento unshielded sí publica la address**
+(`UnshieldedUtxo.owner` es público y consultable sin auth). **Regla de diseño:
+el circuito de denuncia no debe mover tokens unshielded.** El nuestro no lo hace.
+
+### Tres bombas no documentadas por Midnight
+
+1. **El comando de instalación oficial del proof server incluye `-v`**, y ese
+   flag hace `debug!("Received request: {hex}")` sobre cada `/prove` — o sea
+   **un hex-dump de cada witness y de cada coin secret key a `docker logs`**.
+   ✅ Verificado: nuestro container **no** usa `-v`.
+2. **El proof server bindea a `0.0.0.0` con CORS permisivo y sin TLS.**
+   ✅ **Corregido**: recreado con `-p 127.0.0.1:6300:6300`, verificado que ya no
+   responde desde la IP de LAN.
+3. **El `disconnect` del indexer no borra nada.** `DELETE FROM wallets` tiene
+   0 resultados en todo el repo: el ciphertext de la viewing key, su hash
+   (pseudónimo estable) y el mapeo wallet→todas-sus-transacciones **persisten
+   indefinidamente**. No hay política de retención publicada.
+
+### Mitigaciones — paquete de ~3 h
+
+| # | Mitigación | h | Estado |
+|---|---|---|---|
+| M1 | Proof server local, sin `-v`, bind `127.0.0.1` | 0,25 | ✅ **HECHO** |
+| M2 | **No llamar `connect` del indexer / no entregar viewing key.** Leer con `contractAction(address)`, que no pide credencial | 0,5-1 | **HACER** — elimina toda la fuga del indexer |
+| M9 | `assert(path.leaf == derivePublicKey(secretKey()))` — la doc oficial lo llama *"the security-critical line"*; sin eso, cualquiera replaya un path visto en una tx pública | 0,25 | **VERIFICAR** si ya está |
+| M10 | Domain separator del nullifier distinto al del commitment | 0,5 | ✅ ya está |
+| M3 | Delay aleatorio antes del submit | 0,5 | Barato; con 1,4 tx/min ayuda poco solo, pero es defensa declarable |
+| M5 | Tor/VPN para el submit RPC | 0,5-1 | Única defensa contra el binding IP↔address |
+| M11 | Tráfico señuelo (denuncias dummy programadas) | 1-2 | Alto valor dado el conjunto ≈1 |
+
+**NO usar 1AM para sponsorship:** delega el *proving*, o sea que ProofStation
+recibe **los witnesses en claro** más la IP. Empeora el modelo de amenaza.
+
+**DUST sponsorship propio** sí existe y está documentado oficialmente
+(`/sdks/official/wallet-developer-guide.md#dust-sponsorship`, usa
+`Transaction.merge` por debajo), pero son 4-8 h. **Al deck.**
+
+### Para el deck: lo que Midnight NO documenta
+
+Nada sobre privacidad a nivel de red — ni IP, ni Tor, ni timing, ni batching, ni
+tamaño de conjunto de anonimato más allá de una frase. Sin privacy policy ni
+retention policy para sus endpoints públicos. Decir esto de frente, con nuestras
+mediciones al lado, es exactamente el tipo de honestidad técnica que distingue
+un proyecto serio.
+
+---
+
 ## 8. Cortado con fundamento
 
 | Qué | Por qué |
