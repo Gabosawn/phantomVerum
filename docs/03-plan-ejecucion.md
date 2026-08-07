@@ -41,18 +41,21 @@ transaction hashes *mockeados*. La diferencia fue el deploy real. Es el 40 %.
 
 ## 1. Anti-DQ checklist — hacer primero (≈1 h)
 
-| # | Ítem | Estado verificado | Acción |
+> Estado al sáb 8/8 — **9 de 10 cerrados.** Queda uno solo, y no lo puede
+> cerrar cualquiera.
+
+| # | Ítem | Estado | Nota |
 |---|---|---|---|
-| 1 | Topic `midnightntwrk` | ❌ `repositoryTopics: null` | `gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact` |
-| 2 | Node ≥ 22 | ❌ instalado v20.19.4 | `nvm install 22 && nvm use 22` **antes** del primer `npm install` |
-| 3 | Deps `@midnight-ntwrk/*` | ❌ ningún package.json las declara | Pinnear exacto (verificado contra matrix Preview): midnight-js **4.1.1**, compact-runtime **0.16.0**, dapp-connector-api **4.0.1**, testkit-js **4.1.1**. `npm install` + commitear lockfile |
-| 4 | Scripts npm rotos | ❌ (ver §1.1) | Arreglar antes de que exploten en integración |
-| 5 | tDUST del faucet Preview | pendiente | Pedir HOY (los faucets se caen/rate-limitean) |
-| 6 | `.env.example` | ❌ no existe (el .gitignore lo permite) | Crear con `DEPLOY_SEED=`, `NETWORK=preview` |
-| 7 | Proof server pinneado | ⚠️ corre `:latest` | Usar `:8.1.0` (el de la matrix Preview) |
-| 8 | Licencia Apache 2.0 | ✅ | — |
-| 9 | Repo público | ✅ | — |
-| 10 | Commits post-kickoff | ✅ todos de hoy, 11:14+ | Agregar 1 línea al README declarando `.agents/` como tooling de IA de terceros, no código del producto |
+| 1 | **Topic `midnightntwrk`** | 🔴 **PENDIENTE** | `repositoryTopics` sigue vacío. **Requiere permisos de admin — solo Gabriel.** `gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact`. **Es causal de descalificación listada en las reglas.** |
+| 2 | Node ≥ 22 | ✅ | v22.23.2 vía nvm |
+| 3 | Deps `@midnight-ntwrk/*` pinneadas | ✅ | midnight-js 4.1.1, compact-runtime 0.16.0, ledger-v8 8.1.0, verificadas contra la matrix de Preview + lockfile commiteado |
+| 4 | Scripts npm | ✅ | `--if-present`, `type: module`, NodeNext; más los workarounds de `noexec` |
+| 5 | tDUST del faucet | 🟡 | El faucet exige captcha Turnstile (verificado: el token dummy de testkit da 403). Seed generada; el equipo pivoteó a devnet local primero |
+| 6 | `.env.example` | ✅ | |
+| 7 | Proof server pinneado | ✅ | `:8.1.0`, y **rebindeado a `127.0.0.1`** (estaba expuesto en `0.0.0.0` con CORS permisivo) |
+| 8 | Licencia Apache 2.0 | ✅ | |
+| 9 | Repo público | ✅ | |
+| 10 | Commits post-kickoff | ✅ | Todos del 7/8 desde las 11:14 |
 
 ### 1.1 Scripts npm rotos (verificados)
 
