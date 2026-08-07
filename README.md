@@ -12,45 +12,40 @@
 
 ## Equipo
 
-| Persona | Rol | Es dueño de |
-|---|---|---|
-| **GABRIEL** | Lead técnico · Infra e integración | T0 gate de compilación, T4 wiring TS + deploy, T5 proof server, merges a main, submit final |
-| **JUAN** | Contratos Compact | T1 contrato backup, T2 circuitos core, T3 revelarAutoria (pair con Gabriel) |
-| **GERMAN** | Frontend | T6 UI organización + denunciante, T7 vista fiscal, conexión E2E |
-| **SANTIAGO** | QA y Comunicación | T8 tests + simulación, T9 deck/guion/Q&A, T10 video, T11 checklist de entrega |
-
 Detalle de roles y cronograma hora a hora: [`docs/03-equipo.md`](docs/03-equipo.md)
 
 ## Por dónde empezar
 
-1. **Todos:** [`docs/00-idea.md`](docs/00-idea.md) — la idea, el diferencial y por qué está verificado.
-2. **Todos:** [`docs/03-equipo.md`](docs/03-equipo.md) — tu rol, tus tasks y el cronograma.
-3. **Antes del viernes 10:00:** [`docs/05-setup.md`](docs/05-setup.md) — checklist de máquina. **Llegar sin esto quema medio hackathon.**
-4. **Tu task concreta:** [`docs/02-tasks.md`](docs/02-tasks.md) — buscá tu nombre.
+1. [`docs/00-idea.md`](docs/00-idea.md) — la idea, el diferencial y por que esta verificado.
+2. [`docs/03-equipo.md`](docs/03-equipo.md) — roles, tasks y cronograma.
+3. **Antes del viernes 10:00:** [`docs/05-setup.md`](docs/05-setup.md) — checklist de maquina. **Llegar sin esto quema medio hackathon.**
+4. [`docs/02-tasks.md`](docs/02-tasks.md) — backlog completo de tasks.
+5. **Agentes de IA:** [`AGENTS.md`](AGENTS.md) — toolchain, servicios y reglas para el agente de coding.
 
 ## Mapa del repo
 
-| Carpeta | Qué va | Dueño |
-|---|---|---|
-| `docs/` | Idea, arquitectura, tasks, pitch, reglas | Todos |
-| `contracts/` | Contratos Compact (los 3 circuitos) | Juan |
-| `app/` | Wiring TypeScript: witnesses, deploy, scripts CLI | Gabriel |
-| `ui/` | Frontend: 3 vistas (organización, denunciante, fiscal) | German |
-| `tests/` | Tests y archivos de simulación (QA = 15 % de la nota) | Santiago |
-| `deck/` | Pitch, guion de demo, Q&A, video | Santiago |
+| Carpeta | Qué va |
+|---|---|
+| `docs/` | Idea, arquitectura, tasks, pitch, reglas |
+| `contracts/` | Contratos Compact (los 3 circuitos) |
+| `app/` | Wiring TypeScript: witnesses, deploy, scripts CLI |
+| `ui/` | Frontend: 3 vistas (organización, denunciante, fiscal) |
+| `tests/` | Tests y archivos de simulación (QA = 15 % de la nota) |
+| `deck/` | Pitch, guion de demo, Q&A, video |
 
 ## Documentación
 
-| Doc | Para qué |
+| Doc | Para que |
 |---|---|
-| [`docs/00-idea.md`](docs/00-idea.md) | La idea final, autocontenida — empezar acá |
+| [`AGENTS.md`](AGENTS.md) | Toolchain, servicios, reglas — contexto para agentes de IA |
+| [`docs/00-idea.md`](docs/00-idea.md) | La idea final, autocontenida — empezar aca |
 | [`docs/01-arquitectura.md`](docs/01-arquitectura.md) | Actores, flujo, los 3 circuitos, estado del ledger |
 | [`docs/02-tasks.md`](docs/02-tasks.md) | Backlog completo con asignaciones, timeboxes y criterios |
 | [`docs/03-equipo.md`](docs/03-equipo.md) | Roles, cronograma hora a hora, protocolo git y de bloqueos |
 | [`docs/04-pitch-y-qa.md`](docs/04-pitch-y-qa.md) | Deck, guion de demo de 4 tiempos, Q&A duro con respuestas |
-| [`docs/05-setup.md`](docs/05-setup.md) | Checklist de setup pre-evento, por persona |
+| [`docs/05-setup.md`](docs/05-setup.md) | Checklist de setup + toolchain + verificacion rapida |
 | [`docs/06-reglas-checklist.md`](docs/06-reglas-checklist.md) | Gates del reglamento y checklist de entrega |
-| [`docs/DESVIOS.md`](docs/DESVIOS.md) | Registro obligatorio de desvíos de sintaxis y versiones |
+| [`docs/DESVIOS.md`](docs/DESVIOS.md) | Registro obligatorio de desvios de sintaxis y versiones |
 
 > El razonamiento completo detrás de la idea (investigaciones de prior art,
 > anonimato transaccional y ganadores previos) vive en el paquete de
@@ -86,16 +81,16 @@ y por qué.
 
 ## Estado
 
-- [ ] T0 — Gate de compilación *(Gabriel)*
-- [ ] T1 — Contrato backup minimalista *(Juan)*
-- [ ] T2 — Circuitos `registrarOrganizacion` + `denunciar` *(Juan)*
-- [ ] T3 — Circuito `revelarAutoria` con designated verifier *(Juan + Gabriel)*
-- [ ] T4 — Wiring TS + deploy testnet *(Gabriel)*
-- [ ] T5 — Proof server local documentado *(Gabriel)*
-- [ ] T6 — UI organización + denunciante *(German)*
-- [ ] T7 — Vista fiscal *(German)*
-- [ ] T8 — Tests + archivos de simulación *(Santiago)*
-- [ ] T9 — Deck + guion + Q&A *(Santiago)*
-- [ ] T10 — Video de demo *(Santiago + German)*
-- [ ] T11 — Compliance y entrega *(Santiago + Gabriel)*
-- [ ] T12 — Stretch: evidencia cifrada para el fiscal *(quien esté libre)*
+- [ ] T0 — Gate de compilación
+- [ ] T1 — Contrato backup minimalista
+- [ ] T2 — Circuitos `registrarOrganizacion` + `denunciar`
+- [ ] T3 — Circuito `revelarAutoria` con designated verifier
+- [ ] T4 — Wiring TS + deploy testnet
+- [ ] T5 — Proof server local documentado
+- [ ] T6 — UI organización + denunciante
+- [ ] T7 — Vista fiscal
+- [ ] T8 — Tests + archivos de simulación
+- [ ] T9 — Deck + guion + Q&A
+- [ ] T10 — Video de demo
+- [ ] T11 — Compliance y entrega
+- [ ] T12 — Stretch: evidencia cifrada para el fiscal

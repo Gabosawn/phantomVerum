@@ -100,14 +100,16 @@ Cuatro por día de trabajo, 10 minutos máximo, parados, corridos por Gabriel:
 ## 4. Protocolo git
 
 - **main siempre compila.** Es el gate del reglamento — un main roto a la hora
-  de la entrega es descalificación.
-- Rama por task: `t2-denunciar`, `t6-ui-denunciante`. Merge a main lo hace
-  Gabriel, con la task compilando y sus tests pasando.
-- Commits con ID de task (`T2: nullifier por período`).
-- **Push como mínimo cada hora** — regla de la casa tras casi perder los
-  reportes por un apagón. Lo que no está pusheado no existe.
+  de la entrega es descalificacion.
+- Rama por task: `t2-denunciar`, `t6-ui-denunciante`.
+- **Conventional Commits obligatorio:** `feat(T2): nullifier por periodo`,
+  `fix(T4): corregir witness provider`, `docs: actualizar README`.
+  Prefijos: `feat`, `fix`, `docs`, `test`, `chore`, `refactor`.
+- **El committer es siempre la persona, nunca el agente de IA.**
+  Configurar antes de commitear: `git config user.name` y `user.email`.
+- **Push como minimo cada hora** — lo que no esta pusheado no existe.
 - El tag `backup` de T1 no se toca nunca: es lo que se entrega si todo lo
-  demás sale mal.
+  demas sale mal.
 
 ## 5. Protocolo de bloqueo
 

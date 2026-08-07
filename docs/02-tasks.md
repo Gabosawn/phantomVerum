@@ -30,14 +30,11 @@ T11 entrega (al final, checklist)
 T12 stretch (solo si T0–T11 cerradas)
 ```
 
-Carga por persona: **Juan** T1→T2→T3 · **Gabriel** T0→T5→T4→T3(pair)→submit ·
-**German** T6→T7→integración · **Santiago** T8 continuo + T9→T10→T11.
-
 ---
 
 ## P0 — Bloqueantes del gate de descalificación
 
-### T0 — Gate de compilación · **GABRIEL**
+### T0 — Gate de compilación
 
 **Prioridad:** P0 · **Timebox:** 1 h (vie 10:00–11:00) · **Depende de:** nada
 **Bloquea:** absolutamente todo
@@ -47,23 +44,23 @@ compilando **sin modificar**, antes de escribir una línea propia. En paralelo,
 crear el repo público (Apache 2.0, label y topics — ver `06-reglas-checklist.md`).
 
 **Pasos:**
-1. Instalar compilador de Compact y SDK según docs vigentes (los otros tres
-   validan su propia máquina con `05-setup.md` mientras tanto).
+1. Instalar compilador de Compact y SDK según docs vigentes (el resto del
+   equipo valida su propia máquina con `05-setup.md` mientras tanto).
 2. Clonar el template/ejemplo oficial del hackathon. Compilarlo tal cual.
 3. Registrar en `DESVIOS.md`: versión del compilador, `pragma`, imports de la
    stdlib que usa el template, y si Compact expone tiempo/altura de bloque.
-4. Crear el repo del equipo y dar acceso a los cuatro.
+4. Crear el repo del equipo y dar acceso a todos los integrantes.
 
 **Criterio de aceptación:**
 - [ ] Template oficial compila sin errores, sin modificaciones.
 - [ ] `DESVIOS.md` registra compilador + `pragma` + imports.
-- [ ] Repo público creado, Apache 2.0, los 4 con acceso, primer push hecho.
+- [ ] Repo público creado, Apache 2.0, todos los integrantes con acceso, primer push hecho.
 
 **Qué NO hacer:** empezar el circuito de Testigo acá. Solo probar el entorno.
 
 ---
 
-### T1 — Contrato backup minimalista · **JUAN**
+### T1 — Contrato backup minimalista
 
 **Prioridad:** P0 · **Timebox:** 45 min (vie 11:00–11:45) · **Depende de:** T0
 
@@ -83,7 +80,7 @@ contrato final, así que además sirve de andamio para T2.
 
 ---
 
-### T2 — Circuitos `registrarOrganizacion` + `denunciar` · **JUAN**
+### T2 — Circuitos `registrarOrganizacion` + `denunciar`
 
 **Prioridad:** P0 · **Timebox:** 4 h (vie 12:00–16:00) · **Depende de:** T1
 
@@ -107,7 +104,7 @@ el ledger público; el circuito no emite nada extra.
 
 ---
 
-### T3 — Circuito `revelarAutoria` (designated verifier) · **JUAN + GABRIEL (pair)**
+### T3 — Circuito `revelarAutoria` (designated verifier)
 
 **Prioridad:** P0 · **Timebox:** 2,5 h (vie 16:00–18:30) · **Depende de:** T2
 
@@ -126,13 +123,13 @@ mirar con lupa.
 
 ---
 
-### T4 — Wiring TypeScript + deploy a testnet · **GABRIEL**
+### T4 — Wiring TypeScript + deploy a testnet
 
 **Prioridad:** P0 · **Timebox:** 3 h (vie 12:00–16:00, arranca contra T1 sin
 esperar a T2) · **Depende de:** T1
 
 **Objetivo:** ejecutar el flujo completo desde scripts: witnesses → prueba →
-transacción en testnet. Es la capa que la UI de German consume.
+transacción en testnet. Es la capa que la UI consume.
 
 **Incluye:**
 - Witness providers de los tres circuitos.
@@ -150,7 +147,7 @@ transacción en testnet. Es la capa que la UI de German consume.
 
 ---
 
-### T5 — Proof server local documentado · **GABRIEL**
+### T5 — Proof server local documentado
 
 **Prioridad:** P0 · **Timebox:** 1 h (vie 11:00–12:00) · **Depende de:** T0 · **Paralelizable**
 
@@ -168,7 +165,7 @@ local) y su terminal tiene que estar visible en la demo.
 
 ## P1 — Necesarios para que la demo cuente la historia
 
-### T6 — UI: vistas organización + denunciante · **GERMAN**
+### T6 — UI: vistas organización + denunciante
 
 **Prioridad:** P1 · **Timebox:** 4 h (vie 12:00–16:00 con mocks; 16:00–18:00
 conexión real) · **Depende de:** T4 para conectar (esqueleto con mocks antes)
@@ -192,7 +189,7 @@ proyectable (fuente grande, alto contraste).
 
 ---
 
-### T7 — UI: vista fiscal · **GERMAN**
+### T7 — UI: vista fiscal
 
 **Prioridad:** P1 · **Timebox:** 2 h (vie 18:00–20:00) · **Depende de:** T6, T3
 **No es opcional** — es el tiempo 4, el diferencial en pantalla.
@@ -210,7 +207,7 @@ o ❌.
 
 ---
 
-### T8 — Tests + archivos de simulación · **SANTIAGO**
+### T8 — Tests + archivos de simulación
 
 **Prioridad:** P1 · **Timebox:** continuo desde vie 12:00 · **Depende de:** va
 detrás de T1→T2→T3 a medida que salen
@@ -235,7 +232,7 @@ exhaustivos realistas. La mayoría deja estos puntos en la mesa; nosotros no.
 
 ---
 
-### T9 — Deck + guion + Q&A · **SANTIAGO**
+### T9 — Deck + guion + Q&A
 
 **Prioridad:** P1 · **Timebox:** 2,5 h (vie 16:00–18:30) · **Depende de:**
 `04-pitch-y-qa.md` (no bloquea ni es bloqueado por código)
@@ -254,7 +251,7 @@ por el tiempo 4 (autoría diferida), no por el buzón anónimo.
 
 ---
 
-### T10 — Video de demo · **SANTIAGO + GERMAN**
+### T10 — Video de demo
 
 **Prioridad:** P1 · **Timebox:** 1,5 h (sáb 09:30–11:00) · **Depende de:** T6, T7
 
@@ -274,7 +271,7 @@ por el tiempo 4 (autoría diferida), no por el buzón anónimo.
 
 ---
 
-### T11 — Compliance y entrega · **SANTIAGO (checklist) + GABRIEL (submit)**
+### T11 — Compliance y entrega
 
 **Prioridad:** P0 al final · **Timebox:** 1 h (sáb 11:00–12:00) · **Depende de:** todo
 
@@ -282,15 +279,15 @@ por el tiempo 4 (autoría diferida), no por el buzón anónimo.
 **Regla de la casa: submit a las 12:00, no a las 12:59.**
 
 **Criterio de aceptación:**
-- [ ] Checklist de `06-reglas-checklist.md` 100 % tildado por Santiago.
-- [ ] Submit confirmado por Gabriel, screenshot de la confirmación.
+- [ ] Checklist de `06-reglas-checklist.md` 100 % tildado.
+- [ ] Submit confirmado, screenshot de la confirmación.
 - [ ] main compila, tests verdes, README completo, video linkeado.
 
 ---
 
 ## P2 — Stretch (solo si T0–T11 están cerradas)
 
-### T12 — Evidencia cifrada para el fiscal · **quien esté libre**
+### T12 — Evidencia cifrada para el fiscal
 
 **Timebox:** 2 h máx. Cifrar la evidencia con la clave del fiscal y guardar el
 blob off-chain (o en un campo del contrato si es barato), de modo que al
