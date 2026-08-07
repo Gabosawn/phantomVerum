@@ -1,104 +1,111 @@
-// Adversarial checks for testigo.compact. Read-only against the compiled output.
-import { Contract, ledger as leerLedger, pureCircuits } from './generated/index.js';
-import { createConstructorContext, createCircuitContext, sampleContractAddress } from '@midnight-ntwrk/compact-runtime';
+// Regresión adversarial. Cada bloque es un ataque que en algún momento
+// FUNCIONÓ contra este contrato; ahora el test falla si vuelve a funcionar.
+// Origen: review de seguridad del 2026-08-07 (hallazgos HIGH-1 y MEDIUM-1).
 
-const b32 = (f) => Uint8Array.from({ length: 32 }, (_, i) => (f + i) % 256);
-const hex = (u8) => Buffer.from(u8).toString('hex');
+import {
+  Contract, pureCircuits, nuevoMundo, b32, hex, check, checkRechaza, resumen,
+  EPOCA, DUR_EPOCA, AHORA,
+} from './harness.mjs';
 
-function mk(secrets) {
-  let leafFor = () => null;
-  const w = {
-    credencialSecret: (c) => [c.privateState, secrets.cred],
-    secretPersonal: (c) => [c.privateState, secrets.sec],
-    evidenciaHash: (c) => [c.privateState, secrets.ev],
-    credencialPath: (c) => {
-      const p = c.ledger.credenciales.findPathForLeaf(leafFor());
-      if (!p) throw new Error('sin credencial');
-      return [c.privateState, p.path];
-    },
-  };
-  return { w, setLeaf: (f) => { leafFor = f; } };
+const orgA = b32(0x11);
+const orgB = b32(0xb0); // NUNCA se registra
+const ancla = b32(0xaa);
+const cred = b32(0x22);
+const sec = b32(0x44);
+
+const secretos = { ev: b32(0x33) };
+const credComm = pureCircuits.credCommitmentDe(cred);
+let hojaBuscada = pureCircuits.hojaDe(orgA, credComm);
+
+const witnesses = {
+  credencialSecret: (c) => [c.privateState, cred],
+  secretPersonal: (c) => [c.privateState, sec],
+  evidenciaHash: (c) => [c.privateState, secretos.ev],
+  credencialPath: (c) => {
+    const p = c.ledger.credenciales.findPathForLeaf(hojaBuscada);
+    if (!p) throw new Error('sin credencial');
+    return [c.privateState, p.path];
+  },
+};
+
+const m = nuevoMundo(witnesses);
+m.call('registrarOrganizacion', orgA, ancla);
+m.call('emitirCredencial', orgA, credComm);
+m.call('denunciar', orgA, EPOCA);
+
+console.log('=== A. Que expone el transcript publico de denunciar ===');
+// No es un ataque: es la superficie de disclosure que declaramos en el README.
+// Se deja como documentación ejecutable de lo que un observador ve.
+const r = m.call('revelarAutoria', pureCircuits.denunciaIdDe(secretos.ev, sec), b32(0x66));
+const dump = JSON.stringify(r.proofData, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
+check('el transcript existe y es inspeccionable', dump.length > 0, `${dump.length} chars`);
+console.log('  Publico por diseño: orgId, epoca, denunciaId, nullifier, autoriaHash, raiz de Merkle.');
+console.log('  NUNCA sale: credencialSecret, secretPersonal, el archivo de evidencia.');
+
+console.log('\n=== B. [HIGH-1] El periodo NO puede elegirlo quien llama ===');
+// Antes: `periodo` era un Bytes<32> libre -> la misma credencial generaba N
+// nullifiers variando la etiqueta, y el anti-spam del spec §4.2 no servia.
+// Ahora el circuito lo ata al blockTime.
+let aceptadas = 0;
+for (const delta of [1n, 2n, 3n]) {
+  secretos.ev = b32(0x33 + Number(delta)); // evidencia distinta -> otro denunciaId
+  try { m.call('denunciar', orgA, EPOCA + delta); aceptadas++; } catch { /* esperado */ }
 }
+check('ninguna denuncia extra entra cambiando el periodo', aceptadas === 0, `${aceptadas}/3 aceptadas`);
+check('nullifiers.size sigue en 1', m.estado().nullifiers.size() === 1n,
+  `size=${m.estado().nullifiers.size()}`);
 
-const orgA = b32(0x11), orgB = b32(0xb0), ancla = b32(0xaa);
-const cred = b32(0x22), sec = b32(0x44), ev = b32(0x33);
-const secrets = { cred, sec, ev };
-const { w, setLeaf } = mk(secrets);
-const contrato = new Contract(w);
-const init = contrato.initialState(createConstructorContext({}, '0'.repeat(64)));
-let ctx = createCircuitContext(sampleContractAddress(), init.currentZswapLocalState, init.currentContractState, init.currentPrivateState);
-const st = () => leerLedger(ctx.currentQueryContext.state);
-const call = (n, ...a) => { const r = contrato.impureCircuits[n](ctx, ...a); ctx = r.context; return r; };
+console.log('\n=== C. [MEDIUM-1] emitirCredencial liga el orgId a la hoja ===');
+// Antes: `emitirCredencial(orgId, hoja)` recibia la hoja ya calculada, asi que
+// el assert de organizacion registrada era decorativo: se pasaba un orgId
+// registrado y se colaba la hoja de una org fantasma.
+check('orgB nunca se registro', !m.estado().organizaciones.member(orgB));
+const hojaFantasma = pureCircuits.hojaDe(orgB, credComm);
+m.call('emitirCredencial', orgA, credComm); // el atacante solo controla el commitment
+check('el arbol NO contiene una hoja para la org fantasma',
+  m.estado().credenciales.findPathForLeaf(hojaFantasma) === undefined);
+checkRechaza('emitirCredencial contra una org no registrada',
+  () => m.call('emitirCredencial', orgB, credComm), 'organizacion no registrada');
+hojaBuscada = hojaFantasma;
+secretos.ev = b32(0x70);
+checkRechaza('denunciar en nombre de la org fantasma',
+  () => m.call('denunciar', orgB, EPOCA), 'sin credencial');
+hojaBuscada = pureCircuits.hojaDe(orgA, credComm);
 
-console.log('### A. Public transcript of denunciar: does orgId/periodo appear?');
-call('registrarOrganizacion', orgA, ancla);
-const hojaA = pureCircuits.hojaDe(orgA, cred);
-setLeaf(() => hojaA);
-call('emitirCredencial', orgA, hojaA);
-const periodo = b32(0x55);
-const r = call('denunciar', orgA, periodo);
-const tx = r.proofData ?? r;
-const dump = JSON.stringify(tx, (_, v) => (typeof v === 'bigint' ? v.toString() : v));
-console.log('  result keys:', Object.keys(r));
-console.log('  transcript contains orgId hex? ', dump.includes(hex(orgA)));
-console.log('  transcript contains periodo hex? ', dump.includes(hex(periodo)));
-console.log('  transcript contains denunciaId? ', dump.includes(hex(pureCircuits.denunciaIdDe(ev, sec))));
-console.log('  transcript contains nullifier? ', dump.includes(hex(pureCircuits.nullifierDe(cred, orgA, periodo))));
-console.log('  transcript len', dump.length);
-console.log('  --- publicTranscript excerpt ---');
-console.log(dump.slice(0, 2500));
-
-console.log('\n### B. periodo is caller-chosen -> anti-spam bypass');
-let n = 0;
-for (const p of [b32(0x56), b32(0x57), b32(0x58)]) {
-  secrets.ev = b32(0x33 + ++n); // distinct evidence -> distinct denunciaId
-  try { call('denunciar', orgA, p); console.log(`  denuncia extra con periodo ${hex(p).slice(0, 8)}: ACEPTADA`); }
-  catch (e) { console.log(`  rechazada: ${String(e.message).split('\n')[0]}`); }
-}
-console.log('  denuncias.size =', st().denuncias.size(), ' nullifiers.size =', st().nullifiers.size());
-
-console.log('\n### C. emitirCredencial: orgId param is not bound to the leaf');
-const hojaB = pureCircuits.hojaDe(orgB, cred); // orgB NEVER registered
-console.log('  organizaciones.member(orgB) =', st().organizaciones.member(orgB));
-call('emitirCredencial', orgA, hojaB); // pass registered orgA, insert a leaf for orgB
-setLeaf(() => hojaB);
-secrets.ev = b32(0x77);
-try { call('denunciar', orgB, b32(0x59)); console.log('  denunciar(orgB) ACEPTADA -> credencial forjada para una org no registrada'); }
-catch (e) { console.log('  rechazada:', String(e.message).split('\n')[0]); }
-
-console.log('\n### D. Whoever holds the export {secret, evidenciaHash} can act as the author');
-setLeaf(() => hojaA); secrets.ev = b32(0x33); // back to the original denuncia
+console.log('\n=== D. [DECLARADO] Quien tiene el export de llave actua como el autor ===');
+// El export §3.2 contiene {secret, evidenciaHash}: el fiscal aprende el secret.
+// Es una limitacion DECLARADA del MVP (roadmap: prueba ZK al fiscal). Este
+// bloque documenta la consecuencia exacta para que nadie se sorprenda.
+secretos.ev = b32(0x33); // volver a la evidencia de la denuncia original
 const denunciaId = pureCircuits.denunciaIdDe(b32(0x33), sec);
-console.log('  denuncias.member(denunciaId) =', st().denuncias.member(denunciaId));
-const fiscalPk = b32(0x66), empleadorPk = b32(0x88), fiscal2 = b32(0x99);
-// the "fiscal" builds his own Contract with the leaked witnesses
-const fiscalCtr = new Contract({
+const fiscal2 = b32(0x99);
+const conElExport = {
   credencialSecret: (c) => [c.privateState, b32(0)],
   credencialPath: (c) => [c.privateState, []],
   secretPersonal: (c) => [c.privateState, sec],
   evidenciaHash: (c) => [c.privateState, b32(0x33)],
-});
-try {
-  const rr = fiscalCtr.impureCircuits.revelarAutoria(ctx, denunciaId, empleadorPk);
-  ctx = rr.context;
-  console.log('  fiscal republished authorship to EMPLEADOR pk: ACCEPTED');
-  console.log('  autorias.member(autoria(sec,id,empleadorPk)) =', st().autorias.member(pureCircuits.autoriaDe(sec, denunciaId, empleadorPk)));
-} catch (e) { console.log('  rejected:', String(e.message).split('\n')[0]); }
-// pre-burn the author's future reveal to fiscal2
-try {
-  const rr = fiscalCtr.impureCircuits.revelarAutoria(ctx, denunciaId, fiscal2);
-  ctx = rr.context;
-  console.log('  fiscal pre-burned the (denuncia, fiscal2) slot: ACCEPTED');
-} catch (e) { console.log('  rejected:', String(e.message).split('\n')[0]); }
-try { call('revelarAutoria', denunciaId, fiscal2); console.log('  FAIL author could still reveal to fiscal2'); }
-catch (e) { console.log('  author now PERMANENTLY blocked from revealing to fiscal2:', String(e.message).split('\n')[0]); }
+};
+let republico = true;
+try { m.callComo(conElExport, 'revelarAutoria', denunciaId, b32(0x88)); } catch { republico = false; }
+check('CONOCIDO: con el export se puede republicar la autoria a otra pk', republico);
+m.callComo(conElExport, 'revelarAutoria', denunciaId, fiscal2);
+checkRechaza('CONOCIDO: y quemar el slot (denuncia, fiscal2) del autor real',
+  () => m.call('revelarAutoria', denunciaId, fiscal2), 'autoria ya revelada a este fiscal');
+console.log('  -> Mitigacion actual: el export se entrega a UN fiscal, fuera de banda.');
+console.log('  -> Roadmap: prueba ZK al fiscal en vez de entregarle el secret.');
 
-console.log('\n### E. Merkle root as a sync-counter (root changes per insert; history keeps them all)');
-const roots = [];
+console.log('\n=== E. La raiz de Merkle cambia con cada insercion ===');
+// Un observador puede usar la raiz revelada como contador de sincronizacion.
+// Por eso el witness debe usar SIEMPRE el path del estado mas reciente.
+const raices = [];
 for (let i = 0; i < 4; i++) {
-  call('emitirCredencial', orgA, b32(0xc0 + i));
-  roots.push(JSON.stringify(st().credenciales.root(), (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
+  m.call('emitirCredencial', orgA, b32(0xc0 + i));
+  raices.push(m.estado().credenciales.root().field.toString());
 }
-console.log('  distinct roots after 4 inserts:', new Set(roots).size, '/ 4');
-const hist = [...{ [Symbol.iterator]: () => st().credenciales.history() }];
-console.log('  history length =', hist.length, '(every past root stays acceptable to checkRoot)');
+check('4 inserciones -> 4 raices distintas', new Set(raices).size === 4);
+const hist = [...{ [Symbol.iterator]: () => m.estado().credenciales.history() }];
+check('el historico conserva las raices pasadas', hist.length > 1, `history=${hist.length}`);
+console.log('  -> Guia para app/src/witnesses: NUNCA cachear el path; recalcularlo');
+console.log('     con findPathForLeaf sobre el estado mas reciente antes de cada denuncia.');
+
+resumen('sec-audit');

@@ -1,116 +1,78 @@
-// A.6 (bonus) — round-trip completo del arbol de credenciales en el simulador
-// local de @midnight-ntwrk/compact-runtime, SIN red y SIN proof server.
-// Objetivo: de-riesgar B2.3 probando que el witness `credencialPath` armado
-// con `ledger.credenciales.findPathForLeaf(hoja).path` satisface el circuito
-// `denunciar`. No toca el repo.
+// Los 4 tiempos de la demo (docs/01-arquitectura.md §2), de punta a punta,
+// contra el contrato COMPILADO REAL en el simulador local. Sin red, sin
+// proof server. Es el mismo camino que va a recorrer app/ en B3.
 
 import {
-  Contract,
-  ledger as leerLedger,
-  pureCircuits,
-} from './generated/index.js';
-import {
-  createConstructorContext,
-  createCircuitContext,
-  sampleContractAddress,
-} from '@midnight-ntwrk/compact-runtime';
-
-const b32 = (fill) => Uint8Array.from({ length: 32 }, (_, i) => (fill + i) % 256);
-const hex = (u8) => Buffer.from(u8).toString('hex');
+  pureCircuits, nuevoMundo, b32, hex, check, checkRechaza, resumen, EPOCA,
+} from './harness.mjs';
 
 const orgId = b32(0x11);
 const ancla = b32(0xaa);
 const credSecret = b32(0x22);
 const secretPersonal = b32(0x44);
 const evidenciaHash = b32(0x33);
-const periodo = b32(0x55);
 const fiscalPk = b32(0x66);
+const empleadorPk = b32(0x77);
 
-const hoja = pureCircuits.hojaDe(orgId, credSecret);
+const credComm = pureCircuits.credCommitmentDe(credSecret);
+const hoja = pureCircuits.hojaDe(orgId, credComm);
 
-// --- El witness real que va a vivir en app/src/witnesses/index.ts ---
+// El witness real que va a vivir en app/src/witnesses/index.ts (B2.3).
 const witnesses = {
-  credencialSecret: (ctx) => [ctx.privateState, credSecret],
-  secretPersonal: (ctx) => [ctx.privateState, secretPersonal],
-  evidenciaHash: (ctx) => [ctx.privateState, evidenciaHash],
-  credencialPath: (ctx) => {
-    const camino = ctx.ledger.credenciales.findPathForLeaf(hoja);
-    if (camino === undefined) {
-      throw new Error('credencial no emitida para esta org');
-    }
-    return [ctx.privateState, camino.path];
+  credencialSecret: (c) => [c.privateState, credSecret],
+  secretPersonal: (c) => [c.privateState, secretPersonal],
+  evidenciaHash: (c) => [c.privateState, evidenciaHash],
+  credencialPath: (c) => {
+    const camino = c.ledger.credenciales.findPathForLeaf(hoja);
+    if (camino === undefined) throw new Error('credencial no emitida para esta org');
+    return [c.privateState, camino.path];
   },
 };
 
-const contrato = new Contract(witnesses);
-const address = sampleContractAddress();
-const coinPublicKey = '0'.repeat(64);
+const m = nuevoMundo(witnesses);
 
-const inicial = contrato.initialState(createConstructorContext({}, coinPublicKey));
-let ctx = createCircuitContext(
-  address,
-  inicial.currentZswapLocalState,
-  inicial.currentContractState,
-  inicial.currentPrivateState,
-);
+console.log('=== T1. La org se registra y emite una credencial ===');
+m.call('registrarOrganizacion', orgId, ancla);
+check('organizaciones.size == 1', m.estado().organizaciones.size() === 1n);
+console.log(`  credCommitment = ${hex(credComm)}`);
+console.log(`  hoja           = ${hex(hoja)}`);
+// El emisor manda el COMMITMENT; el contrato construye la hoja en circuito.
+m.call('emitirCredencial', orgId, credComm);
+check('credenciales.firstFree == 1', m.estado().credenciales.firstFree() === 1n);
 
-const estado = () => leerLedger(ctx.currentQueryContext.state);
-const llamar = (nombre, ...args) => {
-  const r = contrato.impureCircuits[nombre](ctx, ...args);
-  ctx = r.context;
-  return r;
-};
+const camino = m.estado().credenciales.findPathForLeaf(hoja);
+check('findPathForLeaf encuentra la hoja construida en circuito', camino !== undefined);
+check('el path tiene 8 hermanos', camino?.path.length === 8, `len=${camino?.path.length}`);
+check('findPathForLeaf de una hoja ajena -> undefined',
+  m.estado().credenciales.findPathForLeaf(b32(0x99)) === undefined);
 
-console.log('=== T1. registrarOrganizacion + emitirCredencial ===');
-llamar('registrarOrganizacion', orgId, ancla);
-console.log(`organizaciones.size          = ${estado().organizaciones.size()}`);
-console.log(`hoja (pure circuit hojaDe)   = ${hex(hoja)}`);
-llamar('emitirCredencial', orgId, hoja);
-console.log(`credenciales.firstFree       = ${estado().credenciales.firstFree()}`);
-
-const camino = estado().credenciales.findPathForLeaf(hoja);
-console.log(`findPathForLeaf -> leaf      = ${hex(camino.leaf)}`);
-console.log(`findPathForLeaf -> path.len  = ${camino.path.length}`);
-console.log(`path[0]                      = ${JSON.stringify(camino.path[0], (_, v) => (typeof v === 'bigint' ? v.toString() : v))}`);
-console.log(`findPathForLeaf(hoja ajena)  = ${estado().credenciales.findPathForLeaf(b32(0x99))}`);
-
-console.log('\n=== T2. denunciar (usa el witness credencialPath) ===');
-llamar('denunciar', orgId, periodo);
+console.log('\n=== T2. Denuncia (usa el witness credencialPath) ===');
+m.call('denunciar', orgId, EPOCA);
 const denunciaId = pureCircuits.denunciaIdDe(evidenciaHash, secretPersonal);
-const nullifier = pureCircuits.nullifierDe(credSecret, orgId, periodo);
-console.log(`denunciaId                   = ${hex(denunciaId)}`);
-console.log(`nullifier                    = ${hex(nullifier)}`);
-console.log(`denuncias.member(denunciaId) = ${estado().denuncias.member(denunciaId)}`);
-console.log(`nullifiers.member(nullifier) = ${estado().nullifiers.member(nullifier)}`);
+const nullifier = pureCircuits.nullifierDe(credSecret, orgId, EPOCA);
+console.log(`  denunciaId = ${hex(denunciaId)}`);
+console.log(`  nullifier  = ${hex(nullifier)}`);
+check('la denuncia quedo sellada', m.estado().denuncias.member(denunciaId));
+check('el nullifier quedo quemado', m.estado().nullifiers.member(nullifier));
 
-console.log('\n=== T2b. re-denuncia en el mismo periodo debe FALLAR ===');
-try {
-  llamar('denunciar', orgId, periodo);
-  console.log('  FAIL: no fallo');
-} catch (e) {
-  console.log(`  ok: ${String(e.message).split('\n')[0]}`);
-}
+console.log('\n=== T3. La evidencia no se puede alterar ni re-denunciar ===');
+checkRechaza('re-denuncia en la misma epoca',
+  () => m.call('denunciar', orgId, EPOCA), 'ya denunciaste este periodo');
 
-console.log('\n=== T4. revelarAutoria ===');
-llamar('revelarAutoria', denunciaId, fiscalPk);
+console.log('\n=== T4. Autoria diferida, ligada al fiscal ===');
+m.call('revelarAutoria', denunciaId, fiscalPk);
 const autoriaHash = pureCircuits.autoriaDe(secretPersonal, denunciaId, fiscalPk);
-console.log(`autoriaHash                  = ${hex(autoriaHash)}`);
-console.log(`autorias.member(autoriaHash) = ${estado().autorias.member(autoriaHash)}`);
+console.log(`  autoriaHash = ${hex(autoriaHash)}`);
+check('la autoria quedo registrada', m.estado().autorias.member(autoriaHash));
 
-console.log('\n=== T4b. secret ajeno NO puede revelar autoria ===');
-const contratoImpostor = new Contract({
-  ...witnesses,
-  secretPersonal: (c) => [c.privateState, b32(0x99)],
-});
-try {
-  contratoImpostor.impureCircuits.revelarAutoria(ctx, denunciaId, fiscalPk);
-  console.log('  FAIL: no fallo');
-} catch (e) {
-  console.log(`  ok: ${String(e.message).split('\n')[0]}`);
-}
+checkRechaza('un secret ajeno no puede reclamar la autoria',
+  () => m.callComo({ ...witnesses, secretPersonal: (c) => [c.privateState, b32(0x99)] },
+    'revelarAutoria', denunciaId, fiscalPk),
+  'no sos el autor');
 
-console.log('\n=== T4c. verificacion del fiscal vs. del empleador (off-chain) ===');
-const empleadorPk = b32(0x77);
+console.log('\n--- El momento del video: misma denuncia, dos verificadores ---');
 const hashEmpleador = pureCircuits.autoriaDe(secretPersonal, denunciaId, empleadorPk);
-console.log(`autoria(fiscal)    en ledger = ${estado().autorias.member(autoriaHash)}`);
-console.log(`autoria(empleador) en ledger = ${estado().autorias.member(hashEmpleador)}`);
+check('FISCAL   -> la autoria verifica', m.estado().autorias.member(autoriaHash));
+check('EMPLEADOR -> no verifica', !m.estado().autorias.member(hashEmpleador));
+
+resumen('merkle-roundtrip');
