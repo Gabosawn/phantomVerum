@@ -1,22 +1,23 @@
 /**
- * B1.3 — Los 6 providers de midnight-js.
+ * B1.3 — The 6 midnight-js providers.
  *
- * `MidnightProviders` (verificado en `midnight-js-types/dist/providers.d.ts`,
- * 4.1.1) exige exactamente:
+ * `MidnightProviders` (verified in `midnight-js-types/dist/providers.d.ts`,
+ * 4.1.1) requires exactly:
  *
  *   privateStateProvider · publicDataProvider · zkConfigProvider ·
- *   proofProvider · walletProvider · midnightProvider   (+ loggerProvider opcional)
+ *   proofProvider · walletProvider · midnightProvider   (+ optional loggerProvider)
  *
- * El ensamblado de acá abajo es el mismo que hace `initializeMidnightProviders`
- * de testkit-js (ver `testkit-js/dist/index.mjs`); lo escribimos explícito
- * porque necesitamos controlar el path de los artefactos ZK y la password del
- * private state, y porque es código que un juez va a leer.
+ * The assembly below is the same one `initializeMidnightProviders` from
+ * testkit-js does (see `testkit-js/dist/index.mjs`); we write it explicitly
+ * because we need to control the ZK artifacts path and the private state
+ * password, and because it is code a judge will read.
  *
- * Sobre el wallet: NO usamos `@midnight-ntwrk/wallet` ni `-wallet-api`. Están
- * en 5.0.0, montan zswap/ledger viejos incompatibles con el stack 4.1.1 y no
- * figuran en la compatibility matrix. El camino soportado para "wallet desde
- * seed" es `MidnightWalletProvider` de testkit-js, que implementa a la vez
- * `WalletProvider` y `MidnightProvider` (los dos providers que faltan).
+ * About the wallet: we do NOT use `@midnight-ntwrk/wallet` nor `-wallet-api`.
+ * They are at 5.0.0, mount old zswap/ledger incompatible with the 4.1.1
+ * stack and are not in the compatibility matrix. The supported path for
+ * "wallet from seed" is testkit-js's `MidnightWalletProvider`, which
+ * implements both `WalletProvider` and `MidnightProvider` (the two missing
+ * providers).
  */
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -41,24 +42,25 @@ import type { NetworkConfig } from './networks.js';
 import { REPO_ROOT, privateStateDirectory, zkConfigDirectory } from './paths.js';
 
 // ---------------------------------------------------------------------------
-// Guarda de compatibilidad que el SDK NO nos da
+// Compatibility guard the SDK does NOT give us
 // ---------------------------------------------------------------------------
 
 /**
- * ⚠️ `MidnightWalletProvider.build(logger, env, seed)` declara `env` con un tipo
- * que TypeScript no puede resolver: el `.d.ts` de testkit-js 4.1.1 importa
- * `EnvironmentConfiguration` desde el alias `@/index`, que no existe fuera del
- * build del propio paquete. Con `skipLibCheck` eso colapsa a `any`.
+ * ⚠️ `MidnightWalletProvider.build(logger, env, seed)` declares `env` with a
+ * type TypeScript cannot resolve: the testkit-js 4.1.1 `.d.ts` imports
+ * `EnvironmentConfiguration` from the `@/index` alias, which does not exist
+ * outside the package's own build. With `skipLibCheck` that collapses to
+ * `any`.
  *
- * Verificado, no supuesto: `MidnightWalletProvider.build(logger, { soloEsto: 1 },
- * 'x')` type-checkea sin una queja. O sea que NADA valida que `NetworkConfig`
- * tenga lo que el wallet necesita — un campo mal escrito se manifestaría recién
- * en runtime, a mitad de un deploy.
+ * Verified, not assumed: `MidnightWalletProvider.build(logger, { onlyThis: 1 },
+ * 'x')` type-checks without a complaint. Meaning NOTHING validates that
+ * `NetworkConfig` has what the wallet needs — a misspelled field would only
+ * show up at runtime, mid-deploy.
  *
- * Este tipo replica los campos que el SDK lee DE VERDAD, leídos del código:
- * `mapEnvironmentToConfiguration` (indexer, indexerWS, proofServer,
- * walletNetworkId, nodeWS) y `waitForFunds` (faucet). La línea de abajo hace
- * que `tsc` falle si `NetworkConfig` deja de cumplir el contrato.
+ * This type replicates the fields the SDK ACTUALLY reads, taken from the
+ * code: `mapEnvironmentToConfiguration` (indexer, indexerWS, proofServer,
+ * walletNetworkId, nodeWS) and `waitForFunds` (faucet). The line below makes
+ * `tsc` fail if `NetworkConfig` stops fulfilling the contract.
  */
 interface WalletEnvironmentShape {
   readonly walletNetworkId: NetworkId.NetworkId;
@@ -71,53 +73,53 @@ interface WalletEnvironmentShape {
 
 type AssertAssignable<T extends U, U> = T;
 
-/** Falla la compilación si `NetworkConfig` deja de servir como env del wallet. */
+/** Fails the build if `NetworkConfig` stops working as the wallet env. */
 export type NetworkConfigIsWalletEnvironment = AssertAssignable<
   NetworkConfig,
   WalletEnvironmentShape
 >;
 
 /**
- * Los circuitos con claves de Testigo. Tienen que coincidir 1:1 con
- * `contracts/output/keys/*.prover` — `NodeZkConfigProvider` los busca por
- * nombre de archivo. Si el contrato agrega un circuito, se agrega acá.
+ * The circuits with Testigo keys. They must match 1:1 with
+ * `contracts/output/keys/*.prover` — `NodeZkConfigProvider` looks them up by
+ * file name. If the contract gains a circuit, it is added here.
  */
 export type TestigoCircuitId =
-  | 'registrarOrganizacion'
-  | 'emitirCredencial'
-  | 'denunciar'
-  | 'revelarAutoria';
+  | 'registerOrganization'
+  | 'issueCredential'
+  | 'report'
+  | 'revealAuthorship';
 
-/** Los mismos, como array — para chequear que los artefactos existan. */
+/** The same ones, as an array — to check that the artifacts exist. */
 export const TESTIGO_CIRCUIT_IDS: readonly TestigoCircuitId[] = [
-  'registrarOrganizacion',
-  'emitirCredencial',
-  'denunciar',
-  'revelarAutoria',
+  'registerOrganization',
+  'issueCredential',
+  'report',
+  'revealAuthorship',
 ];
 
 /**
- * El tipo de logger que espera `MidnightWalletProvider.build` (un `Logger` de
- * pino). Lo derivamos de la firma real en vez de importar `pino`, que no es
- * dependencia declarada de `app/`.
+ * The logger type `MidnightWalletProvider.build` expects (a pino `Logger`).
+ * Derived from the real signature instead of importing `pino`, which is not
+ * a declared dependency of `app/`.
  */
 export type WalletLogger = Parameters<typeof MidnightWalletProvider.build>[0];
 
 /**
- * Logger para los scripts CLI.
+ * Logger for the CLI scripts.
  *
- * El logger que exporta testkit-js viene en nivel `info` y escupe a stdout la
- * config completa del wallet — incluida **la seed en claro**
- * (`Your wallet seed is: ...`, en `MidnightWalletProvider.build`). Eso es
- * veneno para material de demo que se proyecta en un video, y peor todavía si
- * alguien pega el log en un issue.
+ * The logger testkit-js exports comes at `info` level and dumps the wallet's
+ * full config to stdout — including **the seed in the clear**
+ * (`Your wallet seed is: ...`, in `MidnightWalletProvider.build`). That is
+ * poison for demo material projected in a video, and worse if someone pastes
+ * the log into an issue.
  *
- * Bajamos el nivel a `warn` por defecto. También bajamos el del singleton de
- * testkit, porque partes del SDK (`FluentWalletBuilder.forEnvironment`,
- * `WalletFactory`) loguean contra ESE objeto y no contra el que les pasamos:
- * sin esto siguen saliendo por stdout aunque nuestro child esté callado.
+ * We lower the level to `warn` by default. We also lower the testkit
+ * singleton's, because parts of the SDK (`FluentWalletBuilder.forEnvironment`,
+ * `WalletFactory`) log against THAT object and not the one we pass: without
+ * this they keep hitting stdout even with our child silenced.
  *
- * `LOG_LEVEL=info` (o `debug`) lo vuelve a subir para debuggear.
+ * `LOG_LEVEL=info` (or `debug`) raises it again for debugging.
  */
 export const scriptLogger = (env: NodeJS.ProcessEnv = process.env): WalletLogger => {
   const requested = env.LOG_LEVEL?.trim();
@@ -128,10 +130,10 @@ export const scriptLogger = (env: NodeJS.ProcessEnv = process.env): WalletLogger
   return child;
 };
 
-/** Nombre base del store de private state en LevelDB. */
+/** Base name of the private state store in LevelDB. */
 export const PRIVATE_STATE_STORE_NAME = 'testigo-private-state';
 
-/** Id del private state del contrato (clave dentro del store). */
+/** Id of the contract's private state (key inside the store). */
 export const TESTIGO_PRIVATE_STATE_ID = 'testigo';
 
 // ---------------------------------------------------------------------------
@@ -141,11 +143,11 @@ export const TESTIGO_PRIVATE_STATE_ID = 'testigo';
 let envLoaded = false;
 
 /**
- * Carga `.env` de la raíz del repo si existe.
+ * Loads the repo root's `.env` if it exists.
  *
- * Node 22 trae `process.loadEnvFile()` — no hace falta `dotenv`. Las variables
- * ya presentes en el ambiente NO se pisan, así que
- * `NETWORK=local npm run ...` sigue mandando sobre el `.env`.
+ * Node 22 brings `process.loadEnvFile()` — no need for `dotenv`. Variables
+ * already present in the environment are NOT overridden, so
+ * `NETWORK=local npm run ...` still wins over `.env`.
  */
 export const loadEnvFile = (): void => {
   if (envLoaded) {
@@ -158,13 +160,13 @@ export const loadEnvFile = (): void => {
   }
 };
 
-/** Error accionable cuando falta o está mal la `DEPLOY_SEED`. */
+/** Actionable error when `DEPLOY_SEED` is missing or malformed. */
 export class MissingSeedError extends Error {
   constructor(detail: string) {
     super(
       `${detail}\n` +
-        'Generá una con: openssl rand -hex 32\n' +
-        'y ponela en .env como DEPLOY_SEED=<64 chars hex> (nunca la commitees).',
+        'Generate one with: openssl rand -hex 32\n' +
+        'and put it in .env as DEPLOY_SEED=<64 hex chars> (never commit it).',
     );
     this.name = 'MissingSeedError';
   }
@@ -173,22 +175,22 @@ export class MissingSeedError extends Error {
 const HEX64 = /^[0-9a-f]{64}$/i;
 
 /**
- * Lee y valida `DEPLOY_SEED`.
+ * Reads and validates `DEPLOY_SEED`.
  *
- * Formato: 64 chars hex (32 bytes). El SDK hace `Buffer.from(seed, 'hex')` y se
- * la pasa a `HDWallet.fromSeed` (verificado en `deriveKeyForRole`, testkit-js);
- * un string que no sea hex se convierte en un buffer truncado en silencio y la
- * derivación falla con un error críptico. Por eso validamos acá.
+ * Format: 64 hex chars (32 bytes). The SDK does `Buffer.from(seed, 'hex')`
+ * and passes it to `HDWallet.fromSeed` (verified in `deriveKeyForRole`,
+ * testkit-js); a non-hex string silently becomes a truncated buffer and the
+ * derivation fails with a cryptic error. Hence the validation here.
  */
 export const readDeploySeed = (env: NodeJS.ProcessEnv = process.env): string => {
   loadEnvFile();
   const seed = env.DEPLOY_SEED?.trim();
   if (seed === undefined || seed === '') {
-    throw new MissingSeedError('Falta DEPLOY_SEED.');
+    throw new MissingSeedError('DEPLOY_SEED is missing.');
   }
   if (!HEX64.test(seed)) {
     throw new MissingSeedError(
-      `DEPLOY_SEED tiene ${seed.length} chars y se esperaban 64 hex (32 bytes).`,
+      `DEPLOY_SEED has ${seed.length} chars, expected 64 hex (32 bytes).`,
     );
   }
   return seed.toLowerCase();
@@ -202,21 +204,21 @@ const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const LOWER = 'abcdefghijkmnpqrstuvwxyz';
 
 /**
- * Password de cifrado del LevelDB de private state.
+ * Encryption password of the private state LevelDB.
  *
- * `levelPrivateStateProvider` valida la password en CADA lectura/escritura
- * contra una política dura (`validatePassword` en midnight-js-utils 4.1.1):
- * ≥16 chars · ≥3 de 4 clases de caracteres · ≤3 idénticos seguidos · sin
- * secuencias de 4+ (`1234`, `abcd`).
+ * `levelPrivateStateProvider` validates the password on EVERY read/write
+ * against a hard policy (`validatePassword` in midnight-js-utils 4.1.1):
+ * ≥16 chars · ≥3 of 4 character classes · ≤3 identical in a row · no 4+
+ * sequences (`1234`, `abcd`).
  *
- * Si no viene `PRIVATE_STATE_PASSWORD`, la derivamos de la `DEPLOY_SEED` con un
- * tag de dominio. La seed ya es el secreto que protege todo lo demás, así que
- * no agrega superficie nueva — y es estrictamente mejor que la constante
- * hardcodeada que usa el testkit.
+ * If `PRIVATE_STATE_PASSWORD` is not set, we derive it from `DEPLOY_SEED`
+ * with a domain tag. The seed is already the secret protecting everything
+ * else, so this adds no new surface — and it is strictly better than the
+ * hardcoded constant the testkit uses.
  *
- * El alfabeto alterna MAYÚSCULA/minúscula posición a posición: dos caracteres
- * contiguos nunca quedan a distancia ±1 de code point, así que el resultado no
- * puede disparar el chequeo de "secuencias".
+ * The alphabet alternates UPPERCASE/lowercase position by position: two
+ * contiguous characters are never at ±1 code point, so the result cannot
+ * trip the "sequences" check.
  */
 export const derivePrivateStatePassword = (seed: string): string => {
   const digest = createHash('sha256').update(`testigo:private-state:v1:${seed}`).digest();
@@ -228,7 +230,7 @@ export const derivePrivateStatePassword = (seed: string): string => {
   return out;
 };
 
-/** Password efectiva: la explícita del ambiente, o la derivada de la seed. */
+/** Effective password: the explicit env one, or the seed-derived one. */
 export const privateStatePassword = (env: NodeJS.ProcessEnv = process.env): string => {
   loadEnvFile();
   const explicit = env.PRIVATE_STATE_PASSWORD?.trim();
@@ -239,38 +241,38 @@ export const privateStatePassword = (env: NodeJS.ProcessEnv = process.env): stri
 };
 
 // ---------------------------------------------------------------------------
-// Providers individuales
+// Individual providers
 // ---------------------------------------------------------------------------
 
 /**
- * Provider de datos públicos (indexer).
+ * Public data provider (indexer).
  *
- * `indexerPublicDataProvider(queryURL, subscriptionURL, webSocketImpl?)` — dos
- * URLs, no una: HTTP para queries, WebSocket para subscriptions.
+ * `indexerPublicDataProvider(queryURL, subscriptionURL, webSocketImpl?)` —
+ * two URLs, not one: HTTP for queries, WebSocket for subscriptions.
  *
- * No necesita wallet ni seed: es el que usan `verificarAutoria` (B3.6, 100 %
- * off-chain) y `leerEstadoLedger` (B3.7).
+ * Needs no wallet or seed: it is the one `verifyAuthorship` (B3.6, 100%
+ * off-chain) and `readLedgerState` (B3.7) use.
  */
 export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvider =>
   indexerPublicDataProvider(network.indexer, network.indexerWS);
 
 /**
- * Provider de artefactos ZK, leyendo `contracts/output/`.
+ * ZK artifacts provider, reading `contracts/output/`.
  *
- * `NodeZkConfigProvider` espera adentro `keys/<circuitId>.prover|.verifier` y
- * `zkir/<circuitId>.bzkir`. Es exactamente el layout que emite `compact
- * compile`, así que apuntamos al directorio de salida tal cual.
+ * `NodeZkConfigProvider` expects `keys/<circuitId>.prover|.verifier` and
+ * `zkir/<circuitId>.bzkir` inside. That is exactly the layout `compact
+ * compile` emits, so we point at the output directory as-is.
  */
 export const buildZkConfigProvider = <K extends string = TestigoCircuitId>(
   zkConfigPath: string = zkConfigDirectory(),
 ): NodeZkConfigProvider<K> => new NodeZkConfigProvider<K>(zkConfigPath);
 
 /**
- * Verifica que los artefactos ZK existan ANTES de intentar probar nada.
+ * Verifies that the ZK artifacts exist BEFORE trying to prove anything.
  *
- * Sin esto, un `contracts/output/` vacío se manifiesta como un ENOENT a mitad
- * del proving, después de haber armado wallet y transacción. Devuelve la lista
- * de archivos faltantes (vacía = todo bien).
+ * Without this, an empty `contracts/output/` shows up as an ENOENT in the
+ * middle of proving, after having assembled wallet and transaction. Returns
+ * the list of missing files (empty = all good).
  */
 export const missingZkArtifacts = (
   zkConfigPath: string = zkConfigDirectory(),
@@ -292,26 +294,26 @@ export const missingZkArtifacts = (
   return missing;
 };
 
-/** Igual que `missingZkArtifacts`, pero explota con instrucciones. */
+/** Same as `missingZkArtifacts`, but blows up with instructions. */
 export const assertZkArtifacts = (zkConfigPath: string = zkConfigDirectory()): void => {
   const missing = missingZkArtifacts(zkConfigPath);
   if (missing.length > 0) {
     throw new Error(
-      `Faltan artefactos ZK en ${zkConfigPath}:\n` +
+      `Missing ZK artifacts in ${zkConfigPath}:\n` +
         missing.map((m) => `  - ${m}`).join('\n') +
-        '\nCorré: npm run compile --workspace=contracts',
+        '\nRun: npm run compile --workspace=contracts',
     );
   }
 };
 
 /**
- * Proof provider HTTP contra el proof server local.
+ * HTTP proof provider against the local proof server.
  *
- * `httpClientProofProvider(url, zkConfigProvider, config?)` — necesita el
- * zkConfigProvider porque prueba circuito por circuito contra `/check` y
- * `/prove` (el endpoint `/prove-tx` NO se usa; ver el doc del paquete).
+ * `httpClientProofProvider(url, zkConfigProvider, config?)` — it needs the
+ * zkConfigProvider because it proves circuit by circuit against `/check`
+ * and `/prove` (the `/prove-tx` endpoint is NOT used; see the package doc).
  *
- * El proof server nunca recibe la seed ni las signing keys.
+ * The proof server never receives the seed or the signing keys.
  */
 export const buildProofProvider = <K extends string = TestigoCircuitId>(
   network: NetworkConfig,
@@ -319,11 +321,11 @@ export const buildProofProvider = <K extends string = TestigoCircuitId>(
 ): ProofProvider => httpClientProofProvider<K>(network.proofServer, zkConfigProvider);
 
 /**
- * Private state provider sobre LevelDB.
+ * Private state provider over LevelDB.
  *
- * En 4.1.1 `levelPrivateStateProvider` pide dos campos obligatorios que las
- * versiones viejas no tenían: `privateStoragePasswordProvider` y `accountId`
- * (aislamiento entre cuentas que comparten la misma base).
+ * In 4.1.1 `levelPrivateStateProvider` requires two mandatory fields older
+ * versions did not have: `privateStoragePasswordProvider` and `accountId`
+ * (isolation between accounts sharing the same database).
  */
 export const buildPrivateStateProvider = <
   PSI extends PrivateStateId = PrivateStateId,
@@ -349,14 +351,16 @@ export const buildPrivateStateProvider = <
 // ---------------------------------------------------------------------------
 
 /**
- * Construye el wallet desde `DEPLOY_SEED`.
+ * Builds the wallet from `DEPLOY_SEED`.
  *
- * `MidnightWalletProvider` implementa `WalletProvider` Y `MidnightProvider`:
- * cubre `balanceTx` / `getCoinPublicKey` / `getEncryptionPublicKey` y `submitTx`.
+ * `MidnightWalletProvider` implements `WalletProvider` AND
+ * `MidnightProvider`: it covers `balanceTx` / `getCoinPublicKey` /
+ * `getEncryptionPublicKey` and `submitTx`.
  *
- * OJO: `build()` NO arranca el wallet. Hay que llamar a `start()` aparte, y
- * `start(true)` (el default) pide tDUST al faucet y BLOQUEA hasta tener fondos.
- * Para cualquier cosa que no sea el primer deploy querés `start(false)`.
+ * BEWARE: `build()` does NOT start the wallet. `start()` must be called
+ * separately, and `start(true)` (the default) requests tDUST from the faucet
+ * and BLOCKS until funded. For anything but the first deploy you want
+ * `start(false)`.
  */
 export const buildWalletProvider = async (
   network: NetworkConfig = currentNetwork(),
@@ -370,10 +374,10 @@ export const buildWalletProvider = async (
 };
 
 // ---------------------------------------------------------------------------
-// Ensamblado
+// Assembly
 // ---------------------------------------------------------------------------
 
-/** Providers + las piezas sueltas que los scripts necesitan por separado. */
+/** Providers + the loose pieces the scripts need separately. */
 export interface TestigoProviders<PCK extends string = TestigoCircuitId, PS = unknown> {
   readonly providers: MidnightProviders<PCK, PrivateStateId, PS>;
   readonly walletProvider: MidnightWalletProvider;
@@ -382,11 +386,11 @@ export interface TestigoProviders<PCK extends string = TestigoCircuitId, PS = un
 }
 
 /**
- * Ensambla los 6 providers a partir de un wallet ya construido.
+ * Assembles the 6 providers from an already built wallet.
  *
- * `accountId` sale de la coin public key del wallet — mismo criterio que
- * `initializeMidnightProviders` del testkit — así que dos seeds distintas no se
- * pisan el private state.
+ * `accountId` comes from the wallet's coin public key — same criterion as
+ * the testkit's `initializeMidnightProviders` — so two different seeds do
+ * not step on each other's private state.
  */
 export const assembleProviders = <PCK extends string = TestigoCircuitId, PS = unknown>(options: {
   readonly walletProvider: MidnightWalletProvider;
@@ -397,13 +401,13 @@ export const assembleProviders = <PCK extends string = TestigoCircuitId, PS = un
 }): MidnightProviders<PCK, PrivateStateId, PS> => {
   const zkConfigPath = options.zkConfigPath ?? zkConfigDirectory();
   const zkConfigProvider = buildZkConfigProvider<PCK>(zkConfigPath);
-  // `getCoinPublicKey()` devuelve un STRING hex, así que este `Buffer.from` lo
-  // codifica como UTF-8 y termina hexeando el hex (el accountId sale del doble
-  // de largo). Es feo, pero es exactamente lo que hace
-  // `initializeMidnightProviders` del testkit: lo mantenemos igual a propósito
-  // para que un store escrito por nuestro código y uno escrito por el helper
-  // del SDK sean el mismo. Como accountId solo hace falta que sea determinístico
-  // y único por wallet, y lo es (el SDK igual lo hashea con SHA-256).
+  // `getCoinPublicKey()` returns a hex STRING, so this `Buffer.from` encodes
+  // it as UTF-8 and ends up hexing the hex (the accountId comes out double
+  // length). Ugly, but it is exactly what the testkit's
+  // `initializeMidnightProviders` does: we keep it identical on purpose so a
+  // store written by our code and one written by the SDK helper are the same.
+  // The accountId only needs to be deterministic and unique per wallet, and
+  // it is (the SDK hashes it with SHA-256 anyway).
   const accountId = Buffer.from(options.walletProvider.getCoinPublicKey()).toString('hex');
 
   return {
@@ -421,10 +425,11 @@ export const assembleProviders = <PCK extends string = TestigoCircuitId, PS = un
 };
 
 /**
- * Camino completo: red activa → wallet desde `DEPLOY_SEED` → 6 providers.
+ * Full path: active network → wallet from `DEPLOY_SEED` → 6 providers.
  *
- * Es lo que llaman los scripts de B4. NO arranca el wallet (ver
- * `buildWalletProvider`): el script decide si necesita esperar fondos.
+ * It is what the B4 scripts call. It does NOT start the wallet (see
+ * `buildWalletProvider`): the script decides whether it needs to wait for
+ * funds.
  */
 export const createProviders = async <PCK extends string = TestigoCircuitId, PS = unknown>(
   options: {
@@ -452,11 +457,11 @@ export const createProviders = async <PCK extends string = TestigoCircuitId, PS 
 };
 
 /**
- * Solo lectura: indexer, sin wallet, sin seed, sin proof server.
+ * Read-only: indexer, no wallet, no seed, no proof server.
  *
- * Es el modo que necesitan `verificarAutoria` (B3.6) y `leerEstadoLedger`
- * (B3.7). Que el fiscal pueda verificar una autoría sin tener una wallet es
- * parte de la demo, no un detalle de implementación.
+ * It is the mode `verifyAuthorship` (B3.6) and `readLedgerState` (B3.7)
+ * need. That the prosecutor can verify an authorship without owning a
+ * wallet is part of the demo, not an implementation detail.
  */
 export const createReadOnlyProviders = (
   network: NetworkConfig = currentNetwork(),

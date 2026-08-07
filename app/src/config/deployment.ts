@@ -1,16 +1,17 @@
 /**
- * B1.2 — Dirección del contrato deployado.
+ * B1.2 — Address of the deployed contract.
  *
- * Formato congelado en docs/03-plan-ejecucion.md §3.2:
+ * Format frozen in docs/03-plan-ejecucion.md §3.2:
  *
  *   { network, contractAddress, deployTxId, deployedAt, compilerVersion }
  *
- * `app/src/config/deployment.json` es la ÚNICA fuente de la dirección del
- * contrato: `ui/` y `tests/` leen de acá, nunca de una env var suelta. El
- * archivo se commitea (a diferencia de `.env`, que nunca).
+ * `app/src/config/deployment.json` is the SINGLE source of the contract's
+ * address: `ui/` and `tests/` read from here, never from a loose env var.
+ * The file is committed (unlike `.env`, which never is).
  *
- * Antes del deploy el archivo existe con todos los campos en `null`. Eso es un
- * estado válido y distinguible ("todavía no deployamos"), no un archivo roto.
+ * Before the deploy the file exists with every field set to `null`. That is
+ * a valid, distinguishable state ("we have not deployed yet"), not a broken
+ * file.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,26 +19,26 @@ import path from 'node:path';
 import { isNetworkName, type NetworkName } from './networks.js';
 import { deploymentJsonPath, zkConfigDirectory } from './paths.js';
 
-/** Un deploy concreto: todos los campos presentes. */
+/** A concrete deploy: every field present. */
 export interface DeploymentRecord {
-  /** Red contra la que se deployó. */
+  /** Network deployed against. */
   readonly network: NetworkName;
-  /** Dirección del contrato (hex, sin `0x`). */
+  /** Contract address (hex, no `0x`). */
   readonly contractAddress: string;
-  /** Identificador de la transacción de deploy. */
+  /** Identifier of the deploy transaction. */
   readonly deployTxId: string;
-  /** Timestamp ISO-8601 del deploy. */
+  /** ISO-8601 timestamp of the deploy. */
   readonly deployedAt: string;
-  /** Versión del compilador Compact que generó los artefactos. */
+  /** Version of the Compact compiler that generated the artifacts. */
   readonly compilerVersion: string;
 }
 
-/** El archivo en disco: mismo shape, con `null` mientras no haya deploy. */
+/** The file on disk: same shape, with `null` while there is no deploy. */
 export type DeploymentFile = {
   readonly [K in keyof DeploymentRecord]: DeploymentRecord[K] | null;
 };
 
-/** Placeholder que se escribe cuando todavía no hay deploy. */
+/** Placeholder written while there is no deploy yet. */
 export const EMPTY_DEPLOYMENT: DeploymentFile = {
   network: null,
   contractAddress: null,
@@ -47,22 +48,22 @@ export const EMPTY_DEPLOYMENT: DeploymentFile = {
 };
 
 /**
- * Ruta del `deployment.json`.
+ * Path of `deployment.json`.
  *
- * Apunta SIEMPRE al archivo fuente `app/src/config/deployment.json` — el que se
- * commitea — nunca a una copia en `dist/`. `DEPLOYMENT_FILE` lo pisa.
+ * ALWAYS points at the source file `app/src/config/deployment.json` — the
+ * committed one — never at a copy in `dist/`. `DEPLOYMENT_FILE` overrides it.
  */
 export const deploymentFilePath = deploymentJsonPath;
 
-/** Error de formato del `deployment.json` — legible, con el path adentro. */
+/** Format error of `deployment.json` — readable, with the path inside. */
 export class DeploymentFormatError extends Error {
   constructor(path: string, detail: string) {
-    super(`deployment.json inválido (${path}): ${detail}`);
+    super(`invalid deployment.json (${path}): ${detail}`);
     this.name = 'DeploymentFormatError';
   }
 }
 
-/** ¿El archivo describe un deploy real (todos los campos presentes)? */
+/** Does the file describe a real deploy (every field present)? */
 export const isDeployed = (file: DeploymentFile): file is DeploymentRecord =>
   file.network !== null &&
   file.contractAddress !== null &&
@@ -75,21 +76,21 @@ const asNullableString = (value: unknown, field: string, path: string): string |
     return null;
   }
   if (typeof value !== 'string') {
-    throw new DeploymentFormatError(path, `el campo "${field}" debe ser string o null`);
+    throw new DeploymentFormatError(path, `field "${field}" must be a string or null`);
   }
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
 };
 
-/** Valida y normaliza el JSON crudo a `DeploymentFile`. */
+/** Validates and normalizes the raw JSON into a `DeploymentFile`. */
 export const parseDeploymentFile = (raw: unknown, path: string): DeploymentFile => {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw new DeploymentFormatError(path, 'se esperaba un objeto JSON');
+    throw new DeploymentFormatError(path, 'expected a JSON object');
   }
   const obj = raw as Record<string, unknown>;
   const network = asNullableString(obj.network, 'network', path);
   if (network !== null && !isNetworkName(network)) {
-    throw new DeploymentFormatError(path, `"network" desconocida: ${network}`);
+    throw new DeploymentFormatError(path, `unknown "network": ${network}`);
   }
   return {
     network,
@@ -101,8 +102,8 @@ export const parseDeploymentFile = (raw: unknown, path: string): DeploymentFile 
 };
 
 /**
- * Lee el `deployment.json`. Si el archivo no existe devuelve el placeholder
- * vacío: "todavía no deployamos" no es un error de I/O.
+ * Reads `deployment.json`. If the file does not exist it returns the empty
+ * placeholder: "we have not deployed yet" is not an I/O error.
  */
 export const readDeploymentFile = async (
   env: NodeJS.ProcessEnv = process.env,
@@ -121,12 +122,12 @@ export const readDeploymentFile = async (
   try {
     raw = JSON.parse(text);
   } catch (error) {
-    throw new DeploymentFormatError(path, `no es JSON parseable (${String(error)})`);
+    throw new DeploymentFormatError(path, `not parseable JSON (${String(error)})`);
   }
   return parseDeploymentFile(raw, path);
 };
 
-/** Devuelve el deploy si existe, `null` si el archivo sigue en placeholder. */
+/** Returns the deploy if it exists, `null` if the file is still a placeholder. */
 export const readDeployment = async (
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<DeploymentRecord | null> => {
@@ -135,8 +136,8 @@ export const readDeployment = async (
 };
 
 /**
- * Igual que `readDeployment`, pero explota con un mensaje accionable si todavía
- * no hay contrato. Es el que usan los scripts que necesitan sí o sí la address.
+ * Same as `readDeployment`, but blows up with an actionable message if there
+ * is no contract yet. Used by the scripts that absolutely need the address.
  */
 export const requireDeployment = async (
   env: NodeJS.ProcessEnv = process.env,
@@ -144,14 +145,14 @@ export const requireDeployment = async (
   const deployment = await readDeployment(env);
   if (deployment === null) {
     throw new Error(
-      `No hay contrato deployado: ${deploymentFilePath(env)} sigue en placeholder. ` +
-        'Corré el script de deploy (B5.1) antes de este paso.',
+      `No deployed contract: ${deploymentFilePath(env)} is still a placeholder. ` +
+        'Run the deploy script (B5.1) before this step.',
     );
   }
   return deployment;
 };
 
-/** Escribe el `deployment.json` (2 espacios + newline final, para diffs limpios). */
+/** Writes `deployment.json` (2 spaces + trailing newline, for clean diffs). */
 export const writeDeploymentFile = async (
   file: DeploymentFile,
   env: NodeJS.ProcessEnv = process.env,
@@ -162,8 +163,8 @@ export const writeDeploymentFile = async (
 };
 
 /**
- * Registra un deploy. `deployedAt` se completa solo si no viene.
- * Devuelve el path escrito, para que el script lo pueda imprimir.
+ * Records a deploy. `deployedAt` is filled in if not provided.
+ * Returns the written path, so the script can print it.
  */
 export const writeDeployment = async (
   record: Omit<DeploymentRecord, 'deployedAt'> & { readonly deployedAt?: string },
@@ -180,18 +181,18 @@ export const writeDeployment = async (
   return { path, record: complete };
 };
 
-/** Vuelve el archivo al placeholder (útil para el smoke de re-deploy, B5.4). */
+/** Resets the file to the placeholder (useful for the B5.4 re-deploy smoke). */
 export const clearDeployment = async (
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string> => writeDeploymentFile(EMPTY_DEPLOYMENT, env);
 
 /**
- * Lee la versión del compilador desde los artefactos reales
- * (`contracts/output/compiler/contract-info.json`), en vez de hardcodearla.
+ * Reads the compiler version from the real artifacts
+ * (`contracts/output/compiler/contract-info.json`) instead of hardcoding it.
  *
- * El deploy (B5.1) tiene que registrar la versión que EFECTIVAMENTE generó las
- * claves: si el contrato se recompila con otro compilador, `deployment.json`
- * tiene que reflejarlo solo.
+ * The deploy (B5.1) must record the version that ACTUALLY generated the
+ * keys: if the contract is recompiled with another compiler,
+ * `deployment.json` must reflect it on its own.
  */
 export const readCompilerVersion = async (
   zkConfigPath = zkConfigDirectory(),
@@ -200,7 +201,7 @@ export const readCompilerVersion = async (
   const raw: unknown = JSON.parse(await readFile(infoPath, 'utf8'));
   const version = (raw as Record<string, unknown>)['compiler-version'];
   if (typeof version !== 'string' || version.trim() === '') {
-    throw new Error(`No pude leer "compiler-version" de ${infoPath}`);
+    throw new Error(`Could not read "compiler-version" from ${infoPath}`);
   }
   return version.trim();
 };

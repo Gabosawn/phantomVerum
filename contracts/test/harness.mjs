@@ -1,46 +1,46 @@
-// Harness compartido: corre el contrato COMPILADO REAL en el simulador local
-// de @midnight-ntwrk/compact-runtime — sin red, sin proof server, sin mocks.
-// Requiere haber corrido `npm run compile` (o `compile:fast`) antes.
+// Shared harness: runs the REAL COMPILED contract in the local simulator of
+// @midnight-ntwrk/compact-runtime — no network, no proof server, no mocks.
+// Requires a prior `npm run compile` (or `compile:fast`).
 
-import { Contract, ledger as leerLedger, pureCircuits } from '../output/contract/index.js';
+import { Contract, ledger as readLedger, pureCircuits } from '../output/contract/index.js';
 import {
   createConstructorContext,
   createCircuitContext,
   sampleContractAddress,
 } from '@midnight-ntwrk/compact-runtime';
 
-export { Contract, leerLedger, pureCircuits };
+export { Contract, readLedger, pureCircuits };
 
-// Tiene que coincidir con `duracionEpoca()` del contrato (segundos).
-export const DUR_EPOCA = 86400n;
+// Must match the contract's `epochDuration()` (seconds).
+export const EPOCH_DURATION = 86400n;
 
-// Instante fijo para que los tests sean determinísticos.
-// 2026-08-07T00:00:00Z en segundos Unix.
-export const AHORA = 1786147200;
-export const EPOCA = BigInt(AHORA) / DUR_EPOCA;
+// Fixed instant so the tests are deterministic.
+// 2026-08-07T00:00:00Z in Unix seconds.
+export const NOW = 1786147200;
+export const EPOCH = BigInt(NOW) / EPOCH_DURATION;
 
 export const b32 = (fill) => Uint8Array.from({ length: 32 }, (_, i) => (fill + i) % 256);
 export const hex = (u8) => Buffer.from(u8).toString('hex');
 
 /**
- * Crea un "mundo": contrato + estado, con `call(nombre, ...args)` que avanza
- * el estado. `at(segundos)` permite mover el reloj para probar épocas.
+ * Creates a "world": contract + state, with `call(name, ...args)` advancing
+ * the state. `at(seconds)` moves the clock to exercise epochs.
  */
-export function nuevoMundo(witnesses, { ahora = AHORA } = {}) {
-  const contrato = new Contract(witnesses);
+export function newWorld(witnesses, { now = NOW } = {}) {
+  const contract = new Contract(witnesses);
   const address = sampleContractAddress();
-  const inicial = contrato.initialState(createConstructorContext({}, '0'.repeat(64)));
+  const initial = contract.initialState(createConstructorContext({}, '0'.repeat(64)));
 
-  let estadoContrato = inicial.currentContractState;
-  let zswap = inicial.currentZswapLocalState;
-  let priv = inicial.currentPrivateState;
-  let reloj = ahora;
+  let contractState = initial.currentContractState;
+  let zswap = initial.currentZswapLocalState;
+  let priv = initial.currentPrivateState;
+  let clock = now;
 
   const ctx = () =>
-    createCircuitContext(address, zswap, estadoContrato, priv, undefined, undefined, reloj);
+    createCircuitContext(address, zswap, contractState, priv, undefined, undefined, clock);
 
-  const absorber = (r) => {
-    estadoContrato = r.context.currentQueryContext.state;
+  const absorb = (r) => {
+    contractState = r.context.currentQueryContext.state;
     zswap = r.context.currentZswapLocalState;
     priv = r.context.currentPrivateState;
     return r;
@@ -48,46 +48,46 @@ export function nuevoMundo(witnesses, { ahora = AHORA } = {}) {
 
   return {
     address,
-    at: (segundos) => { reloj = segundos; },
-    ahora: () => reloj,
+    at: (seconds) => { clock = seconds; },
+    now: () => clock,
     ctx,
-    estado: () => leerLedger(estadoContrato),
-    call: (nombre, ...args) => absorber(contrato.impureCircuits[nombre](ctx(), ...args)),
-    // Llama con OTRO juego de witnesses sobre el MISMO estado (impostores).
-    callComo: (otrosWitnesses, nombre, ...args) =>
-      absorber(new Contract(otrosWitnesses).impureCircuits[nombre](ctx(), ...args)),
+    state: () => readLedger(contractState),
+    call: (name, ...args) => absorb(contract.impureCircuits[name](ctx(), ...args)),
+    // Calls with ANOTHER witness set over the SAME state (impostors).
+    callAs: (otherWitnesses, name, ...args) =>
+      absorb(new Contract(otherWitnesses).impureCircuits[name](ctx(), ...args)),
   };
 }
 
-// ---- mini framework de asserts ----
-let fallos = 0;
-let corridos = 0;
+// ---- mini assert framework ----
+let failures = 0;
+let run = 0;
 
-export const check = (nombre, cond, detalle = '') => {
-  corridos++;
-  if (cond) console.log(`  ok    ${nombre}${detalle ? ` (${detalle})` : ''}`);
-  else { fallos++; console.log(`  FAIL  ${nombre}${detalle ? ` (${detalle})` : ''}`); }
+export const check = (name, cond, detail = '') => {
+  run++;
+  if (cond) console.log(`  ok    ${name}${detail ? ` (${detail})` : ''}`);
+  else { failures++; console.log(`  FAIL  ${name}${detail ? ` (${detail})` : ''}`); }
 };
 
-/** Espera que `fn` lance, y que el mensaje contenga `fragmento`. */
-export const checkRechaza = (nombre, fn, fragmento) => {
-  corridos++;
+/** Expects `fn` to throw, with a message containing `fragment`. */
+export const checkRejects = (name, fn, fragment) => {
+  run++;
   try {
     fn();
-    fallos++;
-    console.log(`  FAIL  ${nombre} -> NO fallo (se esperaba "${fragmento}")`);
+    failures++;
+    console.log(`  FAIL  ${name} -> did NOT throw (expected "${fragment}")`);
   } catch (e) {
     const msg = String(e.message).split('\n')[0];
-    if (fragmento && !msg.includes(fragmento)) {
-      fallos++;
-      console.log(`  FAIL  ${nombre} -> fallo con "${msg}", se esperaba "${fragmento}"`);
+    if (fragment && !msg.includes(fragment)) {
+      failures++;
+      console.log(`  FAIL  ${name} -> threw "${msg}", expected "${fragment}"`);
     } else {
-      console.log(`  ok    ${nombre} -> rechazado: ${msg}`);
+      console.log(`  ok    ${name} -> rejected: ${msg}`);
     }
   }
 };
 
-export const resumen = (titulo) => {
-  console.log(`\n=== ${titulo}: ${corridos - fallos}/${corridos} ${fallos === 0 ? 'OK' : `— ${fallos} FALLOS`} ===`);
-  process.exit(fallos === 0 ? 0 : 1);
+export const summary = (title) => {
+  console.log(`\n=== ${title}: ${run - failures}/${run} ${failures === 0 ? 'OK' : `— ${failures} FAILURES`} ===`);
+  process.exit(failures === 0 ? 0 : 1);
 };

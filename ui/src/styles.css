@@ -1,0 +1,77 @@
+:root {
+  color-scheme: light;
+  --bg: #f3efe6;
+  --ink: #1c1914;
+  --muted: #5c564c;
+  --line: #d4cdc0;
+  --accent: #0f5c4c;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, #fff8e8, transparent 40%),
+    linear-gradient(160deg, #ebe4d6, #f7f3ea 45%, #e7efe9);
+}
+
+.shell {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  color: var(--ink);
+  font-size: 1.25rem;
+}
+
+nav {
+  display: flex;
+  gap: 1rem;
+}
+
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+nav a:hover {
+  color: var(--accent);
+}
+
+.view h1 {
+  font-size: 2rem;
+  margin: 2rem 0 0.75rem;
+}
+
+.view p {
+  max-width: 40rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.note {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent);
+  background: rgba(15, 92, 76, 0.06);
+}

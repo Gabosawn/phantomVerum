@@ -275,31 +275,31 @@ el transcript antes de afirmarla en el deck.**
 Cada bloque es ejecutable por una persona o por un agente supervisado; no se
 bloquean entre sí porque §3 ya congela las interfaces.
 
-### Bloque A — Contratos (`contracts/`) — riesgo ya quemado
+### Bloque A — Contratos (`contracts/`) — ✅ hecho
 
-- [ ] Portar el contrato Opción A validado a `contracts/src/testigo.compact`
-      (adaptar nombres si hace falta), `compact compile` verde **en el repo**
-- [ ] Script `compile` en contracts/package.json + gate en CI o pre-push
-      (main siempre compila = anti-DQ automático)
-- [ ] Congelar B en `contracts/src/fallback/` (compilada, sin usar)
+- [x] Portar el contrato Opción A validado a `contracts/src/testigo.compact`,
+      `compact compile` verde **en el repo**
+- [x] Script `compile` en contracts/package.json
+- [x] Congelar B en `contracts/src/fallback/` (sin usar por default)
 - **Entregable:** compile verde commiteado + claves generadas. Es el gate del
-  40 % — va primero y hoy.
+  40 % — cumplido.
 
-### Bloque B — Wiring TS (`app/`)
+### Bloque B — Wiring TS (`app/`) — 🟡 API lista; falta CLI + Preview
 
-- [ ] Deps pinneadas (§1) + config Preview (`rpc.preview.midnight.network`,
+- [x] Deps pinneadas (§1) + config Preview (`rpc.preview.midnight.network`,
       indexer v4, proof server local :6300)
-- [ ] Witnesses: `credencialPath()` = `ledger.credenciales.findPathForLeaf(hoja).path`
+- [x] Witnesses: `credencialPath()` = `ledger.credenciales.findPathForLeaf(hoja).path`
       (~5 líneas; manejar el `undefined` = "no sos empleado")
-- [ ] Los 5 métodos de §3.1 + persistencia §3.2
-- [ ] `verificarAutoria` con pure circuits (sin proof server — gratis)
-- [ ] Deploy a Preview + `deployment.json` commiteado **esta noche** (§6)
+- [x] Los 5 métodos de §3.1 + persistencia §3.2
+- [x] `verificarAutoria` con pure circuits (sin proof server — gratis)
+- [ ] Deploy a Preview + `deployment.json` commiteado (§6) + scripts CLI B4
 - **Entregable:** E2E de los 4 tiempos por CLI contra Preview; el caso
   "secret ajeno" falla en proof time sin emitir tx.
 
-### Bloque C — UI (`ui/`)
+### Bloque C — UI (`ui/`) — 🟡 scaffold
 
-- [ ] Las 3 vistas del README, mockeando §3.1 hasta integrar
+- [x] Scaffold de las 3 vistas del README
+- [ ] Cablear a `app/` real (hoy stubs)
 - [ ] **Panel split "qué ve la cadena / qué nunca sale de tu máquina"** en la
       vista Denunciante — es el artefacto que un juez de privacidad busca
       (15 % UX se gana acá, no en pulido cosmético)
@@ -307,12 +307,11 @@ bloquean entre sí porque §3 ya congela las interfaces.
       clave del fiscal → ✅ / clave del empleador → ❌. Es EL momento del video
 - **Entregable:** 3 vistas contra `app/` real. Legible y proyectable.
 
-### Bloque D — Tests (`tests/`)
+### Bloque D — Tests (`tests/`) — ✅ hecho
 
-- [ ] Suite por circuito contra el contrato compilado (§3.3), tabla del README
-      + 2 casos nuevos: re-envío de denuncia idéntica falla (guard);
-      colisión nullifier/autoria imposible (domain separation)
-- [ ] `npm run simulate`: los 4 tiempos imprimiendo el ledger en cada paso
+- [x] Suite por circuito contra el contrato compilado (§3.3) + hardening
+      (guards, domain separation, época)
+- [x] `npm run simulate`: los 4 tiempos imprimiendo el ledger en cada paso
 - **Entregable:** `npm test` verde visible en README/video (QA = 15 % y casi
   nadie lo muestra).
 

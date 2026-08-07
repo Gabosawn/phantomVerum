@@ -2,6 +2,17 @@
 
 > Prerequisite: `00-idea.md`. This document specifies **semantics**, not
 > syntax. Read §8 before writing a line of Compact.
+>
+> **As-built note (integration, 2026-08-07):** the authority on names, types
+> and semantics is the compiled contract — `contracts/src/testigo.compact`
+> and its generated `contracts/output/contract/index.d.ts`. This spec was
+> written before the blocks were built and has been corrected where the
+> implementation resolved its ambiguities: the nullifier is keyed on
+> `credentialSecret` (§5, Option A), the report id on `personalSecret`;
+> `period` is a **blockTime-bound epoch index** (Uint<64>, 86400-second
+> epochs), not a free label; credentials live in a global on-chain
+> `HistoricMerkleTree` and the issuer only ever receives a **commitment**
+> of the credential secret, never the secret itself.
 
 ---
 
@@ -35,18 +46,20 @@ T3. ACME tries to alter the evidence. Cannot: the hash is sealed
 
 T4. The whistleblower calls revealAuthorship(reportId, prosecutorPk):
     proves they know the preimage of reportId (only the author knows it)
-    WITHOUT revealing evidence or secret, and binds the proof to the
-    prosecutor's key. The prosecutor verifies. The employer, if intercepted,
-    cannot use it.
+    and binds the ON-CHAIN RECORD to the prosecutor's key — intercepted,
+    that record proves nothing. Verification happens off-chain with a
+    package the whistleblower hands to the prosecutor; whoever holds that
+    package can verify, so it goes only to the chosen prosecutor.
 ```
 
 ## 3. Ledger state (public)
 
 ```
-ledger organizations: Map<Bytes<32>, Bytes<32>>  // orgId → credential anchor
-ledger reports:       Set<Bytes<32>>             // sealed reportIds
-ledger nullifiers:    Set<Bytes<32>>             // anti-spam per period
-ledger authorships:   Set<Bytes<32>>             // H(secret ‖ reportId ‖ prosecutorPk)
+ledger organizations: Map<Bytes<32>, Bytes<32>>       // orgId → issuer anchor (metadata)
+ledger credentials:   HistoricMerkleTree<8, Bytes<32>> // global tree of credential leaves
+ledger reports:       Set<Bytes<32>>                  // sealed reportIds
+ledger nullifiers:    Set<Bytes<32>>                  // anti-spam per epoch
+ledger authorships:   Set<Bytes<32>>                  // H(dom ‖ personalSecret ‖ reportId ‖ prosecutorPk)
 ```
 
 Everything else — credential, secret, evidence — is witness: never leaves the
@@ -61,23 +74,33 @@ witnesses. Acts as scaffolding for the rest of the contract.
 
 ### 4.2 `report` — the core
 
-**Public inputs:** `orgId`, `period` (coarse epoch, e.g. `2026-08`).
-**Witnesses:** `credential` (see §5), `secret` (personal, persistent),
-`evidenceHash` (the app hashes the file locally; the circuit receives the hash).
+**Public inputs:** `orgId`, `period` — the **epoch index**
+(`floor(blockTime / 86400)`, Uint<64>). The circuit rejects any period that
+is not the epoch in progress, otherwise the nullifier would be evadable by
+inventing labels.
+**Witnesses:** `credentialSecret` + `credentialPath` (see §5),
+`personalSecret` (persistent), `evidenceHash` (the app hashes the file
+locally; the circuit receives the hash).
 
 **Constraints:**
 
 ```
-C1. validCredential(credential, organizations[orgId])   // see §5
-C2. assert(!nullifiers.member(nullifier))               // one report per period
+C0. assert(period is the CURRENT epoch)                  // blockTimeGte/blockTimeLt
+C1. validCredential(credentialSecret, credentialPath)    // Merkle membership, see §5
+C2. assert(!nullifiers.member(nullifier))                // one report per epoch
 ```
 
-**Derived values:**
+**Derived values (each hash carries its own domain tag in position 0):**
 
 ```
-reportId   = H(evidenceHash ‖ secret)     // the seal; only the author knows the preimage
-nullifier  = H(secret ‖ orgId ‖ period)   // one report per (person, org, period)
+reportId   = H(dom ‖ evidenceHash ‖ personalSecret)        // the seal; only the author knows the preimage
+nullifier  = H(dom ‖ credentialSecret ‖ orgId ‖ period)    // one report per (credential, org, epoch)
 ```
+
+The split of secrets is deliberate: the **nullifier** uses
+`credentialSecret`, so anti-spam cannot be defeated by minting fresh
+personal secrets; the **reportId** uses `personalSecret`, which the mock
+issuer never sees, so authorship stays unforgeable by the org.
 
 **Effects:**
 
@@ -101,12 +124,20 @@ C2. assert(reports.member(reportId))               // the report exists
 authorships.insert(disclose(H(secret ‖ reportId ‖ prosecutorPk)))
 ```
 
-**Why designated verifier:** the authorship is tied to *that* prosecutor. The
-on-chain record is only interpretable by whoever has the context the
-whistleblower delivers off-chain to the prosecutor (their claim + the values to
-verify the authorship hash). Shown to the employer, the record proves nothing —
-they cannot distinguish who generated it or replay it. This is the small delta
-over the base circuit that no judge has ever seen shipped.
+**Why designated verifier:** the authorship *record* is tied to *that*
+prosecutor. The on-chain record is only interpretable by whoever has the
+context the whistleblower delivers off-chain to the prosecutor (their claim +
+the values to verify the authorship hash). Shown to the employer, the record
+proves nothing — they cannot distinguish who generated it or replay it. This is
+the small delta over the base circuit that no judge has ever seen shipped.
+
+**Honest scope (audit 2026-08-07):** the *conviction* comes from the off-chain
+package, and the package itself is transferable — a prosecutor who forwards
+`(evidenceHash, secret)` transfers the ability to verify. What the
+`prosecutorPk` binding buys is that the on-chain artifact names no one and
+cannot be re-bound. Cryptographic non-transferability (a designated-verifier
+tag the prosecutor could have simulated, e.g. Diffie–Hellman over the
+whistleblower's published point and the prosecutor's private key) is roadmap.
 
 ## 5. The credential — two options, in order of preference
 
@@ -114,13 +145,19 @@ The issuer is a **declared mock** (same as all comparable projects). What needs
 to be decided during implementation, with the installed stdlib in view, is the
 in-circuit verification mechanism. Two options, in order of preference:
 
-**Option A — Merkle membership (preferred, ecosystem standard):**
-the organization publishes as `anchor` the root of a Merkle tree of credential
-commitments (`H(credentialSecret)` per employee). `report` takes the leaf and
-path as witnesses and verifies the root in-circuit. depapp did it in Compact
-(1M-leaf tree), so it's viable; we only need shallow depth (e.g. 8 levels = 256
-employees). The nullifier uses `credentialSecret` as `secret` → one credential =
-one report per period. Correct and defensible.
+**Option A — Merkle membership (preferred, ecosystem standard) — AS BUILT:**
+a single global on-chain `HistoricMerkleTree` holds all issued credential
+leaves; `anchor` is issuer metadata. The employee generates
+`credentialSecret` locally and hands the issuer only its **commitment**
+(`H(dom ‖ credentialSecret)`); `issueCredential(orgId, commitment)` builds
+the leaf `H(dom ‖ orgId ‖ commitment)` **in-circuit** from the orgId it just
+validated, so a leaf cannot be smuggled in for an unregistered org.
+`report` rebuilds the leaf in-circuit from the public `orgId` and the
+`credentialSecret` witness, and verifies membership with the
+`credentialPath` witness (siblings only — the witness cannot choose which
+leaf gets proven). Shallow depth suffices (8 levels = 256 credentials). The
+nullifier uses `credentialSecret` → one credential = one report per epoch.
+Correct and defensible.
 
 **Option B — zero-risk fallback (only if A doesn't compile in time):**
 the organization publishes `anchor = H(orgSecret)` and delivers the same
@@ -141,7 +178,7 @@ time, freeze B and move A to roadmap.
 | The company alters or repudiates the evidence | `reportId` sealed on-chain; altering the evidence breaks the hash | ✅ |
 | A third party claims the report (steals the reward) | Only the author knows `(evidenceHash, secret)` — preimage of `reportId` | ✅ |
 | The employer reuses/replays the authorship proof | Designated verifier: authorship is tied to `prosecutorPk` | ✅ |
-| Spam / drowning the channel with fake reports | Nullifier `H(secret ‖ orgId ‖ period)` | ✅ (weak in Option B — declared) |
+| Spam / drowning the channel with fake reports | Nullifier `H(dom ‖ credentialSecret ‖ orgId ‖ epoch)`, epoch bound to blockTime | ✅ (weak in Option B — declared) |
 | Report with false content | **None.** We don't prove veracity — stated upfront | ❌ declared |
 | Off-chain metadata (indexer sees viewing key/IP) | Local proof server + Tor/own node; fee-sponsor roadmap | ⚠️ mitigated, declared |
 | Timing correlation (report at 3 AM, only Juan was online) | Out of scope; coarse periods help | ⚠️ declared |
@@ -173,6 +210,10 @@ timestamp is left as inclusion order + `period` as a public input.
 
 ```compact
 // PSEUDOCODE — adapt to the installed version. See §8.
+// HISTORICAL: kept as originally frozen. The shipped contract diverges where
+// this spec was ambiguous or weak — domain tags on every hash, the global
+// credential tree + commitments (§5 as-built), and the blockTime-bound
+// epoch check. contracts/src/testigo.compact is the authority.
 
 export ledger organizations: Map<Bytes<32>, Bytes<32>>;
 export ledger reports: Set<Bytes<32>>;
