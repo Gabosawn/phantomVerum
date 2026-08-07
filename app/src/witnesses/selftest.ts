@@ -10,6 +10,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+import { check, checkRechaza, checkRechazaAsync, resumen } from './check.js';
 import {
   DURACION_EPOCA_SEG,
   epocaActual,
@@ -34,36 +35,6 @@ import {
   periodoDeRegistro,
   rutaSecrets,
 } from './secrets.js';
-
-// ── mini framework ──────────────────────────────────────────────────────
-let corridos = 0;
-let fallos = 0;
-
-function check(nombre: string, cond: boolean, detalle = ''): void {
-  corridos++;
-  if (cond) console.log(`  ok    ${nombre}${detalle ? ` (${detalle})` : ''}`);
-  else {
-    fallos++;
-    console.log(`  FAIL  ${nombre}${detalle ? ` (${detalle})` : ''}`);
-  }
-}
-
-function checkRechaza(nombre: string, fn: () => unknown, fragmento: string): void {
-  corridos++;
-  try {
-    fn();
-    fallos++;
-    console.log(`  FAIL  ${nombre} -> no lanzó (se esperaba "${fragmento}")`);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (!msg.includes(fragmento)) {
-      fallos++;
-      console.log(`  FAIL  ${nombre} -> lanzó "${msg}", se esperaba "${fragmento}"`);
-    } else {
-      console.log(`  ok    ${nombre} -> rechazado`);
-    }
-  }
-}
 
 // ── fixtures ────────────────────────────────────────────────────────────
 const dirTmp = fs.mkdtempSync(path.join(os.tmpdir(), 'testigo-selftest-'));
@@ -277,17 +248,10 @@ async function main(): Promise<void> {
   check('resumenEvidencia reporta nombre y tamaño locales', resumen1.nombre === 'evidencia.txt' && resumen1.bytes === 3);
   check('resumenEvidencia.hashHex coincide', resumen1.hashHex === SHA256_ABC);
 
-  await hashEvidenciaArchivo(path.join(dirTmp, 'no-existe.pdf')).then(
-    () => check('archivo inexistente rechaza', false),
-    (e: unknown) => {
-      corridos++;
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('no se pudo leer la evidencia')) console.log('  ok    archivo inexistente rechaza con error legible');
-      else {
-        fallos++;
-        console.log(`  FAIL  archivo inexistente -> "${msg}"`);
-      }
-    },
+  await checkRechazaAsync(
+    'un archivo inexistente rechaza con error legible',
+    () => hashEvidenciaArchivo(path.join(dirTmp, 'no-existe.pdf')),
+    'no se pudo leer la evidencia',
   );
 
   console.log('\n=== 8. Épocas (periodo: Uint<64> -> bigint) ===');
@@ -329,10 +293,7 @@ async function main(): Promise<void> {
 main()
   .then(() => {
     fs.rmSync(dirTmp, { recursive: true, force: true });
-    console.log(
-      `\n=== selftest witnesses: ${corridos - fallos}/${corridos} ${fallos === 0 ? 'OK' : `— ${fallos} FALLOS`} ===`,
-    );
-    process.exit(fallos === 0 ? 0 : 1);
+    resumen('selftest secrets + evidencia');
   })
   .catch((e: unknown) => {
     fs.rmSync(dirTmp, { recursive: true, force: true });
