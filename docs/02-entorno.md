@@ -1,62 +1,63 @@
-# 02 — Entorno de desarrollo
+# 02 — Development environment
 
 ## Toolchain
 
-- `compact` vive en `~/.local/bin/compact` (NO `~/.compact/bin`)
-- Después de instalar: **`compact update` es OBLIGATORIO** — baja compactc y lo setea default.
-  `compact --version` funciona igual aunque falte; verificar SIEMPRE `compact compile --version`
-- Compilar: `compact compile contrato.compact output/` → genera JS/TS + zkir/
+- `compact` lives at `~/.local/bin/compact` (NOT `~/.compact/bin`)
+- After installing: **`compact update` is MANDATORY** — downloads compactc and sets it as default.
+  `compact --version` works even if it's missing — ALWAYS verify `compact compile --version`
+- Compile: `compact compile contract.compact output/` → generates JS/TS + zkir/
 - Proof server: `docker run -p 6300:6300 midnightntwrk/proof-server:latest midnight-proof-server -v`
-  (docker = alias de podman, funciona igual)
-- Red objetivo: **Preview** (no devnet/testnet)
+  (docker = podman alias, works the same)
+- Target network: **Preview** (no devnet/testnet)
 
-## Verificación rápida
+## Quick verification
 
 ```bash
 which compact && compact --version && compact compile --version
-ss -tlnp | grep 6300          # proof server escuchando
+ss -tlnp | grep 6300          # proof server listening
 curl -s http://localhost:6300/health
 ```
 
-## Servicios
+## Services
 
-| Servicio | Local | Preview |
+| Service | Local | Preview |
 |---|---|---|
 | Node | `ws://localhost:9944` | `wss://rpc.preview.midnight.network` |
 | Indexer | `http://localhost:8088/api/v4/graphql` | `https://indexer.preview.midnight.network/api/v4/graphql` |
 | Proof server | `localhost:6300` | — |
 
-**NO HAY READS SIN INDEXER** — todo queryContractState/balances va por GraphQL del indexer.
+**NO READS WITHOUT INDEXER** — all queryContractState/balances goes through the indexer's GraphQL.
 
-## Checklist de máquina
+## Machine checklist
 
 - [ ] Node.js 22+ — `node --version`
 - [ ] Docker — `docker --version`
-- [ ] Compilador Compact instalado + `compact update` ejecutado
-- [ ] `compact compile --version` responde (no solo `compact --version`)
-- [ ] Proof server arriba en `localhost:6300`
-- [ ] `queryContractState` contra el indexer de preview funciona (no solo el local)
-- [ ] Wallet Lace + tDUST de preview faucet
-- [ ] Hello World E2E: compilar → deployar → interactuar completo
+- [ ] Compact compiler installed + `compact update` executed
+- [ ] `compact compile --version` responds (not just `compact --version`)
+- [ ] Proof server up on `localhost:6300`
+- [ ] `queryContractState` against the preview indexer works (not just local)
+- [ ] Wallet Lace + tDUST from preview faucet
+- [ ] Hello World E2E: compile → deploy → full interaction
 
 ## Links
 
-| Recurso | Link |
+| Resource | Link |
 |---|---|
-| Docs oficiales | https://docs.midnight.network |
-| Compatibility matrix (versiones) | https://docs.midnight.network/relnotes/support-matrix |
-| dApps existentes | https://github.com/midnightntwrk/midnight-awesome-dapps |
-| Ejemplos oficiales | https://github.com/midnightntwrk (create-mn-app, example-zkloan, example-private-party) |
+| Official docs | https://docs.midnight.network |
+| Compatibility matrix (versions) | https://docs.midnight.network/relnotes/support-matrix |
+| Existing dApps | https://github.com/midnightntwrk/midnight-awesome-dapps |
+| Official examples | https://github.com/midnightntwrk (create-mn-app, example-zkloan, example-private-party) |
 
-## Conceptos clave
+## Key concepts
 
-- **Dual-ledger:** `ledger` = estado público on-chain; `witness` = estado
-  privado que nunca sale de tu máquina. Diseñar = decidir qué va de cada lado.
-- **Compact:** parecido a TypeScript, compila a circuitos ZK. Versión 0.5.1.
-- **`disclose()`:** todo privado por defecto; solo lo marcado se publica.
-- **`assert`:** falla local en proof time — nada inválido llega a la chain.
-- **midnight-js:** SDK TypeScript que conecta frontend con contrato.
-- **Proof server:** proceso local que genera las pruebas; los witnesses viajan
-  solo hasta él. **Nunca recibe seed ni signing keys.**
-- **Indexer (GraphQL):** única vía para leer estado on-chain (`queryContractState`,
-  balances). No hay lecturas directas sin indexer.
+- **Dual-ledger:** `ledger` = public on-chain state; `witness` = private
+  state that never leaves your machine. Designing = deciding which goes on
+  each side.
+- **Compact:** TypeScript-like, compiles to ZK circuits. Version 0.5.1.
+- **`disclose()`:** everything private by default; only marked items are published.
+- **`assert`:** fails locally at proof time — nothing invalid reaches the chain.
+- **midnight-js:** TypeScript SDK connecting frontend with contract.
+- **Proof server:** local process that generates proofs; witnesses travel
+  only to it. **Never receives seed or signing keys.**
+- **Indexer (GraphQL):** sole path to read on-chain state (`queryContractState`,
+  balances). No direct reads without indexer.
