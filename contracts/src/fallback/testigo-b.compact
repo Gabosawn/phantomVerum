@@ -1,0 +1,138 @@
+pragma language_version >= 0.23;
+
+import CompactStandardLibrary;
+
+// =====================================================================
+// Testigo — OPCION B (spec docs/01-arquitectura.md §5): FALLBACK CONGELADO
+//
+// ⚠️  ESTE CONTRATO NO SE COMPILA NI SE DEPLOYA POR DEFAULT.
+//     El contrato en produccion es ../testigo.compact (Opcion A, Merkle).
+//
+// CUANDO USARLO
+//   Solo como red de seguridad, si la Opcion A se rompe y no hay tiempo de
+//   arreglarla. Sintomas que lo justifican:
+//     · el witness `credencialPath()` no se puede construir off-chain
+//       (p. ej. `findPathForLeaf` no devuelve el shape esperado);
+//     · el proving de `denunciar` con el arbol de Merkle no cierra en
+//       tiempo aceptable para la demo en vivo;
+//     · una regresion del compilador rompe HistoricMerkleTree /
+//       merkleTreePathRoot / checkRoot.
+//
+// COMO SE ACTIVA (es un cambio de path de artefacto, no una reescritura)
+//   1. `compact compile src/fallback/testigo-b.compact output/`
+//   2. En app/: apuntar el import del contrato y el zk-config provider al
+//      mismo `output/`; borrar las llamadas a `emitirCredencial` y el
+//      witness `credencialPath` (la Opcion B no los tiene).
+//   3. `registrarOrganizacion(orgId, ancla)` pasa a recibir
+//      `ancla = anclaDe(orgSecret)` — el pure circuit exportado de abajo.
+//   4. El witness `credencialSecret()` pasa a devolver el `orgSecret`
+//      compartido, no el secret individual del empleado.
+//   Los otros tres pure circuits (`denunciaIdDe`, `nullifierDe`,
+//   `autoriaDe`) tienen firma y dominio IDENTICOS a los de la Opcion A,
+//   asi que `verificarAutoria` off-chain y los tests no cambian.
+//
+// MECANISMO
+//   La organizacion publica `ancla = H(dom || orgSecret)` y entrega el
+//   MISMO `orgSecret` a todos sus empleados (mock). El circuito verifica
+//   `H(orgSecret) == ancla`. Anonimato perfecto dentro de la org.
+//
+// DEBILIDADES DECLARADAS (spec §5, Opcion B — se presentan de frente como
+// limite del mock del emisor, no del diseño):
+//   · Anti-spam debil: quien tenga el orgSecret puede generar N nullifiers
+//     usando N secrets personales distintos.
+//   · Sin revocacion: filtrado el orgSecret, cualquiera denuncia como
+//     empleado de esa org y no hay forma de cortarlo.
+//   · Sin control de acceso en `registrarOrganizacion` (igual que en A).
+// =====================================================================
+
+// ---- Estado del ledger (spec §3) ----
+export ledger organizaciones: Map<Bytes<32>, Bytes<32>>; // orgId -> ancla
+
+export ledger denuncias: Set<Bytes<32>>; // denunciaId sellados
+
+export ledger nullifiers: Set<Bytes<32>>; // anti-spam por periodo
+
+export ledger autorias: Set<Bytes<32>>; // H(secret || denunciaId || fiscalPk)
+
+// ---- Witnesses (nunca salen de la maquina del denunciante) ----
+witness credencialSecret(): Bytes<32>; // orgSecret entregado por la org (mock)
+
+witness secretPersonal(): Bytes<32>; // secret persistente del denunciante
+
+witness evidenciaHash(): Bytes<32>; // hash del archivo, calculado localmente
+
+// ---- Domain separation (plan §2.2) ----
+circuit domAncla(): Bytes<32> {
+  return pad(32, "testigo:ancla:v1");
+}
+
+circuit domDenuncia(): Bytes<32> {
+  return pad(32, "testigo:denuncia:v1");
+}
+
+circuit domNullifier(): Bytes<32> {
+  return pad(32, "testigo:nullifier:v1");
+}
+
+circuit domAutoria(): Bytes<32> {
+  return pad(32, "testigo:autoria:v1");
+}
+
+export pure circuit anclaDe(orgSecret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([domAncla(), orgSecret]);
+}
+
+export pure circuit denunciaIdDe(ev: Bytes<32>, sec: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domDenuncia(), ev, sec]);
+}
+
+export pure circuit nullifierDe(sec: Bytes<32>, orgId: Bytes<32>, periodo: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([domNullifier(), sec, orgId, periodo]);
+}
+
+export pure circuit autoriaDe(sec: Bytes<32>, denunciaId: Bytes<32>, fiscalPk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([domAutoria(), sec, denunciaId, fiscalPk]);
+}
+
+// ---- 4.1 registrarOrganizacion ----
+export circuit registrarOrganizacion(orgId: Bytes<32>, ancla: Bytes<32>): [] {
+  assert(!organizaciones.member(disclose(orgId)), "organizacion ya registrada");
+  organizaciones.insert(disclose(orgId), disclose(ancla));
+}
+
+// ---- 4.2 denunciar ----
+export circuit denunciar(orgId: Bytes<32>, periodo: Bytes<32>): [] {
+  const cred = credencialSecret();
+  const sec = secretPersonal();
+  const ev = evidenciaHash();
+
+  // C1 — pertenencia: H(orgSecret) == ancla de la org
+  assert(organizaciones.member(disclose(orgId)), "organizacion no registrada");
+  assert(anclaDe(cred) == organizaciones.lookup(disclose(orgId)), "credencial invalida");
+
+  // C2 — anti-spam por periodo (debil en esta opcion: ver cabecera)
+  const nul = nullifierDe(sec, orgId, periodo);
+  assert(!nullifiers.member(disclose(nul)), "ya denunciaste este periodo");
+
+  const id = denunciaIdDe(ev, sec);
+  assert(!denuncias.member(disclose(id)), "denuncia ya sellada");
+
+  denuncias.insert(disclose(id));
+  nullifiers.insert(disclose(nul));
+}
+
+// ---- 4.3 revelarAutoria ----
+export circuit revelarAutoria(denunciaId: Bytes<32>, fiscalPk: Bytes<32>): [] {
+  const sec = secretPersonal();
+  const ev = evidenciaHash();
+
+  // C1 — solo el autor conoce el preimagen (assert puro: sin disclose)
+  assert(denunciaIdDe(ev, sec) == denunciaId, "no sos el autor");
+
+  // C2 — la denuncia existe
+  assert(denuncias.member(disclose(denunciaId)), "denuncia inexistente");
+
+  const a = autoriaDe(sec, denunciaId, fiscalPk);
+  assert(!autorias.member(disclose(a)), "autoria ya revelada a este fiscal");
+  autorias.insert(disclose(a));
+}
