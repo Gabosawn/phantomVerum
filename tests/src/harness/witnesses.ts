@@ -10,7 +10,7 @@
  */
 
 import { MERKLE_DEPTH } from "./contract-surface.js";
-import { hexToBytes, leafOf } from "./crypto.js";
+import { credCommitmentOf, hexToBytes, leafOf } from "./crypto.js";
 import type { Actor, Hex32 } from "./types.js";
 
 /** What the reporter keeps on their own machine. Never leaves it. */
@@ -78,12 +78,12 @@ export const witnesses = {
    * so the witness cannot choose which leaf gets proven.
    *
    * It takes no argument, which means it has to work out its own leaf. That is why `orgId`
-   * lives in the private state: `leafOf(orgId, credentialSecret)` is the leaf this reporter can
-   * legitimately produce a path for.
+   * lives in the private state: `leafOf(orgId, credCommitmentOf(credSecret))` is the leaf this
+   * reporter can legitimately produce a path for — the same commitment the issuer was handed.
    */
   credentialPath: (ctx: WitnessCtx): [TestigoPrivateState, MerkleTreePathEntry[]] => {
     const { orgIdHex, credentialSecretHex } = ctx.privateState;
-    const leaf = leafOf(orgIdHex, credentialSecretHex);
+    const leaf = leafOf(orgIdHex, credCommitmentOf(credentialSecretHex));
     const found = ctx.ledger.credentials.findPathForLeaf(hexToBytes(leaf));
     return [ctx.privateState, found?.path ?? UNSATISFIABLE_SIBLINGS];
   },

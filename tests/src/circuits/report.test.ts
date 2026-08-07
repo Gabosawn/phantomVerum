@@ -7,12 +7,11 @@
 
 import { describe, expect, it } from "vitest";
 
-import { ASSERTS } from "../harness/contract-surface.js";
+import { ASSERTS, EPOCH_DURATION } from "../harness/contract-surface.js";
 import { leafOf, nullifierOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
   AUGUST,
-  AUGUST_HEX,
   BETA,
   EMPLOYEE_A,
   EMPLOYEE_B,
@@ -20,7 +19,6 @@ import {
   IMPOSTOR,
   OTHER_EVIDENCE,
   SEPTEMBER,
-  SEPTEMBER_HEX,
   baseScenario,
   claimingOrg,
   withEvidence,
@@ -36,7 +34,7 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
 
     const l = h.ledger();
     expect(l.reports).toContain(reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret));
-    expect(l.nullifiers).toContain(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST_HEX));
+    expect(l.nullifiers).toContain(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST));
     expect(l.reports.size).toBe(1);
     expect(l.nullifiers.size).toBe(1);
 
@@ -80,7 +78,10 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
     h.as(EMPLOYEE_A).report(ACME, AUGUST);
 
     // A new report means new evidence: reusing it would collide on reportId, which is the
-    // idempotency guard's job (see hardening.test.ts), not this case's.
+    // idempotency guard's job (see hardening.test.ts), not this case's. The clock must be
+    // advanced: C0 pins `period` to the CURRENT epoch, so SEPTEMBER only passes once
+    // blockTime has entered it.
+    h.advanceTime(Number(EPOCH_DURATION));
     h.as(withEvidence(EMPLOYEE_A, OTHER_EVIDENCE)).report(ACME, SEPTEMBER);
 
     const l = h.ledger();
@@ -88,8 +89,8 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
     expect(l.nullifiers.size).toBe(2);
 
     // Different periods produce nullifiers that cannot be linked to one another.
-    const august = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST_HEX);
-    const september = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, SEPTEMBER_HEX);
+    const august = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST);
+    const september = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, SEPTEMBER);
     expect(august).not.toBe(september);
     expect(l.nullifiers).toContain(august);
     expect(l.nullifiers).toContain(september);

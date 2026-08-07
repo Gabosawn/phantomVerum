@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 
 import { authorshipOf, bytesToHex, hexToBytes, leafOf, nullifierOf, reportIdOf } from "../harness/crypto.js";
+import { EPOCH_DURATION } from "../harness/contract-surface.js";
 import {
   ACME,
   AUGUST,
@@ -44,6 +45,13 @@ const SAMPLES: readonly [Hex32, Hex32, Hex32][] = [
   ["0123456789abcdef".repeat(4), "fedcba9876543210".repeat(4), "5a".repeat(32)],
 ];
 
+/**
+ * Epoch indices spanning the `Uint<64>` domain, for the nullifier agreement checks. The
+ * third operand of `nullifierOf` is the epoch index (a `bigint`), so it is exercised
+ * separately from the two `Bytes<32>` operands.
+ */
+const PERIODS: readonly bigint[] = [0n, 1n, AUGUST, 2n ** 32n, 2n ** 64n - 1n];
+
 describe.skipIf(!compiled)("crypto.ts agrees with the contract's pure circuits", () => {
   it("reproduces leafOf, reportIdOf, nullifierOf and authorshipOf digest for digest", async () => {
     const { loadContract } = await import("../harness/simulator.js");
@@ -53,10 +61,14 @@ describe.skipIf(!compiled)("crypto.ts agrees with the contract's pure circuits",
     for (const [x, y, z] of SAMPLES) {
       expect(leafOf(x, y)).toBe(bytesToHex(pureCircuits.leafOf(b(x), b(y))));
       expect(reportIdOf(x, y)).toBe(bytesToHex(pureCircuits.reportIdOf(b(x), b(y))));
-      expect(nullifierOf(x, y, z)).toBe(bytesToHex(pureCircuits.nullifierOf(b(x), b(y), b(z))));
       expect(authorshipOf(x, y, z)).toBe(
         bytesToHex(pureCircuits.authorshipOf(b(x), b(y), b(z))),
       );
+      for (const period of PERIODS) {
+        expect(nullifierOf(x, y, period)).toBe(
+          bytesToHex(pureCircuits.nullifierOf(b(x), b(y), period)),
+        );
+      }
     }
   });
 
@@ -65,14 +77,15 @@ describe.skipIf(!compiled)("crypto.ts agrees with the contract's pure circuits",
     const { pureCircuits } = await loadContract();
     const b = hexToBytes;
     const [x, y, z] = SAMPLES[3]!;
+    const period = PERIODS[0]!;
 
     // Swapping operands must move the contract's digest too. If the contract were insensitive to
     // order here, `crypto.ts` agreeing with it would be agreement on a broken construction.
     expect(bytesToHex(pureCircuits.leafOf(b(x), b(y)))).not.toBe(
       bytesToHex(pureCircuits.leafOf(b(y), b(x))),
     );
-    expect(bytesToHex(pureCircuits.nullifierOf(b(x), b(y), b(z)))).not.toBe(
-      bytesToHex(pureCircuits.nullifierOf(b(z), b(y), b(x))),
+    expect(bytesToHex(pureCircuits.nullifierOf(b(x), b(y), period))).not.toBe(
+      bytesToHex(pureCircuits.nullifierOf(b(z), b(y), period)),
     );
   });
 });
@@ -101,6 +114,8 @@ describe("both backends reach the same public ledger", () => {
       h.as(EMPLOYEE_A).report(ACME, AUGUST);
       h.as(EMPLOYEE_B).report(ACME, AUGUST);
       h.as(EMPLOYEE_BETA).report(BETA, AUGUST);
+      // C0 pins `period` to the current epoch — advance the clock into SEPTEMBER first.
+      h.advanceTime(Number(EPOCH_DURATION));
       h.as(withEvidence(EMPLOYEE_A, OTHER_EVIDENCE)).report(ACME, SEPTEMBER);
 
       const reportA = reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret);

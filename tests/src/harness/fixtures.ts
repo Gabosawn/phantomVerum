@@ -3,7 +3,9 @@
  * different value on every run, and nothing can be asserted about it.
  */
 
-import { leafOf, padHex32 } from "./crypto.js";
+import { EPOCH_DURATION } from "./contract-surface.js";
+import { credCommitmentOf, periodHex32 } from "./crypto.js";
+import { GENESIS_BLOCK_TIME } from "./types.js";
 import type { Actor, Hex32, TestigoHarness } from "./types.js";
 
 const byte = (n: number): Hex32 => n.toString(16).padStart(2, "0").repeat(32);
@@ -26,10 +28,18 @@ export const EMPLOYER_PK: Hex32 = byte(0xe1);
 
 // ── periods ─────────────────────────────────────────────────────────────────────────────
 
-export const AUGUST = "2026-08";
-export const SEPTEMBER = "2026-09";
-export const AUGUST_HEX = padHex32(AUGUST);
-export const SEPTEMBER_HEX = padHex32(SEPTEMBER);
+/**
+ * The epoch INDEX (`Uint<64>` → `bigint`) the demo runs in: `floor(GENESIS_BLOCK_TIME /
+ * EPOCH_DURATION)`. `GENESIS_BLOCK_TIME` is exactly divisible, so this is the first window's
+ * index and `report`'s C0 window (start <= blockTime < end) is load-bearing from the start.
+ */
+export const AUGUST = BigInt(GENESIS_BLOCK_TIME) / EPOCH_DURATION;
+/** The next epoch. Callers must advance the harness clock first (`advanceTime(EPOCH_DURATION)`). */
+export const SEPTEMBER = AUGUST + 1n;
+
+/** The little-endian `Bytes<32>` encoding of the epoch index, for hash-operand comparisons. */
+export const AUGUST_HEX = periodHex32(AUGUST);
+export const SEPTEMBER_HEX = periodHex32(SEPTEMBER);
 
 // ── actors ──────────────────────────────────────────────────────────────────────────────
 
@@ -102,8 +112,8 @@ export function claimingOrg(actor: Actor, orgId: Hex32): Actor {
 export function baseScenario<T extends TestigoHarness>(h: T): T {
   h.registerOrganization(ACME, ACME_ANCHOR);
   h.registerOrganization(BETA, BETA_ANCHOR);
-  h.issueCredential(ACME, leafOf(ACME, EMPLOYEE_A.credentialSecret));
-  h.issueCredential(ACME, leafOf(ACME, EMPLOYEE_B.credentialSecret));
-  h.issueCredential(BETA, leafOf(BETA, EMPLOYEE_BETA.credentialSecret));
+  h.issueCredential(ACME, credCommitmentOf(EMPLOYEE_A.credentialSecret));
+  h.issueCredential(ACME, credCommitmentOf(EMPLOYEE_B.credentialSecret));
+  h.issueCredential(BETA, credCommitmentOf(EMPLOYEE_BETA.credentialSecret));
   return h;
 }

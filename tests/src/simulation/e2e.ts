@@ -12,7 +12,7 @@
  */
 
 import { ASSERTS } from "../harness/contract-surface.js";
-import { authorshipOf, leafOf, reportIdOf } from "../harness/crypto.js";
+import { authorshipOf, credCommitmentOf, leafOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
   ACME_ANCHOR,
@@ -117,11 +117,14 @@ function runDemo(h: TestigoHarness): void {
   step(`registerOrganization(ACME, anchor) — ${short(ACME_ANCHOR)}`);
 
   for (const employee of [EMPLOYEE_A, EMPLOYEE_B]) {
-    const leaf = leafOf(ACME, employee.credentialSecret);
-    h.issueCredential(ACME, leaf);
+    // The employee hands the issuer only the COMMITMENT of their credential secret; the leaf is
+    // built from it in-circuit. The issuer never sees `credentialSecret` at all.
+    const commitment = credCommitmentOf(employee.credentialSecret);
+    const leaf = leafOf(ACME, commitment);
+    h.issueCredential(ACME, commitment);
     step(`issueCredential(ACME) → ${employee.name}: leaf ${short(leaf)}`);
   }
-  console.log("     the mock issuer only ever publishes H(tag ‖ orgId ‖ credSecret) — never the secret");
+  console.log("     the mock issuer only ever receives H(credSecret) — never the secret itself");
   showLedger(h.ledger());
   require(h.ledger().organizations.size === 1, "ACME should be registered");
 
@@ -130,7 +133,7 @@ function runDemo(h: TestigoHarness): void {
 
   h.as(EMPLOYEE_A).report(ACME, AUGUST);
   const reportId = reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret);
-  step(`report(ACME, "${AUGUST}") as ${EMPLOYEE_A.name}`);
+  step(`report(ACME, epoch ${AUGUST}) as ${EMPLOYEE_A.name}`);
   step(`sealed: reportId ${short(reportId)}`);
   showLedger(h.ledger());
 
@@ -153,7 +156,7 @@ function runDemo(h: TestigoHarness): void {
     );
   }
 
-  step(`a second report in "${AUGUST}" from the same person:`);
+  step(`a second report in epoch ${AUGUST} from the same person:`);
   const blocked = expectRejection(() => h.as(EMPLOYEE_A).report(ACME, AUGUST));
   verdict(false, `rejected — "${blocked}"  (nullifier, anti-spam)`);
   require(blocked === ASSERTS.alreadyReportedThisPeriod, "the nullifier should block a replay");

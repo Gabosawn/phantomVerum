@@ -20,6 +20,7 @@ import {
 import type {
   ChargedState,
   CircuitContext,
+  EncodedZswapLocalState,
   MerkleTreeDigest,
   MerkleTreePath,
 } from "@midnight-ntwrk/compact-runtime";
@@ -51,7 +52,7 @@ interface GeneratedContract {
   initialState(ctx: unknown): {
     currentContractState: { data: ChargedState };
     currentPrivateState: PS;
-    currentZswapLocalState: unknown;
+    currentZswapLocalState: EncodedZswapLocalState;
   };
   impureCircuits: Record<
     string,

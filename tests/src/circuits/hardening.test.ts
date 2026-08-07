@@ -11,7 +11,7 @@
 import { CompactTypeBytes, CompactTypeVector, persistentHash } from "@midnight-ntwrk/compact-runtime";
 import { describe, expect, it } from "vitest";
 
-import { ASSERTS, DOMAIN_TAGS } from "../harness/contract-surface.js";
+import { ASSERTS, DOMAIN_TAGS, EPOCH_DURATION } from "../harness/contract-surface.js";
 import {
   authorshipOf,
   bytesToHex,
@@ -20,9 +20,10 @@ import {
   nullifierOf,
   pad32,
   padHex32,
+  periodHex32,
   reportIdOf,
 } from "../harness/crypto.js";
-import { ACME, AUGUST, AUGUST_HEX, EMPLOYEE_A, PROSECUTOR_PK, SEPTEMBER, baseScenario } from "../harness/fixtures.js";
+import { ACME, AUGUST, EMPLOYEE_A, PROSECUTOR_PK, SEPTEMBER, baseScenario } from "../harness/fixtures.js";
 import { backends } from "../harness/index.js";
 import type { Hex32 } from "../harness/types.js";
 
@@ -36,7 +37,9 @@ describe.each(BACKENDS)("[$name] hardening — idempotency guards", ({ fresh }) 
     // A different period clears the nullifier guard, isolating the report guard: same evidence +
     // same personal secret ⇒ the same reportId. `Set.insert` is idempotent, so WITHOUT
     // `assert(!reports.member(id))` this call would succeed silently and the reporter would
-    // believe a second report had been sealed when the ledger never changed.
+    // believe a second report had been sealed when the ledger never changed. C0 pins `period`
+    // to the current epoch, so the clock must be advanced before SEPTEMBER is valid.
+    h.advanceTime(Number(EPOCH_DURATION));
     expect(() => h.as(EMPLOYEE_A).report(ACME, SEPTEMBER)).toThrow(ASSERTS.reportAlreadySealed);
 
     const l = h.ledger();
@@ -60,17 +63,29 @@ describe.each(BACKENDS)("[$name] hardening — idempotency guards", ({ fresh }) 
 describe("hardening — domain separation", () => {
   const secret = EMPLOYEE_A.credentialSecret;
 
+  /**
+   * A period for the hash-construction checks below: an epoch index whose little-endian
+   * `Bytes<32>` encoding is distinctive (0x10 0x20 0x30 … 0x80), so the LE write is exercised
+   * rather than passing a trivial value like 0. `PERIOD_HEX` is that encoding.
+   */
+  const PERIOD = 0x8070605040302010n;
+  const PERIOD_HEX = periodHex32(PERIOD);
+
   it("makes the nullifier/authorship cross-collision impossible", () => {
-    // The attack, reproduced exactly.
+    // The attack, reproduced as far as the Uint<64> epoch index lets it go.
     //
     // `nullifierOf` and `authorshipOf` share their shape — H(sec, X, Y) — with a secret in
     // position 0. An attacker registers an organization whose `orgId` equals a victim's
-    // `reportId`, then picks `period` equal to the prosecutor's key. Without domain tags both
-    // hashes are literally the same bytes, so burning a nullifier would forge an authorship
-    // record (or vice versa).
+    // `reportId`, then aims to make the remaining operands collide too. The `period` operand
+    // is where the epoch-index semantics bite back: it is only 8 bytes little-endian, and C0
+    // pins it to the CURRENT epoch at report time, so the full 32-byte prosecutor key is out
+    // of reach. The tightest overlap the attacker can still arrange is `period` = the
+    // prosecutor key's low 8 bytes — reproduced here. Without the position-0 domain tags, the
+    // digests still differ for trivial reasons; with them, the collision is impossible even if
+    // every operand were to align.
     const reportId = reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret);
     const collidingOrgId = reportId;
-    const collidingPeriod = PROSECUTOR_PK;
+    const collidingPeriod = 0xf1f1f1f1f1f1f1f1n;
 
     const nullifier = nullifierOf(secret, collidingOrgId, collidingPeriod);
     const authorship = authorshipOf(secret, reportId, PROSECUTOR_PK);
@@ -85,9 +100,10 @@ describe("hardening — domain separation", () => {
     const b = EMPLOYEE_A.personalSecret;
 
     // Comparing across arities proves nothing: a Vector<3> digest differs from a Vector<4>
-    // digest whatever the tags are. Only same-arity pairs isolate the tag.
+    // digest whatever the tags are. Only same-arity pairs isolate the tag. The fourth operand
+    // is the SAME 32 bytes in both: the nullifier's LE-encoded period vs a bytes-32 value.
     expect(leafOf(a, b)).not.toBe(reportIdOf(a, b)); // both Vector<3>
-    expect(nullifierOf(a, b, b)).not.toBe(authorshipOf(a, b, b)); // both Vector<4>
+    expect(nullifierOf(a, b, PERIOD)).not.toBe(authorshipOf(a, b, PERIOD_HEX)); // both Vector<4>
   });
 
   it("binds each hash to its own domain tag", () => {
@@ -116,7 +132,7 @@ describe("hardening — domain separation", () => {
 
     expect(leafOf(a, b)).toBe(h3(DOMAIN_TAGS.cred, a, b));
     expect(reportIdOf(a, b)).toBe(h3(DOMAIN_TAGS.report, a, b));
-    expect(nullifierOf(a, b, c)).toBe(h4(DOMAIN_TAGS.nullifier, a, b, c));
+    expect(nullifierOf(a, b, PERIOD)).toBe(h4(DOMAIN_TAGS.nullifier, a, b, PERIOD_HEX));
     expect(authorshipOf(a, b, c)).toBe(h4(DOMAIN_TAGS.authorship, a, b, c));
   });
 
@@ -131,7 +147,9 @@ describe("hardening — domain separation", () => {
 
     expect(leafOf(x, y)).toBe("108f71cf14e9149651ff2ba395874832e39f97440fe5ddb838ad6b5c009c3cbf");
     expect(reportIdOf(x, y)).toBe("84b493185a7e947e4d029884956d406c51817dd38ca17c83513eaac71cd578d9");
-    expect(nullifierOf(x, y, z)).toBe("4facb423d218e47bb44aa8385685eef63748dbfcbc5456209799fea7f3bb00ef");
+    expect(nullifierOf(x, y, PERIOD)).toBe(
+      "23bcdb3b770bf53d78766860525f5031a8adef8e0e3ae91661987e38c5b12cf8",
+    );
     expect(authorshipOf(x, y, z)).toBe("6ee2153fc7c435a0be2487e05e430d5db35dba15bb2743ce74491d6e72752a7d");
   });
 
@@ -149,17 +167,15 @@ describe("hardening — domain separation", () => {
   it("makes the period part of the nullifier, not decoration", () => {
     // If `period` did not reach the digest, every period would share one nullifier and the
     // "different period passes" case would be a false positive.
-    expect(nullifierOf(secret, ACME, AUGUST_HEX)).not.toBe(
-      nullifierOf(secret, ACME, padHex32("2026-09")),
-    );
+    expect(nullifierOf(secret, ACME, AUGUST)).not.toBe(nullifierOf(secret, ACME, SEPTEMBER));
   });
 
   it("keeps the nullifier off the personal secret", () => {
     // The nullifier is keyed on the CREDENTIAL secret. If it used the personal secret instead,
     // a reporter could mint a fresh nullifier per report by picking a new personal secret,
     // defeating anti-spam. Changing the personal secret must not move the nullifier.
-    const withOtherPersonal = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST_HEX);
-    expect(withOtherPersonal).toBe(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST_HEX));
-    expect(withOtherPersonal).not.toBe(nullifierOf(EMPLOYEE_A.personalSecret, ACME, AUGUST_HEX));
+    const withOtherPersonal = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST);
+    expect(withOtherPersonal).toBe(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST));
+    expect(withOtherPersonal).not.toBe(nullifierOf(EMPLOYEE_A.personalSecret, ACME, AUGUST));
   });
 });
