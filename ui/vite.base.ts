@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
+import topLevelAwait from "vite-plugin-top-level-await";
+import wasm from "vite-plugin-wasm";
 import type { UserConfig } from "vite";
 
 const aca = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
@@ -17,7 +19,9 @@ export function appConfig(nombre: string, puerto: number): UserConfig {
     root: aca(`./${nombre}`),
     // Compartido por las tres apps: la marca y los PDFs de muestra.
     publicDir: aca("./shared/publico"),
-    plugins: [react()],
+    // compact-runtime's WASM (persistentHash) needs the wasm plugin; the
+    // onchain-runtime entry it resolves to in the browser uses top-level await.
+    plugins: [react(), wasm(), topLevelAwait()],
     resolve: {
       alias: { "@shared": aca("./shared") },
     },

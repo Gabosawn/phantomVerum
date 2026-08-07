@@ -10,6 +10,15 @@
  * Everything here is verified against `contracts/output/contract/index.d.ts`.
  */
 
+// The three crypto-facing constants live with the crypto in `@phantomtrace/shared` (the single
+// implementation the agreement test pins). Re-exported so every existing import site keeps its
+// path.
+export {
+  EPOCH_DURATION,
+  MERKLE_DEPTH,
+  DOMAIN_TAGS,
+} from "@phantomtrace/shared/crypto";
+
 /** Public ledger fields. */
 export const LEDGER = {
   organizations: "organizations",
@@ -19,17 +28,6 @@ export const LEDGER = {
   nullifiers: "nullifiers",
   authorships: "authorships",
 } as const;
-
-/** Credential tree depth. */
-export const MERKLE_DEPTH = 8;
-
-/**
- * `epochDuration()` in the contract: seconds per reporting epoch. Midnight's blockTime is
- * `secondsSinceEpoch` (Unix SECONDS, not milliseconds), so 86400 = one day. `report`'s `period`
- * argument is the EPOCH INDEX — `floor(blockTime / EPOCH_DURATION)` — and C0 pins it to the
- * chain clock: `period * duration <= blockTime < (period + 1) * duration`.
- */
-export const EPOCH_DURATION = 86400n;
 
 /** Exported impure circuits. */
 export const CIRCUITS = {
@@ -66,22 +64,6 @@ export const WITNESSES = {
   credentialPath: "credentialPath",
   personalSecret: "personalSecret",
   evidenceHash: "evidenceHash",
-} as const;
-
-/**
- * Domain separation tags, in position 0 of all five hashes.
- *
- * Without them `nullifierOf` and `authorshipOf` share a shape — H(sec, X, Y) — so an attacker
- * who registers an org whose `orgId` equals a victim's `reportId` forces a cross-domain
- * collision. `hardening.test.ts` reproduces that attack.
- */
-export const DOMAIN_TAGS = {
-  cred: "phantomtrace:cred:v1",
-  /** The commitment layer between `credentialSecret` and the leaf. */
-  credcomm: "phantomtrace:credcomm:v1",
-  report: "phantomtrace:report:v1",
-  nullifier: "phantomtrace:nullifier:v1",
-  authorship: "phantomtrace:authorship:v1",
 } as const;
 
 /** `assert` messages, copied verbatim from the contract. Tests match on these. */

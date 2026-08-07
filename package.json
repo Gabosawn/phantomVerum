@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "workspaces": [
     "contracts",
+    "shared",
     "app",
     "ui",
     "tests"
@@ -13,8 +14,8 @@
   "scripts": {
     "compile": "npm run compile --workspace=contracts",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
-    "simulate": "npm run simulate --workspace=tests",
+    "test": "npm run build --workspace=@phantomtrace/shared && npm run test --workspaces --if-present",
+    "simulate": "npm run build --workspace=@phantomtrace/shared && npm run simulate --workspace=tests",
     "clean": "rm -rf node_modules contracts/node_modules app/node_modules ui/node_modules tests/node_modules"
   },
   "engines": {

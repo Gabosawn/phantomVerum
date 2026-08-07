@@ -5,13 +5,14 @@
   "type": "module",
   "description": "Tests y simulación E2E — Testigo (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "build": "npm run build --workspace=@phantomtrace/shared && tsc -p tsconfig.json",
+    "test": "npm run build --workspace=@phantomtrace/shared && vitest run",
     "test:watch": "vitest",
     "simulate": "npm run build && node dist/simulation/e2e.js"
   },
   "dependencies": {
-    "@midnight-ntwrk/compact-runtime": "0.16.0"
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@phantomtrace/shared": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

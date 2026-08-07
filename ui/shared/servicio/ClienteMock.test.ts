@@ -9,6 +9,7 @@ import {
   secretNuevo,
   type Hex32,
 } from "../cripto";
+import { ANCLA, ORG_ID } from "../demo";
 import {
   CredencialInvalidaError,
   DenunciaRepetidaError,
@@ -26,8 +27,6 @@ const muestra = (nombre: string) =>
     readFileSync(fileURLToPath(new URL(`../publico/muestras/${nombre}`, import.meta.url))),
   );
 
-const ORG_ID: Hex32 = "9c41e2b7159e8c80e81a49b4ff962258c96e7b463443bb64a24057aebbcad80a";
-const ANCLA: Hex32 = "4d7a1f091f0bd415480ff72966302e5040792986a8fec755fd4615a696fd3ce6";
 const SECRET: Hex32 = "6b0de43db76ce5c0cff03c37a0221b65a2a03493b4250c38c6192ceda10c17ae";
 const CRED: Hex32 = "4e7038efbd4f620a7bd88aa10e3d0a1fd5ac95b9e1fadedf4737f83bfecba2bc";
 const PK_PIA: Hex32 = "7d15c80d067698a0e5e7b1cbfcdb285d3ac658b703df68616c9544fd93209a2f";
@@ -60,7 +59,7 @@ async function conCredencial(cliente: ClienteMock, credencialSecret = CRED) {
   // issuer ever receives — the mock never sees `credencialSecret`.
   const { hojaIndex } = await cliente.emitirCredencial({
     orgId: ORG_ID,
-    credCommitment: await credCommitmentOf(credencialSecret),
+    credCommitment: credCommitmentOf(credencialSecret),
   });
   cliente.establecerWitnesses({
     secretPersonal: SECRET,
@@ -90,7 +89,7 @@ describe("T1 · registrar organización y emitir credenciales", () => {
     const c = nuevoCliente();
     const issue = c.emitirCredencial({
       orgId: ORG_ID,
-      credCommitment: await credCommitmentOf(CRED),
+      credCommitment: credCommitmentOf(CRED),
     });
     await expect(issue).rejects.toBeInstanceOf(OrganizationNotRegisteredError);
     await expect(issue).rejects.toThrow("organization not registered");
@@ -102,7 +101,7 @@ describe("T1 · registrar organización y emitir credenciales", () => {
 
     // What crosses the boundary to the issuer is the COMMITMENT, and it is
     // not the secret under any encoding the ledger stores.
-    const credCommitment = await credCommitmentOf(CRED);
+    const credCommitment = credCommitmentOf(CRED);
     expect(credCommitment).not.toBe(CRED);
 
     await c.emitirCredencial({ orgId: ORG_ID, credCommitment });

@@ -24,7 +24,7 @@ export const DEMO_EPOCH = 20672;
 export const PERIODO = epochLabel(DEMO_EPOCH);
 
 export const ORG_ID: Hex32 = "9c41e2b7159e8c80e81a49b4ff962258c96e7b463443bb64a24057aebbcad80a";
-export const ANCLA: Hex32 = "4d7a1f091f0bd415480ff72966302e5040792986a8fec755fd4615a696fd3ce6";
+export const ANCLA: Hex32 = "e44a0aabc18f3c12731504c66f34d565a6745fd1e58cd6f500626e30a9b05716";
 
 /** A quién puede designar el denunciante. */
 export const VERIFICADORES: Verificador[] = [

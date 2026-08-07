@@ -1,0 +1,25 @@
+{
+  "name": "@phantomtrace/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "PhantomVerum — la implementación TS única y verificada de los cinco pure circuits",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.0"
+  },
+  "main": "./dist/crypto.js",
+  "types": "./dist/crypto.d.ts",
+  "exports": {
+    "./crypto": {
+      "types": "./dist/crypto.d.ts",
+      "default": "./dist/crypto.js"
+    }
+  }
+}
