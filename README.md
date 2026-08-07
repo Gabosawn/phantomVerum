@@ -32,8 +32,20 @@ npm install                        # instala todas las workspaces
 npm run compile                    # compila contratos Compact
 npm test                           # corre la suite de tests
 npm run simulate                   # simulación E2E de los 4 tiempos
-npm run dev --workspace=ui         # levanta el frontend en :3000
+npm run dev --workspace=ui         # levanta las dos apps + el sistema visual
 ```
+
+`npm run dev` abre tres servidores:
+
+| URL | Qué es |
+|---|---|
+| `localhost:3000` | **PhantomVerum Cliente** — corre en tu máquina. Oscuro. Tiene proof server |
+| `localhost:3001` | **PhantomVerum Explorer** — el ledger público. Claro. **Sin** proof server |
+| `localhost:3002` | Sistema visual (paleta, tipografía, recursos) — referencia para el deck |
+
+Son **dos orígenes distintos a propósito**: el browser les da `localStorage`
+separado, así que la separación entre lo privado y lo público no depende de que
+nosotros nos portemos bien. Lo único que las conecta es el portapapeles.
 
 Scripts CLI (workspace `app`):
 
@@ -56,12 +68,12 @@ phantomtrace/
 │       ├── witnesses/       #   witness providers de los 3 circuitos
 │       ├── scripts/         #   CLI: registrar-org, denunciar, revelar, verificar
 │       └── config/          #   red Preview, proof server, indexer
-├── ui/                      # @phantomtrace/ui — React + Vite
-│   └── src/
-│       ├── views/           #   Organizacion / Denunciante / Fiscal
-│       ├── components/      #   componentes reutilizables
-│       ├── hooks/           #   wallet, contrato
-│       └── lib/             #   helpers y constantes
+├── ui/                      # @phantomtrace/ui — React + Vite, DOS apps
+│   ├── cliente/             #   app local y privada (:3000)
+│   ├── explorer/            #   app pública, sin proof server (:3001)
+│   ├── sistema/             #   hoja del sistema visual (:3002)
+│   ├── shared/              #   cripto, tipos, servicio, componentes, tokens
+│   └── pruebas/             #   los tests que cruzan las dos apps
 ├── tests/                   # @phantomtrace/tests — Vitest + simulación E2E
 │   └── src/
 │       ├── circuits/        #   tests por circuito
@@ -70,16 +82,49 @@ phantomtrace/
 └── docs/                    # idea, arquitectura, entorno
 ```
 
-### Las 3 vistas de la UI
+### Las dos aplicaciones
+
+El dual-ledger de Midnight no se explica con un cartel: se traduce en **dos
+programas separados**, con registro visual opuesto y sin estado compartido.
+
+**PhantomVerum Cliente** — oscuro, corre en tu máquina, tiene proof server y
+guarda los witnesses.
 
 | Vista | Qué hace |
 |---|---|
-| **Organización** | Registrar org (ancla) + emitir credencial (mock) + panel del ledger: hay N denuncias, ninguna atribuible |
-| **Denunciante** | Cargar evidencia (se hashea local — dicho en pantalla), elegir org/período, denunciar, exportar llave de autoría |
-| **Fiscal** | Cargar denunciaId + clave + material entregado → verificar contra el ledger → ✅ / ❌ |
+| **Emitir credenciales** (T1) | El directorio interno de ACME, que nunca se publica. Al ledger va sólo el ancla |
+| **Denunciar** (T2) | Cargás la evidencia — se hashea **acá**, con Web Crypto — elegís org y período, y salen dos hashes |
+| **Revelar autoría** (T4) | Cargás tu llave, elegís ante quién, y la prueba queda ligada a esa clave pública |
 
-Reglas de UI: legible y proyectable (fuente grande, alto contraste). La vista
-denunciante dice explícitamente qué NO sale de la máquina.
+**PhantomVerum Explorer** — claro, público, **sin proof server**, y lo dice en
+el pie: no hay nada privado que procesar.
+
+| Vista | Qué hace |
+|---|---|
+| **Ledger** | 3 denuncias, 0 atribuibles. La columna «autor» no está censurada: no existe |
+| **Verificar sello** (T3) | Arrastrás un documento y se compara contra la cadena. Un byte distinto ⇒ rojo |
+| **Verificar autoría** (T4) | Pegás el material y verificás **con tu propia clave**. Cambiala y el veredicto se da vuelta |
+
+Reglas de UI: legible y proyectable (fuente grande, alto contraste), veredictos
+en paneles sólidos a todo el ancho. Todo lo que no sale de tu máquina se muestra
+con una barra de censura: existiendo, sin mostrarse.
+
+### Qué es real y qué está mockeado
+
+Mientras el Bloque B no esté, la UI corre contra una capa de servicio local. Se
+declara de frente porque la diferencia importa:
+
+| Real, verificable | Fabricado |
+|---|---|
+| El SHA-256 de la evidencia — comprobalo con `sha256sum` contra lo que muestra la pantalla | Los `txId` y las alturas de bloque |
+| Las cuatro derivaciones, espejo exacto de `contracts/src/testigo.compact` (mismos tags de dominio, misma aridad) | El «✓ sincronizado» del indexer |
+| Los asserts del circuito: credencial ajena, doble denuncia por período y secret que no es del autor fallan de verdad, y antes de emitir nada | Los tiempos de proving |
+| Los veredictos ✅/❌: son una recomputación local genuina, no una rama `if` | La existencia de una cadena |
+
+Lo mockeado vive en exactamente dos archivos —`ui/shared/cripto.ts` y
+`ui/shared/servicio/ClienteMock.ts`— detrás de la interfaz `TestigoClient`.
+Ninguna vista los conoce. `H` acá es SHA-256; en el circuito es
+`persistentHash`, así que los valores cambian al integrar.
 
 ### Tests
 
@@ -123,15 +168,19 @@ coinciden *exactamente* con el spec (§3–§4).
 compilado con las firmas del spec. **Entregable:** un comando corre los 4
 tiempos E2E; el caso "secret ajeno" falla en proof time sin emitir tx.
 
-### Bloque C — UI (`ui/`)
+### Bloque C — UI (`ui/`) ✅
 
-- [ ] Vista Organización: registro + emisión mock de credenciales + panel del ledger
-- [ ] Vista Denunciante: carga de evidencia (hash local), denuncia, exportar llave
-- [ ] Vista Fiscal: verificación ✅/❌ contra el ledger
+- [x] **Cliente** (`:3000`): emitir credenciales, denunciar con hash local real,
+      revelar autoría designada. Terminal del proof server con logs en vivo
+- [x] **Explorer** (`:3001`): ledger público, verificar sello, verificar autoría
+      con veredictos verde/rojo a pantalla completa
+- [x] Separación por origen: dos puertos ⇒ `localStorage` distinto. El puente es
+      el portapapeles y nada más
+- [x] Capa de servicio con la API congelada de §3.1, lista para enchufar `app/`
+- [x] 42 tests, incluyendo uno que verifica que el Explorer **no puede** importar
+      nada privado del Cliente
 
-**Se puede arrancar sin los Bloques A y B** detrás de una capa de servicio
-mock con la API de los scripts CLI. **Entregable:** las 3 vistas conectadas a
-la capa real de `app/`.
+**Pendiente de integración:** conectar `ClienteReal` cuando el Bloque B exista.
 
 ### Bloque D — Tests (`tests/`)
 

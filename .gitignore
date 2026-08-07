@@ -34,3 +34,6 @@ docker-data/
 *.key
 *.pem
 secrets/
+
+# Build output de las apps de ui/
+ui/dist/
