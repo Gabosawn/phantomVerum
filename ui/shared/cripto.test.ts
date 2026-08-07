@@ -1,0 +1,178 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+
+import {
+  aHex,
+  authorshipOf,
+  credCommitmentOf,
+  deHex,
+  EPOCH_DURATION_SECONDS,
+  epochIndexOf,
+  epochToBytes32,
+  hashDeArchivo,
+  leafOf,
+  nullifierOf,
+  pad32,
+  reportIdOf,
+  secretNuevo,
+} from "./cripto";
+
+const muestra = (nombre: string) =>
+  new Uint8Array(readFileSync(fileURLToPath(new URL(`./publico/muestras/${nombre}`, import.meta.url))));
+
+const ORG_ID = "9c41e2b7159e8c80e81a49b4ff962258c96e7b463443bb64a24057aebbcad80a";
+const SECRET = "6b0de43db76ce5c0cff03c37a0221b65a2a03493b4250c38c6192ceda10c17ae";
+const CRED = "4e7038efbd4f620a7bd88aa10e3d0a1fd5ac95b9e1fadedf4737f83bfecba2bc";
+const PK_PIA = "7d15c80d067698a0e5e7b1cbfcdb285d3ac658b703df68616c9544fd93209a2f";
+const PK_ACME = "3b92af1fe656626d02dff0abcd50b545ce9166f3d6c008dd350133d9753ac410";
+
+describe("codificación", () => {
+  it("pad32 rellena con ceros a la derecha, como pad() de Compact", () => {
+    expect(aHex(pad32("2026-08"))).toBe(
+      "323032362d303800000000000000000000000000000000000000000000000000",
+    );
+  });
+
+  it("pad32 rechaza lo que no entra en Bytes<32>", () => {
+    expect(() => pad32("x".repeat(33))).toThrow(/no entra en Bytes<32>/);
+  });
+
+  it("hex ida y vuelta", () => {
+    const s = secretNuevo();
+    expect(s).toHaveLength(64);
+    expect(aHex(deHex(s))).toBe(s);
+    expect(aHex(deHex(`0x${s}`))).toBe(s);
+  });
+
+  it("deHex rechaza basura", () => {
+    expect(() => deHex("no soy hex")).toThrow(/hex inválido/);
+    expect(() => deHex("abc")).toThrow(/hex inválido/);
+  });
+
+  it("epochToBytes32 encodes the epoch index big-endian in 32 bytes", () => {
+    expect(epochToBytes32(0)).toHaveLength(32);
+    // Value in the last 8 bytes, zero-padded on the left — deterministic.
+    expect(aHex(epochToBytes32(0x1234))).toBe(`${"0".repeat(60)}1234`);
+    expect(aHex(epochToBytes32(20672n))).toBe(aHex(epochToBytes32(20672)));
+  });
+
+  it("epochToBytes32 rejects values outside Uint<64>", () => {
+    expect(() => epochToBytes32(-1)).toThrow(/does not fit in Uint<64>/);
+    expect(() => epochToBytes32(1n << 64n)).toThrow(/does not fit in Uint<64>/);
+  });
+});
+
+describe("reporting epochs — mirror of the contract's C0 arithmetic", () => {
+  it("epochIndexOf is floor(unixSeconds / 86400)", () => {
+    const start = 20672 * EPOCH_DURATION_SECONDS;
+    expect(epochIndexOf(start)).toBe(20672);
+    expect(epochIndexOf(start + EPOCH_DURATION_SECONDS - 1)).toBe(20672);
+    expect(epochIndexOf(start + EPOCH_DURATION_SECONDS)).toBe(20673);
+  });
+
+  it("consecutive epochs yield different nullifiers for the same credential", async () => {
+    const a = await nullifierOf(CRED, ORG_ID, 20672);
+    const b = await nullifierOf(CRED, ORG_ID, 20673);
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("hash de la evidencia", () => {
+  it("es el SHA-256 real del archivo — comprobable con sha256sum", async () => {
+    expect(await hashDeArchivo(muestra("contrato-obra-4471.pdf"))).toBe(
+      "121cfefb8d7d8d3c7b0ef110254a32278ffb655e2fad41aab796b976451dbef7",
+    );
+  });
+
+  it("un byte distinto cambia el hash entero", async () => {
+    const a = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
+    const b = await hashDeArchivo(muestra("contrato-obra-4471-rev-legal.pdf"));
+    expect(b).not.toBe(a);
+    expect(b).toBe("eee932eaca02c09bb059542dc08456d7dda6466c9064941603e088176474eadd");
+  });
+});
+
+describe("derivaciones — espejo de los pure circuits", () => {
+  it("son deterministas", async () => {
+    expect(await reportIdOf("00".repeat(32), SECRET)).toBe(await reportIdOf("00".repeat(32), SECRET));
+  });
+
+  it("todas devuelven Bytes<32>", async () => {
+    for (const h of [
+      await credCommitmentOf(CRED),
+      await leafOf(ORG_ID, await credCommitmentOf(CRED)),
+      await reportIdOf("00".repeat(32), SECRET),
+      await nullifierOf(CRED, ORG_ID, 20672),
+      await authorshipOf(SECRET, "00".repeat(32), PK_PIA),
+    ]) {
+      expect(h).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("credCommitmentOf is deterministic and never equals the raw secret", async () => {
+    expect(await credCommitmentOf(CRED)).toBe(await credCommitmentOf(CRED));
+    expect(await credCommitmentOf(CRED)).not.toBe(CRED);
+  });
+
+  it("leafOf takes the COMMITMENT: commitment and raw secret give different leaves", async () => {
+    // Mirrors the unified contract: leaf = H(dom, orgId, credCommitmentOf(sec)).
+    // Feeding the raw secret where the commitment belongs must not collide.
+    const fromCommitment = await leafOf(ORG_ID, await credCommitmentOf(CRED));
+    const fromRawSecret = await leafOf(ORG_ID, CRED);
+    expect(fromCommitment).not.toBe(fromRawSecret);
+  });
+
+  it("el orden de los argumentos importa", async () => {
+    expect(await reportIdOf(SECRET, CRED)).not.toBe(await reportIdOf(CRED, SECRET));
+  });
+});
+
+describe("domain separation", () => {
+  /**
+   * El ataque que esto mata: alguien registra una organización con
+   * orgId = denunciaId para forzar que un nullifier y una autoría colisionen.
+   * Con el tag de dominio en la posición 0, los cuatro espacios son disjuntos
+   * aunque les entren exactamente los mismos argumentos.
+   */
+  it("nullifier y autoría no colisionan con los mismos tres argumentos", async () => {
+    // Same byte content in every position: the epoch encoding fed to the
+    // nullifier is reused verbatim as the authorship's prosecutorPk. Only the
+    // domain tag differs, and that alone must keep the spaces disjoint.
+    const epoch = 20672;
+    const a = await nullifierOf(SECRET, ORG_ID, epoch);
+    const b = await authorshipOf(SECRET, ORG_ID, aHex(epochToBytes32(epoch)));
+    expect(a).not.toBe(b);
+  });
+
+  it("hoja y denuncia tampoco", async () => {
+    const a = await leafOf(ORG_ID, SECRET);
+    const b = await reportIdOf(ORG_ID, SECRET);
+    expect(a).not.toBe(b);
+  });
+
+  it("commitment y hash de archivo tampoco comparten espacio", async () => {
+    // credCommitmentOf prefixes its domain tag; a bare SHA-256 of the same
+    // 32 bytes (what hashDeArchivo would produce) must not collide with it.
+    const asCommitment = await credCommitmentOf(SECRET);
+    const asBareHash = await hashDeArchivo(deHex(SECRET));
+    expect(asCommitment).not.toBe(asBareHash);
+  });
+});
+
+describe("designated verifier", () => {
+  it("la misma autoría con otra clave da otro hash", async () => {
+    const denunciaId = await reportIdOf(
+      await hashDeArchivo(muestra("contrato-obra-4471.pdf")),
+      SECRET,
+    );
+    const paraFiscal = await authorshipOf(SECRET, denunciaId, PK_PIA);
+    const paraEmpleador = await authorshipOf(SECRET, denunciaId, PK_ACME);
+    expect(paraFiscal).not.toBe(paraEmpleador);
+  });
+
+  it("un secret ajeno no reproduce el denunciaId del autor", async () => {
+    const ev = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
+    expect(await reportIdOf(ev, secretNuevo())).not.toBe(await reportIdOf(ev, SECRET));
+  });
+});

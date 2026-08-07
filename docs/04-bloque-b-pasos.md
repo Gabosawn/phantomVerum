@@ -30,10 +30,10 @@ F5.0 (seed+faucet) — arranca apenas termina F0, corre en paralelo a todo
 | **B1 — config/providers** | ✅ |
 | **B2 — witnesses/secrets** | ✅ |
 | **B3 — API core** | ✅ selftest simulador verde (63/63 en su día; suite monorepo verde hoy) |
-| **B4 — scripts CLI** | ⬜ `app/src/scripts/` vacío (solo `.gitkeep`); scripts npm apuntan a `dist/` inexistente |
+| **B4 — scripts CLI** | ✅ `register-org` / `issue-credential` / `report` / `reveal-authorship` / `verify-authorship` / `e2e` (EN, desde `dev-fable`) |
 | **B5 — deploy Preview** | ⬜ `deployment.json` con campos `null` |
-| **D — tests** | ✅ harness alineado a `output/contract/index.js` + model/contract/simulate verdes |
-| **C — UI** | 🟡 scaffold de 3 vistas; sin cablear a `app/` |
+| **D — tests** | ✅ harness EN + época `bigint` alineada al contrato; `npm test` / `simulate` verdes |
+| **C — UI** | ✅ Cliente (:3000) + Explorer (:3001) + Sistema (desde `dev-fable`); mock service layer, plug a `app/` real pendiente |
 
 **Gate anti-DQ:** `compact compile` verde desde clone limpio (contrato en
 `origin/main` vía Bloque A). El siguiente merge de `dev` lleva a `main` el

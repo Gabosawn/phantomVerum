@@ -1,18 +1,18 @@
 /**
- * B3.7 — Lectura del estado público del contrato.
+ * B3.7 — Reading the contract's public state.
  *
- * Dos formas de leer, la misma salida:
+ * Two ways to read, one output:
  *
- *  - `LectorIndexer` — indexer GraphQL, SIN wallet, SIN seed, SIN proof server.
- *    Es el que usan `verificarAutoria` (B3.6) y el panel de la UI. Que un
- *    fiscal pueda verificar una autoría con nada más que una URL de indexer no
- *    es un detalle de implementación: es el argumento del producto.
- *  - `EjecutorSimulador` — implementa la misma `LectorLedger` leyendo el estado
- *    en memoria.
+ *  - `IndexerReader` — GraphQL indexer, NO wallet, NO seed, NO proof server.
+ *    It is what `verifyAuthorship` (B3.6) and the UI panel use. That a
+ *    prosecutor can verify an authorship with nothing but an indexer URL is
+ *    not an implementation detail: it is the product's argument.
+ *  - `SimulatorExecutor` — implements the same `LedgerReader` by reading the
+ *    in-memory state.
  *
- * La deserialización la hace `ledger()` del módulo GENERADO por el compilador
- * — no se parsea JSON del indexer a mano. Si el ledger del contrato cambia de
- * forma, el .d.ts regenerado rompe `tsc` acá.
+ * Deserialization is done by `ledger()` from the compiler-GENERATED module —
+ * no hand-parsing of indexer JSON. If the contract's ledger changes shape,
+ * the regenerated .d.ts breaks `tsc` here.
  */
 import type { ContractState } from '@midnight-ntwrk/compact-runtime';
 import type { PublicDataProvider } from '@midnight-ntwrk/midnight-js-types';
@@ -21,109 +21,110 @@ import { requireDeployment } from '../config/deployment.js';
 import { currentNetwork } from '../config/init.js';
 import type { NetworkConfig } from '../config/networks.js';
 import { createReadOnlyProviders } from '../config/providers.js';
-import { ledger as leerLedgerDe } from '../../../contracts/output/contract/index.js';
+import { ledger as readLedgerOf } from '../../../contracts/output/contract/index.js';
 import type { Ledger } from '../witnesses/index.js';
-import { type Hex32, aHex } from '../witnesses/hex.js';
+import { type Hex32, toHex } from '../witnesses/hex.js';
 
-import type { LectorLedger } from './ejecutor.js';
-import type { EstadoLedger } from './tipos.js';
+import type { LedgerReader } from './executor.js';
+import type { LedgerState } from './types.js';
 
-/** No hay estado en esa address: el contrato no existe o el indexer no lo vio. */
-export class ContratoNoEncontradoError extends Error {
+/** No state at that address: the contract does not exist or the indexer has not seen it. */
+export class ContractNotFoundError extends Error {
   constructor(
     readonly contractAddress: string,
     readonly indexer: string,
   ) {
     super(
-      `el indexer no tiene estado para el contrato ${contractAddress}\n` +
+      `the indexer has no state for contract ${contractAddress}\n` +
         `  indexer: ${indexer}\n` +
-        '  Causas típicas: la address es de otra red, el deploy todavía no ' +
-        'confirmó, o `deployment.json` quedó desactualizado.',
+        '  Typical causes: the address belongs to another network, the deploy ' +
+        'has not confirmed yet, or `deployment.json` went stale.',
     );
-    this.name = 'ContratoNoEncontradoError';
+    this.name = 'ContractNotFoundError';
   }
 }
 
 /**
- * `ContractState` -> `Ledger` tipado.
+ * `ContractState` -> typed `Ledger`.
  *
- * `.data` es el `ChargedState` que espera el deserializador generado.
+ * `.data` is the `ChargedState` the generated deserializer expects.
  */
-export const ledgerDesdeEstado = (estado: ContractState): Ledger => leerLedgerDe(estado.data);
+export const ledgerFromState = (state: ContractState): Ledger => readLedgerOf(state.data);
 
-/** Lee el estado del contrato desde el indexer. Solo lectura. */
-export class LectorIndexer implements LectorLedger {
+/** Reads the contract state from the indexer. Read-only. */
+export class IndexerReader implements LedgerReader {
   constructor(
     private readonly publicDataProvider: PublicDataProvider,
     readonly contractAddress: string,
     private readonly indexerUrl: string,
   ) {}
 
-  async leerLedger(): Promise<Ledger> {
-    const estado = await this.publicDataProvider.queryContractState(this.contractAddress);
-    if (estado === null) {
-      throw new ContratoNoEncontradoError(this.contractAddress, this.indexerUrl);
+  async readLedger(): Promise<Ledger> {
+    const state = await this.publicDataProvider.queryContractState(this.contractAddress);
+    if (state === null) {
+      throw new ContractNotFoundError(this.contractAddress, this.indexerUrl);
     }
-    return ledgerDesdeEstado(estado);
+    return ledgerFromState(state);
   }
 }
 
-export interface OpcionesLectorSoloLectura {
-  /** Address del contrato. Por defecto, la de `deployment.json`. */
+export interface ReadOnlyReaderOptions {
+  /** Contract address. Defaults to the one in `deployment.json`. */
   readonly contractAddress?: string;
-  /** Red a consultar. Por defecto, la activa (`NETWORK`). */
+  /** Network to query. Defaults to the active one (`NETWORK`). */
   readonly network?: NetworkConfig;
 }
 
 /**
- * Lector sin wallet ni seed: solo el indexer de la red activa.
+ * Reader without wallet or seed: only the active network's indexer.
  *
- * Es el camino de B3.6/B3.7. Si no se le pasa `contractAddress`, la saca de
- * `app/src/config/deployment.json` — la única fuente de la dirección (§3.2).
+ * It is the B3.6/B3.7 path. If no `contractAddress` is given, it takes it
+ * from `app/src/config/deployment.json` — the single source of the address
+ * (§3.2).
  */
-export const crearLectorSoloLectura = async (
-  opciones: OpcionesLectorSoloLectura = {},
-): Promise<LectorIndexer> => {
-  const network = opciones.network ?? currentNetwork();
+export const createReadOnlyReader = async (
+  options: ReadOnlyReaderOptions = {},
+): Promise<IndexerReader> => {
+  const network = options.network ?? currentNetwork();
   const contractAddress =
-    opciones.contractAddress ?? (await requireDeployment()).contractAddress;
+    options.contractAddress ?? (await requireDeployment()).contractAddress;
   const { publicDataProvider } = createReadOnlyProviders(network);
-  return new LectorIndexer(publicDataProvider, contractAddress, network.indexer);
+  return new IndexerReader(publicDataProvider, contractAddress, network.indexer);
 };
 
-/** Todos los elementos de un `Set` del ledger, como Hex32. */
-const comoHexes = (conjunto: { [Symbol.iterator](): Iterator<Uint8Array> }): Hex32[] => {
-  const salida: Hex32[] = [];
-  const it = conjunto[Symbol.iterator]();
+/** Every element of a ledger `Set`, as Hex32. */
+const asHexes = (set: { [Symbol.iterator](): Iterator<Uint8Array> }): Hex32[] => {
+  const out: Hex32[] = [];
+  const it = set[Symbol.iterator]();
   for (let r = it.next(); r.done !== true; r = it.next()) {
-    salida.push(aHex(r.value));
+    out.push(toHex(r.value));
   }
-  return salida;
+  return out;
 };
 
 /**
- * Resume un `Ledger` en la forma congelada de §3.1.
+ * Summarizes a `Ledger` into the frozen §3.1 shape.
  *
- * `organizaciones` y `nullifiers` van como CONTEO, no como lista: enumerar los
- * nullifiers en una UI invita a correlacionarlos con las denuncias, y no
- * aportan nada a la demo.
+ * `organizations` and `nullifiers` go as a COUNT, not a list: enumerating
+ * the nullifiers in a UI invites correlating them with the reports, and
+ * they add nothing to the demo.
  */
-export const resumirLedger = (ledger: Ledger): EstadoLedger => ({
-  organizaciones: Number(ledger.organizaciones.size()),
-  denuncias: comoHexes(ledger.denuncias),
+export const summarizeLedger = (ledger: Ledger): LedgerState => ({
+  organizations: Number(ledger.organizations.size()),
+  reports: asHexes(ledger.reports),
   nullifiers: Number(ledger.nullifiers.size()),
-  autorias: comoHexes(ledger.autorias),
-  credencialesEmitidas: Number(ledger.credenciales.firstFree()),
+  authorships: asHexes(ledger.authorships),
+  issuedCredentials: Number(ledger.credentials.firstFree()),
 });
 
 /**
- * B3.7 — `leerEstadoLedger()`.
+ * B3.7 — `readLedgerState()`.
  *
- * Sin argumentos usa el indexer de la red activa contra la address de
- * `deployment.json`. Con un `LectorLedger` (el simulador, por ejemplo) lee de
- * ahí. Es la misma función en los dos caminos.
+ * With no arguments it uses the active network's indexer against the address
+ * in `deployment.json`. With a `LedgerReader` (the simulator, for instance)
+ * it reads from there. Same function on both paths.
  */
-export const leerEstadoLedger = async (lector?: LectorLedger): Promise<EstadoLedger> => {
-  const fuente = lector ?? (await crearLectorSoloLectura());
-  return resumirLedger(await fuente.leerLedger());
+export const readLedgerState = async (reader?: LedgerReader): Promise<LedgerState> => {
+  const source = reader ?? (await createReadOnlyReader());
+  return summarizeLedger(await source.readLedger());
 };

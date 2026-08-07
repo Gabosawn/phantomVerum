@@ -3,231 +3,233 @@ pragma language_version >= 0.23;
 import CompactStandardLibrary;
 
 // =====================================================================
-// Testigo — buzon de denuncias anonimo con autoria diferida
+// Testigo — anonymous whistleblowing mailbox with deferred authorship
 // Midnight Hack Buenos Aires 2026 · spec: docs/01-arquitectura.md §3–§5
 //
-// OPCION A (spec §5), variante "arbol global":
-//   Un unico HistoricMerkleTree on-chain guarda TODAS las credenciales.
-//   La organizacion queda ligada DENTRO de la hoja:
-//       hoja = H("testigo:cred:v1" || orgId || H("testigo:credcomm:v1" || credSecret))
-//   La hoja se construye EN CIRCUITO a partir del orgId publico en LOS DOS
-//   extremos — al emitir (`emitirCredencial`) y al probar (`denunciar`) —
-//   asi que ni el emisor puede colar la hoja de una org que no se valido,
-//   ni el witness puede mentir sobre a que org pertenece: solo aporta los
-//   hermanos del path. Probar membership en el arbol global prueba
-//   pertenencia A ESA org — la semantica multi-org del spec se conserva.
+// OPTION A (spec §5), "global tree" variant:
+//   A single on-chain HistoricMerkleTree holds ALL issued credentials.
+//   The organization is bound INSIDE the leaf:
+//       leaf = H("…cred:v1" || orgId || H("…credcomm:v1" || credSecret))
+//   The leaf is built IN-CIRCUIT from the public orgId at BOTH ends —
+//   when issuing (`issueCredential`) and when proving (`report`) — so the
+//   issuer cannot smuggle a leaf for an org that was never validated, and
+//   the witness cannot lie about which org it belongs to: it only
+//   provides the path siblings. Proving membership in the global tree
+//   proves membership in THAT org — the spec's multi-org semantics hold.
 //
-//   Por que HistoricMerkleTree y no MerkleTree: con el historico los paths
-//   ya emitidos siguen siendo validos despues de nuevas inserciones, asi
-//   que emitir una credencial no invalida las denuncias en preparacion.
+//   Why HistoricMerkleTree and not MerkleTree: with the historic variant,
+//   already-issued paths remain valid after new insertions, so issuing a
+//   credential does not invalidate reports being prepared.
 //
-//   Por que arbol global y no una raiz por-org en el Map: el ledger TS
-//   generado expone findPathForLeaf() sobre el ADT del arbol, con lo cual
-//   el witness del path son ~5 lineas off-chain. Una raiz por-org obligaria
-//   a reimplementar el arbol de Merkle a mano en TypeScript.
+//   Why a global tree and not a per-org root in the Map: the generated TS
+//   ledger exposes findPathForLeaf() over the tree ADT, which makes the
+//   path witness ~5 lines of off-chain code. A per-org root would force a
+//   hand-rolled Merkle tree in TypeScript.
 //
-// LIMITACIONES DECLARADAS (deck + README, spec §5 y §7):
-//   · El emisor de credenciales es un MOCK: `registrarOrganizacion` y
-//     `emitirCredencial` NO tienen control de acceso — cualquiera puede
-//     registrar una org o agregar una hoja. Es el alcance del MVP, no un
-//     descuido: el emisor real (directorio corporativo firmante) es roadmap.
-//   · No se prueba la VERACIDAD del contenido denunciado (spec §6).
-//   · No hay revocacion de credenciales (spec §7).
+// DECLARED LIMITATIONS (deck + README, spec §5 and §7):
+//   · The credential issuer is a MOCK: `registerOrganization` and
+//     `issueCredential` have NO access control — anyone can register an
+//     org or add a leaf. That is the MVP scope, not an oversight: the
+//     real issuer (a signing corporate directory) is roadmap.
+//   · The TRUTH of the reported content is not proven (spec §6).
+//   · There is no credential revocation (spec §7).
 // =====================================================================
 
-// ---- Estado del ledger (spec §3) ----
+// ---- Ledger state (spec §3) ----
 
-// orgId -> ancla de la organizacion. En la Opcion A el ancla es metadata
-// del emisor (p. ej. su pk publica): la pertenencia NO se verifica contra
-// este valor sino contra el arbol de credenciales. El Map funciona como
-// registro de organizaciones existentes (guard de `emitirCredencial`) y
-// como ancla publicada, tal como lo describe el spec §3.
-export ledger organizaciones: Map<Bytes<32>, Bytes<32>>;
+// orgId -> the organization's anchor. In Option A the anchor is issuer
+// metadata (e.g. its public pk): membership is NOT verified against this
+// value but against the credential tree. The Map acts as the registry of
+// existing organizations (guard of `issueCredential`) and as the
+// published anchor, exactly as spec §3 describes.
+export ledger organizations: Map<Bytes<32>, Bytes<32>>;
 
-// Arbol global de credenciales emitidas. Profundidad 8 = 256 hojas,
-// suficiente para la demo (spec §5: "alcanza profundidad chica").
-export ledger credenciales: HistoricMerkleTree<8, Bytes<32>>;
+// Global tree of issued credentials. Depth 8 = 256 leaves, enough for
+// the demo (spec §5: "a small depth suffices").
+export ledger credentials: HistoricMerkleTree<8, Bytes<32>>;
 
-// denunciaId sellados: H(dom || evidenciaHash || secretPersonal)
-export ledger denuncias: Set<Bytes<32>>;
+// Sealed reportIds: H(dom || evidenceHash || personalSecret)
+export ledger reports: Set<Bytes<32>>;
 
-// anti-spam por epoca: H(dom || credSecret || orgId || epoca).
-// La epoca la fija el blockTime, no quien llama (ver `denunciar`).
+// Per-epoch anti-spam: H(dom || credSecret || orgId || epoch).
+// The epoch is fixed by the blockTime, not by the caller (see `report`).
 export ledger nullifiers: Set<Bytes<32>>;
 
-// autorias reveladas: H(dom || secretPersonal || denunciaId || fiscalPk)
-export ledger autorias: Set<Bytes<32>>;
+// Revealed authorships: H(dom || personalSecret || reportId || prosecutorPk)
+export ledger authorships: Set<Bytes<32>>;
 
-// ---- Witnesses: nunca salen de la maquina del denunciante ----
-// (el proof server corre LOCAL — spec §1)
+// ---- Witnesses: never leave the whistleblower's machine ----
+// (the proof server runs LOCALLY — spec §1)
 
-// Secret de la credencial entregada por la organizacion (mock).
-witness credencialSecret(): Bytes<32>;
+// Credential secret handed out by the organization (mock).
+witness credentialSecret(): Bytes<32>;
 
-// Hermanos del path de Merkle hacia la hoja de esta credencial.
-// Se obtiene off-chain con `credenciales.findPathForLeaf(hoja)`.
-witness credencialPath(): Vector<8, MerkleTreePathEntry>;
+// Merkle path siblings towards this credential's leaf.
+// Obtained off-chain with `credentials.findPathForLeaf(leaf)`.
+witness credentialPath(): Vector<8, MerkleTreePathEntry>;
 
-// Secret personal persistente del denunciante (independiente de la org).
-witness secretPersonal(): Bytes<32>;
+// The whistleblower's persistent personal secret (org-independent).
+witness personalSecret(): Bytes<32>;
 
-// Hash del archivo de evidencia, calculado LOCALMENTE por la app.
-// El archivo nunca se sube a ningun lado.
-witness evidenciaHash(): Bytes<32>;
+// Hash of the evidence file, computed LOCALLY by the app.
+// The file is never uploaded anywhere.
+witness evidenceHash(): Bytes<32>;
 
 // ---- Domain separation (spec/plan §2.2) ----
-// `nullifier` y `autoria` comparten shape y llevan un secret en la misma
-// posicion: sin tag de dominio, un atacante que registra una org con
-// orgId = denunciaId fuerza una colision cruzada entre ambos hashes.
-// `pad` exige literales, por eso los tags van como circuits helper.
+// `nullifier` and `authorship` share a shape and carry a secret in the
+// same position: without a domain tag, an attacker who registers an org
+// with orgId = reportId forces a cross collision between both hashes.
+// `pad` requires literals, hence the tags live in helper circuits.
 
 circuit domCred(): Bytes<32> {
-  return pad(32, "testigo:cred:v1");
+  return pad(32, "phantomtrace:cred:v1");
 }
 
 circuit domCredComm(): Bytes<32> {
-  return pad(32, "testigo:credcomm:v1");
+  return pad(32, "phantomtrace:credcomm:v1");
 }
 
-circuit domDenuncia(): Bytes<32> {
-  return pad(32, "testigo:denuncia:v1");
+circuit domReport(): Bytes<32> {
+  return pad(32, "phantomtrace:report:v1");
 }
 
 circuit domNullifier(): Bytes<32> {
-  return pad(32, "testigo:nullifier:v1");
+  return pad(32, "phantomtrace:nullifier:v1");
 }
 
-circuit domAutoria(): Bytes<32> {
-  return pad(32, "testigo:autoria:v1");
+circuit domAuthorship(): Bytes<32> {
+  return pad(32, "phantomtrace:authorship:v1");
 }
 
-// ---- Epocas de denuncia ----
-// El blockTime de Midnight es `secondsSinceEpoch` (segundos Unix), asi que
-// la duracion va EN SEGUNDOS. 86400 = 1 dia. Grueso a proposito: periodos
-// finos permiten correlacionar por timing (spec §6).
-circuit duracionEpoca(): Uint<64> {
+// ---- Reporting epochs ----
+// Midnight's blockTime is `secondsSinceEpoch` (Unix seconds), so the
+// duration is IN SECONDS. 86400 = 1 day. Deliberately coarse: fine
+// periods allow timing correlation (spec §6).
+circuit epochDuration(): Uint<64> {
   return 86400;
 }
 
-// ---- Pure circuits exportados ----
-// Aparecen en el TS generado bajo `pureCircuits`, asi que la app puede
-// recomputar denunciaId / nullifier / autoria / hoja localmente SIN proof
-// server. Es lo que hace que `verificarAutoria` sea 100 % off-chain.
+// ---- Exported pure circuits ----
+// They appear in the generated TS under `pureCircuits`, so the app can
+// recompute reportId / nullifier / authorship / leaf locally WITHOUT a
+// proof server. This is what makes `verify-authorship` 100% off-chain.
 
-// Commitment de la credencial. Es lo unico que el empleado le entrega al
-// emisor: la org nunca ve el `credencialSecret`.
-export pure circuit credCommitmentDe(credSecret: Bytes<32>): Bytes<32> {
+// The credential commitment. It is the only thing the employee hands to
+// the issuer: the org never sees the `credentialSecret`.
+export pure circuit credCommitmentOf(credSecret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([domCredComm(), credSecret]);
 }
 
-// La hoja liga la credencial A SU ORGANIZACION. Toma el COMMITMENT, no el
-// secret, para que `emitirCredencial` pueda reconstruirla en circuito a
-// partir del orgId que acaba de validar (ver la nota en emitirCredencial).
-export pure circuit hojaDe(orgId: Bytes<32>, credCommitment: Bytes<32>): Bytes<32> {
+// The leaf binds the credential TO ITS ORGANIZATION. It takes the
+// COMMITMENT, not the secret, so `issueCredential` can rebuild it
+// in-circuit from the orgId it just validated (see the note there).
+export pure circuit leafOf(orgId: Bytes<32>, credCommitment: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<3, Bytes<32>>>([domCred(), orgId, credCommitment]);
 }
 
-// El sellado de la denuncia: solo el autor conoce el preimagen.
-export pure circuit denunciaIdDe(ev: Bytes<32>, sec: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<3, Bytes<32>>>([domDenuncia(), ev, sec]);
+// The report seal: only the author knows the preimage.
+export pure circuit reportIdOf(ev: Bytes<32>, sec: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domReport(), ev, sec]);
 }
 
-// Anti-spam: una denuncia por (credencial, org, epoca).
-// `periodo` es el INDICE DE EPOCA (ver `duracionEpoca`), no una etiqueta
-// libre: el circuito `denunciar` lo obliga a ser la epoca en curso.
-export pure circuit nullifierDe(sec: Bytes<32>, orgId: Bytes<32>, periodo: Uint<64>): Bytes<32> {
+// Anti-spam: one report per (credential, org, epoch).
+// `period` is the EPOCH INDEX (see `epochDuration`), not a free label:
+// the `report` circuit forces it to be the current epoch.
+export pure circuit nullifierOf(sec: Bytes<32>, orgId: Bytes<32>, period: Uint<64>): Bytes<32> {
   return persistentHash<Vector<4, Bytes<32>>>(
-           [domNullifier(), sec, orgId, (periodo as Field) as Bytes<32>]
+           [domNullifier(), sec, orgId, (period as Field) as Bytes<32>]
            );
 }
 
-// Designated verifier: la autoria queda ligada a la clave de ESE fiscal.
-export pure circuit autoriaDe(sec: Bytes<32>, denunciaId: Bytes<32>, fiscalPk: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<4, Bytes<32>>>([domAutoria(), sec, denunciaId, fiscalPk]);
+// Designated verifier: authorship is bound to THAT prosecutor's key.
+export pure circuit authorshipOf(sec: Bytes<32>, reportId: Bytes<32>, prosecutorPk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([domAuthorship(), sec, reportId, prosecutorPk]);
 }
 
-// ---- 4.1 registrarOrganizacion (spec §4.1) ----
-// Sin witnesses. Idempotencia: falla si el orgId ya existe.
-export circuit registrarOrganizacion(orgId: Bytes<32>, ancla: Bytes<32>): [] {
-  assert(!organizaciones.member(disclose(orgId)), "organizacion ya registrada");
-  organizaciones.insert(disclose(orgId), disclose(ancla));
+// ---- 4.1 registerOrganization (spec §4.1) ----
+// No witnesses. Idempotence: fails if the orgId already exists.
+export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
+  assert(!organizations.member(disclose(orgId)), "organization already registered");
+  organizations.insert(disclose(orgId), disclose(anchor));
 }
 
-// ---- Auxiliar de la Opcion A: emision de credencial (emisor mock) ----
-// El emisor agrega la credencial de un empleado al arbol global. Recibe el
-// COMMITMENT (`credCommitmentDe(credSecret)`), no el secret: la org nunca
-// ve el secret del empleado.
+// ---- Option A helper: credential issuance (mock issuer) ----
+// The issuer adds an employee's credential to the global tree. It
+// receives the COMMITMENT (`credCommitmentOf(credSecret)`), not the
+// secret: the org never sees the employee's secret.
 //
-// La hoja se construye EN CIRCUITO con el mismo orgId que se acaba de
-// validar contra `organizaciones`. Si la hoja llegara ya calculada, el
-// assert de arriba seria decorativo: se podria pasar un orgId registrado y
-// colar la hoja de una organizacion que nunca se registro, y despues
-// denunciar en nombre de esa org fantasma. Construirla aca liga
-// insercion y validacion al MISMO orgId.
-export circuit emitirCredencial(orgId: Bytes<32>, credCommitment: Bytes<32>): [] {
-  assert(organizaciones.member(disclose(orgId)), "organizacion no registrada");
-  credenciales.insert(disclose(hojaDe(orgId, credCommitment)));
+// The leaf is built IN-CIRCUIT with the same orgId that was just
+// validated against `organizations`. If the leaf arrived precomputed,
+// the assert above would be decorative: one could pass a registered
+// orgId and smuggle in the leaf of an organization that never
+// registered, then report on behalf of that phantom org. Building it
+// here ties insertion and validation to the SAME orgId.
+export circuit issueCredential(orgId: Bytes<32>, credCommitment: Bytes<32>): [] {
+  assert(organizations.member(disclose(orgId)), "organization not registered");
+  credentials.insert(disclose(leafOf(orgId, credCommitment)));
 }
 
-// ---- 4.2 denunciar — el corazon (spec §4.2) ----
-// Publico: orgId, periodo (indice de epoca). Privado: credencial, path,
-// secret, evidencia.
-export circuit denunciar(orgId: Bytes<32>, periodo: Uint<64>): [] {
-  const cred = credencialSecret();
-  const hermanos = credencialPath();
-  const sec = secretPersonal();
-  const ev = evidenciaHash();
+// ---- 4.2 report — the heart (spec §4.2) ----
+// Public: orgId, period (epoch index). Private: credential, path,
+// secret, evidence.
+export circuit report(orgId: Bytes<32>, period: Uint<64>): [] {
+  const cred = credentialSecret();
+  const siblings = credentialPath();
+  const sec = personalSecret();
+  const ev = evidenceHash();
 
-  // C0 — el periodo NO lo elige libremente quien llama. Si fuera una
-  // etiqueta arbitraria, el nullifier seria evadible: la misma credencial
-  // genera N nullifiers distintos variando el periodo, y el anti-spam del
-  // spec §4.2/§6 no vale nada. Aca se obliga a que sea la epoca EN CURSO:
-  //   inicio <= blockTime < inicio + duracion   <=>   periodo == epoca actual
-  const inicio = (periodo as Field) * (duracionEpoca() as Field);
-  const fin = inicio + (duracionEpoca() as Field);
-  assert(blockTimeGte(disclose(inicio as Uint<64>)), "periodo aun no empezo");
-  assert(blockTimeLt(disclose(fin as Uint<64>)), "periodo ya vencido");
+  // C0 — the period is NOT freely chosen by the caller. If it were an
+  // arbitrary label, the nullifier would be evadable: the same
+  // credential yields N distinct nullifiers by varying the period, and
+  // the anti-spam of spec §4.2/§6 is worth nothing. Here it is forced
+  // to be the CURRENT epoch:
+  //   start <= blockTime < start + duration   <=>   period == current epoch
+  const windowStart = (period as Field) * (epochDuration() as Field);
+  const windowEnd = windowStart + (epochDuration() as Field);
+  assert(blockTimeGte(disclose(windowStart as Uint<64>)), "period not started yet");
+  assert(blockTimeLt(disclose(windowEnd as Uint<64>)), "period already over");
 
-  // C1 — pertenencia. La hoja se construye en circuito con el orgId
-  // publico: el witness no puede sustituirla por la de otra org.
-  const camino = MerkleTreePath<8, Bytes<32>> { leaf: hojaDe(orgId, credCommitmentDe(cred)),
-                                                path: hermanos };
-  const raiz = merkleTreePathRoot<8, Bytes<32>>(camino);
-  assert(credenciales.checkRoot(disclose(raiz)), "credencial no pertenece a la organizacion");
+  // C1 — membership. The leaf is built in-circuit from the public
+  // orgId: the witness cannot substitute another org's leaf.
+  const merklePath = MerkleTreePath<8, Bytes<32>> { leaf: leafOf(orgId, credCommitmentOf(cred)),
+                                                    path: siblings };
+  const root = merkleTreePathRoot<8, Bytes<32>>(merklePath);
+  assert(credentials.checkRoot(disclose(root)), "credential does not belong to the organization");
 
-  // C2 — anti-spam por periodo. Usa el secret DE LA CREDENCIAL (spec §5,
-  // Opcion A): una credencial = una denuncia por periodo. Periodos
-  // distintos producen nullifiers no linkeables entre si.
-  const nul = nullifierDe(cred, orgId, periodo);
-  assert(!nullifiers.member(disclose(nul)), "ya denunciaste este periodo");
+  // C2 — per-period anti-spam. Uses the CREDENTIAL's secret (spec §5,
+  // Option A): one credential = one report per period. Different
+  // periods produce nullifiers that are not linkable to each other.
+  const nullifier = nullifierOf(cred, orgId, period);
+  assert(!nullifiers.member(disclose(nullifier)), "already reported this period");
 
-  // El sellado usa el secret PERSONAL: es el que el denunciante guarda
-  // para poder probar autoria meses despues, sobreviva o no la credencial.
-  const id = denunciaIdDe(ev, sec);
-  // Guard de idempotencia: Set.insert es idempotente, sin este assert un
-  // re-envio de la misma denuncia pasaria en silencio.
-  assert(!denuncias.member(disclose(id)), "denuncia ya sellada");
+  // The seal uses the PERSONAL secret: the one the whistleblower keeps
+  // to prove authorship months later, whether the credential survives
+  // or not.
+  const id = reportIdOf(ev, sec);
+  // Idempotence guard: Set.insert is idempotent; without this assert a
+  // re-submission of the same report would pass silently.
+  assert(!reports.member(disclose(id)), "report already sealed");
 
-  denuncias.insert(disclose(id));
-  nullifiers.insert(disclose(nul));
+  reports.insert(disclose(id));
+  nullifiers.insert(disclose(nullifier));
 }
 
-// ---- 4.3 revelarAutoria — el diferencial (spec §4.3) ----
-// Publico: denunciaId, fiscalPk. Privado: evidencia y secret originales.
-export circuit revelarAutoria(denunciaId: Bytes<32>, fiscalPk: Bytes<32>): [] {
-  const sec = secretPersonal();
-  const ev = evidenciaHash();
+// ---- 4.3 revealAuthorship — the differentiator (spec §4.3) ----
+// Public: reportId, prosecutorPk. Private: original evidence and secret.
+export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [] {
+  const sec = personalSecret();
+  const ev = evidenceHash();
 
-  // C1 — solo el autor conoce el preimagen de denunciaId.
-  // Comparacion pura sobre valores witness: no requiere disclose().
-  assert(denunciaIdDe(ev, sec) == denunciaId, "no sos el autor");
+  // C1 — only the author knows the preimage of reportId.
+  // Pure comparison over witness values: no disclose() required.
+  assert(reportIdOf(ev, sec) == reportId, "not the author");
 
-  // C2 — la denuncia existe en el ledger.
-  assert(denuncias.member(disclose(denunciaId)), "denuncia inexistente");
+  // C2 — the report exists on the ledger.
+  assert(reports.member(disclose(reportId)), "report does not exist");
 
-  // Designated verifier: mostrado a otro fiscal (o al empleador) este
-  // registro no prueba nada — el hash esta ligado a fiscalPk.
-  const a = autoriaDe(sec, denunciaId, fiscalPk);
-  assert(!autorias.member(disclose(a)), "autoria ya revelada a este fiscal");
-  autorias.insert(disclose(a));
+  // Designated verifier: shown to another prosecutor (or the employer)
+  // this record proves nothing — the hash is bound to prosecutorPk.
+  const authorship = authorshipOf(sec, reportId, prosecutorPk);
+  assert(!authorships.member(disclose(authorship)), "authorship already revealed to this prosecutor");
+  authorships.insert(disclose(authorship));
 }

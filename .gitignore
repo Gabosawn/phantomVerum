@@ -35,11 +35,14 @@ docker-data/
 *.pem
 secrets/
 
-# Private state del SDK (LevelDB) — contiene estado privado del denunciante.
-# El default de levelPrivateStateProvider crea estos directorios en cuanto
-# corre el primer script con una seed real. NUNCA commitear.
+# SDK private state (LevelDB) — contains the whistleblower's private state.
+# levelPrivateStateProvider's default creates these directories as soon as
+# the first script runs with a real seed. NEVER commit.
 .private-state/
 **/.private-state/
 .states/
 **/.states/
 logs/
+
+# Build output of the ui/ apps
+ui/dist/

@@ -1,58 +1,58 @@
-// A.6 — smoke de los pure circuits del módulo TS generado.
-// Corre sin estado ni contexto: son funciones puras.
+// A.6 — smoke test of the pure circuits in the generated TS module.
+// Runs without state or context: they are pure functions.
 
-import { pureCircuits, b32, hex, check, resumen, EPOCA } from './harness.mjs';
+import { pureCircuits, b32, hex, check, summary, EPOCH } from './harness.mjs';
 
 const orgId = b32(0x11);
 const credSecret = b32(0x22);
-const evidencia = b32(0x33);
+const evidence = b32(0x33);
 const secret = b32(0x44);
-const fiscalPk = b32(0x66);
-const credComm = pureCircuits.credCommitmentDe(credSecret);
+const prosecutorPk = b32(0x66);
+const credComm = pureCircuits.credCommitmentOf(credSecret);
 
-const casos = [
-  ['credCommitmentDe', () => pureCircuits.credCommitmentDe(credSecret)],
-  ['hojaDe', () => pureCircuits.hojaDe(orgId, credComm)],
-  ['denunciaIdDe', () => pureCircuits.denunciaIdDe(evidencia, secret)],
-  ['nullifierDe', () => pureCircuits.nullifierDe(credSecret, orgId, EPOCA)],
-  ['autoriaDe', () => pureCircuits.autoriaDe(secret, b32(0x77), fiscalPk)],
+const cases = [
+  ['credCommitmentOf', () => pureCircuits.credCommitmentOf(credSecret)],
+  ['leafOf', () => pureCircuits.leafOf(orgId, credComm)],
+  ['reportIdOf', () => pureCircuits.reportIdOf(evidence, secret)],
+  ['nullifierOf', () => pureCircuits.nullifierOf(credSecret, orgId, EPOCH)],
+  ['authorshipOf', () => pureCircuits.authorshipOf(secret, b32(0x77), prosecutorPk)],
 ];
 
-console.log('=== 1. Los pure circuits devuelven Bytes<32> ===');
-const salidas = {};
-for (const [nombre, fn] of casos) {
+console.log('=== 1. The pure circuits return Bytes<32> ===');
+const outputs = {};
+for (const [name, fn] of cases) {
   const out = fn();
-  salidas[nombre] = out;
-  console.log(`${nombre.padEnd(17)} -> ${hex(out)}`);
-  check(`${nombre}: Uint8Array de 32 bytes`, out instanceof Uint8Array && out.length === 32);
+  outputs[name] = out;
+  console.log(`${name.padEnd(17)} -> ${hex(out)}`);
+  check(`${name}: Uint8Array of 32 bytes`, out instanceof Uint8Array && out.length === 32);
 }
 
-console.log('\n=== 2. Determinismo ===');
-for (const [nombre, fn] of casos) {
-  check(`${nombre}: determinista`, hex(fn()) === hex(salidas[nombre]));
+console.log('\n=== 2. Determinism ===');
+for (const [name, fn] of cases) {
+  check(`${name}: deterministic`, hex(fn()) === hex(outputs[name]));
 }
 
-console.log('\n=== 3. Sensibilidad a la entrada ===');
+console.log('\n=== 3. Input sensitivity ===');
 check(
-  'denunciaIdDe cambia con el secret',
-  hex(pureCircuits.denunciaIdDe(evidencia, b32(0x45))) !== hex(salidas.denunciaIdDe),
+  'reportIdOf changes with the secret',
+  hex(pureCircuits.reportIdOf(evidence, b32(0x45))) !== hex(outputs.reportIdOf),
 );
 check(
-  'nullifierDe cambia con la epoca',
-  hex(pureCircuits.nullifierDe(credSecret, orgId, EPOCA + 1n)) !== hex(salidas.nullifierDe),
+  'nullifierOf changes with the epoch',
+  hex(pureCircuits.nullifierOf(credSecret, orgId, EPOCH + 1n)) !== hex(outputs.nullifierOf),
 );
 
 console.log('\n=== 4. Domain separation (plan §2.2) ===');
-// Mismos inputs en las mismas posiciones, distinto tag de dominio: es el
-// ataque de colisión cruzada que describe el plan (registrar una org con
-// orgId = denunciaId). Los tags lo hacen imposible.
-const secComoBytes = b32(0x44);
-const a = pureCircuits.autoriaDe(secComoBytes, orgId, b32(0x66));
-const b = pureCircuits.denunciaIdDe(secComoBytes, orgId);
-check('autoriaDe != denunciaIdDe con inputs solapados', hex(a) !== hex(b));
+// Same inputs in the same positions, different domain tag: this is the
+// cross-collision attack the plan describes (registering an org with
+// orgId = reportId). The tags make it impossible.
+const secAsBytes = b32(0x44);
+const a = pureCircuits.authorshipOf(secAsBytes, orgId, b32(0x66));
+const b = pureCircuits.reportIdOf(secAsBytes, orgId);
+check('authorshipOf != reportIdOf with overlapping inputs', hex(a) !== hex(b));
 check(
-  'hojaDe(org, cred) != credCommitmentDe(cred)',
-  hex(pureCircuits.hojaDe(orgId, credComm)) !== hex(credComm),
+  'leafOf(org, cred) != credCommitmentOf(cred)',
+  hex(pureCircuits.leafOf(orgId, credComm)) !== hex(credComm),
 );
 
-resumen('smoke');
+summary('smoke');

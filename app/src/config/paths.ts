@@ -1,30 +1,30 @@
 /**
- * Rutas del repo que los módulos de config necesitan resolver en runtime.
+ * Repo paths the config modules need to resolve at runtime.
  *
- * Truco de resolución (vale para todo este directorio): tanto
- * `app/src/config/*.ts` como el compilado `app/dist/config/*.js` están DOS
- * niveles debajo de `app/`. Así que `new URL('../../', import.meta.url)` apunta
- * a `app/` corras el fuente o el build. Un solo cálculo, sin `process.cwd()`
- * (que depende de desde dónde se invoque el script).
+ * Resolution trick (valid for this whole directory): both
+ * `app/src/config/*.ts` and the compiled `app/dist/config/*.js` sit TWO
+ * levels under `app/`. So `new URL('../../', import.meta.url)` points at
+ * `app/` whether you run the source or the build. A single computation, no
+ * `process.cwd()` (which depends on where the script is invoked from).
  */
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-/** Directorio del workspace `app/`. */
+/** Directory of the `app/` workspace. */
 export const APP_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
-/** Raíz del repo (contiene `app/`, `contracts/`, `ui/`, `tests/`). */
+/** Repo root (contains `app/`, `contracts/`, `ui/`, `tests/`). */
 export const REPO_ROOT = path.resolve(APP_ROOT, '..');
 
 /**
- * Directorio con los artefactos del compilador Compact.
+ * Directory with the Compact compiler artifacts.
  *
- * Es el que consume `NodeZkConfigProvider`, que espera adentro:
- *   - `keys/<circuitId>.prover` y `keys/<circuitId>.verifier`
+ * It is the one `NodeZkConfigProvider` consumes, which expects inside:
+ *   - `keys/<circuitId>.prover` and `keys/<circuitId>.verifier`
  *   - `zkir/<circuitId>.bzkir`
- * (verificado en `midnight-js-node-zk-config-provider/dist/index.mjs`, 4.1.1).
+ * (verified in `midnight-js-node-zk-config-provider/dist/index.mjs`, 4.1.1).
  *
- * `contracts/output/` cumple exactamente ese layout. `ZK_CONFIG_PATH` lo pisa.
+ * `contracts/output/` matches that layout exactly. `ZK_CONFIG_PATH` overrides it.
  */
 export const zkConfigDirectory = (env: NodeJS.ProcessEnv = process.env): string => {
   const override = env.ZK_CONFIG_PATH?.trim();
@@ -34,7 +34,7 @@ export const zkConfigDirectory = (env: NodeJS.ProcessEnv = process.env): string 
   return path.resolve(REPO_ROOT, 'contracts', 'output');
 };
 
-/** `app/src/config/deployment.json` — la fuente commiteada de la address. */
+/** `app/src/config/deployment.json` — the committed source of the address. */
 export const deploymentJsonPath = (env: NodeJS.ProcessEnv = process.env): string => {
   const override = env.DEPLOYMENT_FILE?.trim();
   if (override !== undefined && override !== '') {
@@ -43,7 +43,7 @@ export const deploymentJsonPath = (env: NodeJS.ProcessEnv = process.env): string
   return path.resolve(APP_ROOT, 'src', 'config', 'deployment.json');
 };
 
-/** Directorio donde vive el LevelDB del private state. */
+/** Directory where the private state LevelDB lives. */
 export const privateStateDirectory = (env: NodeJS.ProcessEnv = process.env): string => {
   const override = env.PRIVATE_STATE_DIR?.trim();
   if (override !== undefined && override !== '') {

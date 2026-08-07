@@ -1,112 +1,112 @@
 /**
- * B3 — Punto de entrada de la API de Testigo.
+ * B3 — Entry point of the Testigo API.
  *
- * Es lo que consumen los scripts CLI de B4, `ui/` (bloque C) y `tests/`
- * (bloque D). Las firmas están congeladas en `docs/03-plan-ejecucion.md` §3.1.
+ * It is what the B4 CLI scripts, `ui/` (block C) and `tests/` (block D)
+ * consume. The signatures are frozen in `docs/03-plan-ejecucion.md` §3.1.
  *
- * Los dos caminos:
+ * The two paths:
  *
- *     // contra la red activa (NETWORK=preview|local)
- *     const api = await conectarContrato();
+ *     // against the active network (NETWORK=preview|local)
+ *     const api = await connectContract();
  *
- *     // contra el simulador local: sin red, sin proof server, sin tDUST
- *     const { api } = conectarSimulador();
+ *     // against the local simulator: no network, no proof server, no tDUST
+ *     const { api } = connectSimulator();
  *
- * De ahí para abajo el código es idéntico.
+ * From there down the code is identical.
  */
 
-// ── API principal ───────────────────────────────────────────────────────
+// ── Main API ────────────────────────────────────────────────────────────
 export {
-  ApiTestigo,
-  type ConfigApi,
-  type CredencialLocal,
-  type ResultadoDeploy,
-  conectarContrato,
-  conectarSimulador,
-  deployContrato,
+  TestigoApi,
+  type ApiConfig,
+  type LocalCredential,
+  type DeployResult,
+  connectContract,
+  connectSimulator,
+  deployContract,
 } from './testigo.js';
 
-// ── Off-chain: verificación y export (no necesitan wallet ni proof server) ──
+// ── Off-chain: verification and export (need no wallet nor proof server) ──
 export {
-  ExportInvalidoError,
-  SinSecretsDeLaDenunciaError,
-  exportarLlave,
-  parsearExportLlave,
-  verificarAutoria,
-} from './verificar.js';
+  InvalidExportError,
+  MissingReportSecretsError,
+  exportKey,
+  parseKeyExport,
+  verifyAuthorship,
+} from './verify.js';
 
-// ── Lectura del ledger ──────────────────────────────────────────────────
+// ── Ledger reading ──────────────────────────────────────────────────────
 export {
-  ContratoNoEncontradoError,
-  LectorIndexer,
-  crearLectorSoloLectura,
-  ledgerDesdeEstado,
-  leerEstadoLedger,
-  resumirLedger,
-  type OpcionesLectorSoloLectura,
+  ContractNotFoundError,
+  IndexerReader,
+  createReadOnlyReader,
+  ledgerFromState,
+  readLedgerState,
+  summarizeLedger,
+  type ReadOnlyReaderOptions,
 } from './ledger.js';
 
-// ── Ejecutores ──────────────────────────────────────────────────────────
+// ── Executors ───────────────────────────────────────────────────────────
 export {
-  type AlmacenEstadoPrivado,
-  type ArgsDeCircuito,
-  type CircuitoTestigo,
-  type EjecutorTestigo,
-  type LectorLedger,
-} from './ejecutor.js';
+  type PrivateStateStore,
+  type CircuitArgs,
+  type TestigoCircuit,
+  type TestigoExecutor,
+  type LedgerReader,
+} from './executor.js';
 export {
-  EjecutorSimulador,
-  type OpcionesSimulador,
-  crearEjecutorSimulador,
-} from './ejecutor-simulador.js';
+  SimulatorExecutor,
+  type SimulatorOptions,
+  createSimulatorExecutor,
+} from './executor-simulator.js';
 export {
-  EjecutorRed,
-  TAG_CONTRATO,
-  type ContratoCompilado,
-  type ContratoTestigo,
-  type OpcionesRed,
-  compilarContrato,
-} from './ejecutor-red.js';
+  NetworkExecutor,
+  CONTRACT_TAG,
+  type CompiledTestigoContract,
+  type TestigoContract,
+  type NetworkOptions,
+  compileContract,
+} from './executor-network.js';
 
-// ── Errores tipados ─────────────────────────────────────────────────────
+// ── Typed errors ────────────────────────────────────────────────────────
 export {
-  AutoriaYaReveladaError,
-  CredencialInvalidaError,
-  DenunciaInexistenteError,
-  DenunciaYaSelladaError,
-  ErrorDeCircuito,
-  ErrorTestigo,
-  NoSosElAutorError,
-  NullifierRepetidoError,
-  OrganizacionNoRegistradaError,
-  OrganizacionYaRegistradaError,
-  PeriodoInvalidoError,
-  TxRechazadaError,
-  fallóEnProofTime,
-  mapearErrorDeCircuito,
-  mensajesEncadenados,
-} from './errores.js';
+  AuthorshipAlreadyRevealedError,
+  InvalidCredentialError,
+  ReportDoesNotExistError,
+  ReportAlreadySealedError,
+  CircuitError,
+  TestigoError,
+  NotTheAuthorError,
+  RepeatedNullifierError,
+  OrganizationNotRegisteredError,
+  OrganizationAlreadyRegisteredError,
+  InvalidPeriodError,
+  TxRejectedError,
+  failedAtProofTime,
+  mapCircuitError,
+  chainedMessages,
+} from './errors.js';
 
-// ── Tipos congelados (§3.1 / §3.2) ──────────────────────────────────────
+// ── Frozen types (§3.1 / §3.2) ──────────────────────────────────────────
 export type {
-  Bytes32Entrada,
-  EstadoLedger,
-  ExportLlaveAutoria,
+  Bytes32Input,
+  LedgerState,
+  AuthorshipKeyExport,
   Hex32,
-  ParamsDenunciar,
-  ParamsEmitirCredencial,
-  ParamsRegistrarOrganizacion,
-  ParamsRevelarAutoria,
-  ResultadoDenunciar,
-  ResultadoEmitirCredencial,
-  ResultadoRevelarAutoria,
-  ResultadoVerificacion,
+  ReportParams,
+  IssueCredentialParams,
+  RegisterOrganizationParams,
+  RevealAuthorshipParams,
+  ReportResult,
+  IssueCredentialResult,
+  RevealAuthorshipResult,
+  VerificationResult,
   TxResult,
-} from './tipos.js';
+} from './types.js';
 
-// ── Re-exports de B2 que B4 necesita ────────────────────────────────────
-// Se re-exportan acá para que los scripts CLI tengan un solo import.
-export { DURACION_EPOCA_SEG, epocaActual, epocaDeSegundos } from '../witnesses/epoca.js';
-export { hashEvidenciaArchivo, hashEvidenciaBytes, resumenEvidencia } from '../witnesses/evidencia.js';
-export { aBytes32, aHex, bytesAleatorios32, comoBytes32, comoHex32, esHex32 } from '../witnesses/hex.js';
+// ── B2 re-exports that B4 needs ─────────────────────────────────────────
+// Re-exported here so the CLI scripts have a single import.
+export { EPOCH_DURATION_SEC, currentEpoch, epochOfSeconds } from '../witnesses/epoch.js';
+export { hashEvidenceFile, hashEvidenceBytes, evidenceSummary } from '../witnesses/evidence.js';
+export { toBytes32, toHex, randomBytes32, asBytes32, asHex32, isHex32 } from '../witnesses/hex.js';
 export { pureCircuits } from '../witnesses/index.js';

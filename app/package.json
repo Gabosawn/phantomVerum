@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Wiring TypeScript — witnesses, deploy, scripts CLI (Midnight Hack BA 2026)",
+  "description": "TypeScript wiring — witnesses, deploy, CLI scripts (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "if [ -n \"$(find src -name '*.ts' -print -quit)\" ]; then node ../node_modules/typescript/lib/tsc.js -p .; else echo '(app) no .ts under src yet — build skip'; fi",
-    "registrar-org": "node dist/scripts/registrar-org.js",
-    "emitir-credencial": "node dist/scripts/emitir-credencial.js",
-    "denunciar": "node dist/scripts/denunciar.js",
-    "revelar-autoria": "node dist/scripts/revelar-autoria.js",
-    "verificar-autoria": "node dist/scripts/verificar-autoria.js",
+    "build": "node ../node_modules/typescript/lib/tsc.js -p .",
+    "test": "npm run build && node dist/witnesses/selftest.js && node dist/witnesses/selftest-simulator.js && node dist/api/selftest-simulator.js",
+    "register-org": "node dist/scripts/register-org.js",
+    "issue-credential": "node dist/scripts/issue-credential.js",
+    "report": "node dist/scripts/report.js",
+    "reveal-authorship": "node dist/scripts/reveal-authorship.js",
+    "verify-authorship": "node dist/scripts/verify-authorship.js",
     "e2e": "node dist/scripts/e2e.js"
   },
   "dependencies": {
