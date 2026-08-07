@@ -62,4 +62,16 @@ curl -s http://localhost:6300/     # → {"status":"ok","timestamp":...}
 - **Proof server:** local process that generates proofs; witnesses travel
   only to it. **Never receives seed or signing keys.**
 - **Indexer (GraphQL):** sole path to read on-chain state (`queryContractState`,
-  balances). No direct reads without indexer.
+  balances). No direct reads without indexer. **Preview/Preprod hosted indexers
+  have an `offset: null` bug** — always query with an explicit offset or a raw
+  GraphQL query that omits the offset field. `app/src/config/providers.ts` wraps
+  the SDK provider to avoid this.
+
+## Dependency versions (verified against the support matrix)
+
+| Package | Version | Source |
+|---|---|---|
+| `@midnight-ntwrk/wallet-sdk` | `1.1.0` | `app/package.json` — pinned; verify against https://docs.midnight.network/relnotes/support-matrix for the Preview row. `npm view @midnight-ntwrk/wallet-sdk latest` returns `1.1.0` even though `1.2.0` is published — use `npm view … versions --json` and the matrix, not `latest`. |
+| `@midnight-ntwrk/compact-runtime` | `0.16.0` | Matches ledger-v8 8.1.0 |
+| `@midnight-ntwrk/ledger-v8` | `8.1.0` | Preview network target |
+| All `midnight-js-*` packages | `4.1.1` | SDK stack, consistent across `app/`, `tests/`, `ui/` |

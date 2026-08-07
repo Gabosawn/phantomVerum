@@ -9,7 +9,7 @@
     "compile:fast": "compact compile --skip-zk src/testigo.compact output/",
     "check:fallback": "compact compile --skip-zk src/fallback/testigo-b.compact output/fallback-check/",
     "format": "compact format src/testigo.compact src/fallback/testigo-b.compact",
-    "test": "node test/smoke.mjs && node test/merkle-roundtrip.mjs && node test/security-claims.mjs && node test/sec-audit.mjs",
+    "test": "node test/smoke.mjs && node test/merkle-roundtrip.mjs && node test/security-claims.mjs && node test/sec-audit.mjs && node test/transcript-privacy.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:e2e": "node test/merkle-roundtrip.mjs",
     "test:security": "node test/security-claims.mjs && node test/sec-audit.mjs",

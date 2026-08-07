@@ -23,6 +23,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
+import type { ContractState } from '@midnight-ntwrk/compact-runtime';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
@@ -247,14 +248,45 @@ export const privateStatePassword = (env: NodeJS.ProcessEnv = process.env): stri
 /**
  * Public data provider (indexer).
  *
+ * Patched to avoid the `offset: null` bug on hosted Preview/Preprod indexers:
+ * calling `queryContractState` without an offset triggers an internal error.
+ * We override `queryContractState` with a raw GraphQL query that omits the
+ * offset field entirely; every other method delegates to the SDK provider.
+ *
  * `indexerPublicDataProvider(queryURL, subscriptionURL, webSocketImpl?)` —
  * two URLs, not one: HTTP for queries, WebSocket for subscriptions.
  *
  * Needs no wallet or seed: it is the one `verifyAuthorship` (B3.6, 100%
  * off-chain) and `readLedgerState` (B3.7) use.
  */
-export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvider =>
-  indexerPublicDataProvider(network.indexer, network.indexerWS);
+export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvider => {
+  const base = indexerPublicDataProvider(network.indexer, network.indexerWS);
+  return {
+    ...base,
+    async queryContractState(address: string): Promise<ContractState | null> {
+      const res = await fetch(network.indexer, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: `
+            query LATEST_STATE($address: HexEncoded!) {
+              contractAction(address: $address) { state }
+            }
+          `,
+          variables: { address },
+        }),
+      });
+      const payload = (await res.json()) as {
+        data?: { contractAction?: { state: string } | null };
+        errors?: Array<{ message: string }>;
+      };
+      if (payload.errors?.length) {
+        throw new Error(payload.errors.map((e) => e.message).join('; '));
+      }
+      return (payload.data?.contractAction?.state as ContractState | undefined) ?? null;
+    },
+  };
+};
 
 /**
  * ZK artifacts provider, reading `contracts/output/`.
