@@ -159,11 +159,18 @@ registrarOrganizacion(p: { orgId: Hex32; ancla: Hex32 }): Promise<TxResult>;
 // ⚠️ CAMBIADO tras el review de seguridad (§3.4): el cliente genera el secret,
 // el emisor solo recibe la hoja. Antes devolvía credencialSecret → permitía al
 // emisor recomputar el nullifier de cualquier empleado y desanonimizarlo.
-emitirCredencial(p: { orgId: Hex32; hoja: Hex32 }): Promise<{ hojaIndex: number; tx: TxResult }>;
-  // el CLIENTE hace: credSecret = randomBytes(32); hoja = pureCircuits.hojaDe(orgId, credSecret)
-  // y manda SOLO la hoja. El emisor nunca ve credSecret.
+emitirCredencial(p: { orgId: Hex32; credCommitment: Hex32 }): Promise<{ hojaIndex: number; tx: TxResult }>;
+  // el CLIENTE hace: credSecret = randomBytes(32); credCommitment = pureCircuits.credCommitmentDe(credSecret)
+  // y manda SOLO el commitment. El emisor nunca ve credSecret.
+  // El contrato construye la hoja EN CIRCUITO: hojaDe(orgId, credCommitment) — así el
+  // orgId validado y el insertado son el mismo (fix de M-1: antes se forjaba
+  // credencial para una org nunca registrada).
 
-denunciar(p: { orgId: Hex32; periodo: string; evidencia: Uint8Array }):
+// ⚠️ `periodo` es Uint<64> = bigint (índice de época de 86400 s), NO el string
+// "2026-08". Atado al reloj de la cadena con blockTimeGte/blockTimeLt tras el
+// fix de H-1. La app calcula: BigInt(Math.floor(Date.now()/1000/86400)).
+// SEGUNDOS, no milisegundos (verificado contra BlockContext.secondsSinceEpoch).
+denunciar(p: { orgId: Hex32; periodo: bigint; evidencia: Uint8Array }):
   Promise<{ denunciaId: Hex32; nullifier: Hex32; secretDenuncia: Hex32; tx: TxResult }>;
   // hashea la evidencia LOCAL; lanza CredencialInvalidaError | NullifierRepetidoError (fallan en proof time, sin tx)
   // ⚠️ genera un secretDenuncia FRESCO por denuncia (nunca reusa uno global)
@@ -222,12 +229,17 @@ teóricos. Lo que cambia:
 
 | # | Hallazgo | Estado |
 |---|---|---|
-| H-1 | `periodo` es parámetro libre → 4 denuncias aceptadas con una credencial variando el período. El anti-spam es evadible | Fix de contrato en curso (pre-deploy = gratis) |
+| H-1 | `periodo` es parámetro libre → 4 denuncias aceptadas con una credencial variando el período. El anti-spam es evadible | ✅ **ARREGLADO** — `periodo: Uint<64>` índice de época atado a `blockTimeGte`/`blockTimeLt`, época de 86400 s. Solo la época actual es válida. Regresión: 0/3 denuncias extra aceptadas |
 | H-2 | El export contiene el witness set completo → **quien lo recibe puede actuar como el autor**: republicó autoría a la pk del empleador y quemó el slot de otro fiscal, bloqueando al autor real para siempre | Mitigado con secret por denuncia + reframe honesto |
 | H-3 | `secretPersonal` global reusado en todas las denuncias → un solo reveal desanonimiza retroactivamente todas | **Arreglado en §3.2** (secret por denuncia) |
 | H-4 | El emisor generaba `credencialSecret` → podía recomputar el nullifier de cualquier empleado y desanonimizarlo | **Arreglado en §3.1** (el cliente genera, manda solo la hoja) |
 | H-5 | La raíz de Merkle revelada es un contador de sincronización → acota el conjunto de anonimato | Regla de witness, abajo |
-| M-1 | `emitirCredencial` no liga `orgId` a la hoja: se forjó una credencial para una org no registrada | Fix de contrato en curso |
+| M-1 | `emitirCredencial` no liga `orgId` a la hoja: se forjó una credencial para una org no registrada | ✅ **ARREGLADO** — la hoja se construye en circuito con el `orgId` recién validado; nuevo `credCommitmentDe` con tag de dominio |
+
+**Suite de regresión adversarial: `npm test --workspace=contracts` → 47/47**, contra
+el contrato compilado real en el simulador (sin red, sin proof server, sin mocks
+— el mecanismo de §3.3). Los tests assertean el comportamiento *correcto*, así
+que si alguien reintroduce un hallazgo, fallan. Verde también desde clone limpio.
 
 **Reglas que B2 (witnesses) DEBE cumplir por H-5:**
 1. **Nunca cachear un Merkle path.** `findPathForLeaf` se llama contra el
