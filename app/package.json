@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Wiring TypeScript — witnesses, deploy, scripts CLI (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "tsc -p .",
+    "build": "if [ -n \"$(find src -name '*.ts' -print -quit)\" ]; then tsc -p .; else echo '(app) src/ sin .ts todavia — build skip'; fi",
     "registrar-org": "node dist/scripts/registrar-org.js",
     "emitir-credencial": "node dist/scripts/emitir-credencial.js",
     "denunciar": "node dist/scripts/denunciar.js",
