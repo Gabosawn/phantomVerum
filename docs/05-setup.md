@@ -56,7 +56,7 @@ claude mcp add --transport http midnight https://midnight.mcp.kapa.ai
 Kapa es el unico MCP necesario — responde consultas tecnicas sobre la documentacion
 oficial de Midnight. Con OpenCode, el `AGENTS.md` del repo mas Kapa cubren todo.
 
-Opcional, solo Claude Code: Midnight Expert (`curl -fsSL https://midnightntwrk.expert/install.sh | bash`) y Midskills (`npx skills add Kali-Decoder/Midnight-skills -a claude-code -y`).
+Opcional, solo Claude Code: Midnight Expert (`curl -fsSL https://midnightntwrk.expert/install.sh | bash`).
 
 ## Links
 

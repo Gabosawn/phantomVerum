@@ -44,3 +44,11 @@
 - https://docs.midnight.network — anti-bot: usa `<ruta>.md` o `llms.txt` (Mintlify)
 - Ejemplos: github.com/midnightntwrk (create-mn-app, example-zkloan, example-private-party)
 - Guia evento: https://midnightfoundation.notion.site/Hack-Buenos-Aires-Hacker-Guide-3a04057b9f2380e8a43afe3836f440e7
+
+## OpenCode Skills (instalados en el repo)
+- `compact` — lenguaje de contratos · `midnight-js` — SDK frontend
+- `testing` — tests · `indexer` — GraphQL queries
+- `midnight-security` — seguridad ZK · `midnight-environment-setup` — entorno
+- `midnight-transactions` — tx · `midnight-onchain-logic` — diseno de circuitos
+- `midnight-storage` — storage · `midnight-rpc` — conexion nodos
+- `react-wallet-connector` — integracion Lace en React
