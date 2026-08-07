@@ -42,8 +42,8 @@ npm run dev --workspace=ui         # starts the two apps + the visual system
 
 | URL | What it is |
 |---|---|
-| `localhost:3000` | **PhantomVerum Client** — runs on your machine. Dark. Has a proof server |
-| `localhost:3001` | **PhantomVerum Explorer** — the public ledger. Light. **No** proof server |
+| `localhost:3000` | **Phantom Trace Client** — runs on your machine. Dark. Has a proof server |
+| `localhost:3001` | **Phantom Trace Explorer** — the public ledger. Dark. **No** proof server |
 | `localhost:3002` | Visual system (palette, typography, assets) — reference for the deck |
 
 They are **two distinct origins on purpose**: the browser gives each its own
@@ -81,7 +81,7 @@ phantomtrace/
 │   └── src/
 │       ├── circuits/        #   per-circuit tests
 │       └── simulation/      #   E2E simulation of the 4 stages
-├── deck/                    # presentation material
+├── shared/                  # @phantomtrace/shared — the single TS impl of the 5 pure circuits
 └── docs/                    # idea, architecture, environment
 ```
 
@@ -90,7 +90,7 @@ phantomtrace/
 Midnight's dual ledger is not explained with a sign: it translates into **two
 separate programs**, with opposite visual registers and no shared state.
 
-**PhantomVerum Client** — dark, runs on your machine, has a proof server and
+**Phantom Trace Client** — dark, runs on your machine, has a proof server and
 keeps the witnesses.
 
 | View | What it does |
@@ -99,7 +99,7 @@ keeps the witnesses.
 | **Report** (T2) | You load the evidence — hashed **here**, with Web Crypto — pick org and period, and two hashes come out |
 | **Reveal authorship** (T4) | You load your key, choose before whom, and the proof gets bound to that public key |
 
-**PhantomVerum Explorer** — light, public, **no proof server**, and it says so
+**Phantom Trace Explorer** — dark, public, **no proof server**, and it says so
 in the footer: there is nothing private to process.
 
 | View | What it does |
@@ -124,10 +124,15 @@ declared upfront because the difference matters:
 | The circuit asserts: someone else's credential, a double report in the same period and a secret that is not the author's genuinely fail, before emitting anything | Proving times |
 | The ✅/❌ verdicts: a genuine local recomputation, not an `if` branch | The existence of a chain |
 
-The mocked part lives in exactly two files —`ui/shared/cripto.ts` and
-`ui/shared/servicio/ClienteMock.ts`— behind the `TestigoClient` interface.
-No view knows about them. `H` here is SHA-256; in the circuit it is
-`persistentHash`, so the values change at integration time.
+The mocked part lives in exactly one file — `ui/shared/servicio/ClienteMock.ts`
+— behind the `TestigoClient` interface. No view knows about it.
+
+`ui/shared/cripto.ts` is **not** a mock: it re-exports the five pure circuits
+from `@phantomtrace/shared/crypto`, which uses the same `persistentHash` the
+circuit uses, pinned digest by digest against the compiled contract by
+`tests/src/circuits/contract-agreement.test.ts`. The hashes the UI shows are
+the ones the chain would produce. The only SHA-256 left is `hashDeArchivo`,
+which hashes the evidence file — the same thing `app/`'s witnesses do.
 
 ## Tests
 

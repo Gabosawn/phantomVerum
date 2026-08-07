@@ -30,7 +30,7 @@ export const ALTURA_ACTUAL = 1_284_931;
 
 /** reportIdOf(hash de la evidencia, secret del denunciante de la demo). */
 export const DENUNCIA_DEMO: Hex32 =
-  "3ab5b5b6dd9be079019eb9a9bac9e939966bdbc0405c16313cb9aa1d1b6d50f4";
+  "56e4da144e489f73cfc304cc58b10be3511fc93e936f5c6561f1700a6c57336b";
 
 /** nullifierOf(credSecret de la demo, ORG_ID, DEMO_EPOCH). */
 export const NULLIFIER_DEMO: Hex32 =
@@ -38,7 +38,7 @@ export const NULLIFIER_DEMO: Hex32 =
 
 /** authorshipOf(secret, DENUNCIA_DEMO, pk de la Fiscalía). */
 export const AUTORIA_DEMO_PIA: Hex32 =
-  "aa30e0c322c45b4b41a73ea6d9066e728c1dcf03c13bdc2e8820a742ea068c0e";
+  "0f3532bfa6120ef5bf1d1f5b2c36bc368ac84c0d618dd84b4847aeed2c143646";
 
 /**
  * Tres denuncias del mismo período. La primera es la de la demo; las otras dos

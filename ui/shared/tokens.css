@@ -1,142 +1,152 @@
 /*
- * Sistema visual PhantomVerum — fuente: "PhantomVerum Sistema.dc.html".
+ * Sistema visual Phantom Trace — fuente: "phantom-trace-brand-manual.pdf".
  *
- * La regla que ordena todo: el dual-ledger de Midnight se traduce en dos
- * aplicaciones con registro visual opuesto. Cliente oscuro (corre en tu
- * máquina, tiene witnesses), Explorer claro (lee la cadena, no tiene nada
- * privado que procesar). Cada una puede invertirse para proyectar, pero
- * arranca en su registro nativo.
+ * Oscuridad operativa, luz quirúrgica. Fondo de vigilancia silenciosa donde
+ * el azul Pulse aparece sólo cuando hay algo que señalar: acción, sellado o
+ * dato vivo. El acento nunca decora, siempre significa detección.
  *
- * Dos fondos como máximo por pantalla. El violeta sólo para acción y sellado,
- * el verde sólo para autoría probada, el rojo sólo para el caso no designado.
- * Nada más lleva color.
+ * Dos aplicaciones separadas por el dual-ledger de Midnight — Cliente (corre
+ * en tu máquina, tiene witnesses) y Explorer (lee la cadena). Ambas arrancan
+ * oscuras (Void), alineadas con la marca; cada una puede invertirse para
+ * proyectar.
+ *
+ * Regla del manual: si una composición tiene más de 5% de Pulse, hay demasiado
+ * azul. El verde sólo para autoría probada, el rojo sólo para el caso no
+ * designado. Nada más lleva color.
  */
 
 /* ── Marca — constantes, no cambian con el tema ─────────────────────────── */
 :root {
-  --pv-violeta: #8b6df0;
-  --pv-profundo: #5b44c9;
-  --pv-lila: #c9b3f5;
-  --pv-slate: #454a75;
+  --pv-pulse: #2e6bff;
+  --pv-pulsehi: #7aa2ff;
+  --pv-navy: #0a1226;
+  --pv-panel: #12161f;
+  --pv-line: #1e2430;
+  --pv-steel: #5a6478;
+  --pv-bone: #edeae6;
+  --pv-void: #07090f;
+  --pv-graphite: #0e1219;
+
   --pv-probado: #12876e;
   --pv-rechazo: #c4453a;
 
   --pv-display: "Space Grotesk", system-ui, sans-serif;
-  --pv-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --pv-ui: "Inter", system-ui, sans-serif;
+  --pv-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* ── Cliente · oscuro por defecto ───────────────────────────────────────── */
+/* ── Cliente · oscuro por defecto ──────────────────────────────────────── */
 body[data-app="cliente"] {
-  --pv-body: #07080c;
-  --pv-surface: #14161f;
-  --pv-sunken: #0d0e15;
-  --pv-card: #1d2030;
-  --pv-term: #0d0e15;
-  --pv-text: #edeef5;
-  --pv-text2: #b6bcd4;
-  --pv-muted: #8a92b2;
-  --pv-dim: #5a6080;
-  --pv-accent: #c9b3f5;
+  --pv-body: #07090f;
+  --pv-surface: #0e1219;
+  --pv-sunken: #0a1226;
+  --pv-card: #12161f;
+  --pv-term: #0a1226;
+  --pv-text: #edeae6;
+  --pv-text2: #a7afc0;
+  --pv-muted: #5a6478;
+  --pv-dim: #454d5e;
+  --pv-accent: #7aa2ff;
   --pv-pos: #5fd0b4;
   --pv-posbg: #101c1a;
   --pv-neg: #ee7a6a;
-  --pv-hover: #1d2030;
+  --pv-hover: #12161f;
 
-  --pv-h10: rgba(201, 179, 245, 0.1);
-  --pv-h12: rgba(201, 179, 245, 0.12);
-  --pv-h16: rgba(201, 179, 245, 0.16);
-  --pv-h18: rgba(201, 179, 245, 0.18);
-  --pv-h20: rgba(201, 179, 245, 0.2);
-  --pv-h22: rgba(201, 179, 245, 0.22);
-  --pv-h25: rgba(201, 179, 245, 0.25);
-  --pv-h28: rgba(201, 179, 245, 0.28);
-  --pv-h30: rgba(201, 179, 245, 0.3);
-  --pv-h40: rgba(201, 179, 245, 0.4);
+  --pv-h10: rgba(237, 234, 230, 0.08);
+  --pv-h12: rgba(237, 234, 230, 0.1);
+  --pv-h16: rgba(237, 234, 230, 0.14);
+  --pv-h18: rgba(237, 234, 230, 0.16);
+  --pv-h20: rgba(237, 234, 230, 0.18);
+  --pv-h22: rgba(237, 234, 230, 0.2);
+  --pv-h25: rgba(237, 234, 230, 0.24);
+  --pv-h28: rgba(237, 234, 230, 0.26);
+  --pv-h30: rgba(237, 234, 230, 0.3);
+  --pv-h40: rgba(237, 234, 230, 0.42);
 }
 
 body[data-app="cliente"][data-tema="invertido"] {
-  --pv-body: #dddfe9;
-  --pv-surface: #f1f2f7;
-  --pv-sunken: #e5e7f0;
-  --pv-card: #fbfbfe;
-  --pv-term: #e5e7f0;
-  --pv-text: #171a28;
-  --pv-text2: #454a75;
-  --pv-muted: #6e7490;
-  --pv-dim: #8a92b2;
-  --pv-accent: #5b44c9;
+  --pv-body: #edeae6;
+  --pv-surface: #f4f4f1;
+  --pv-sunken: #e4e3df;
+  --pv-card: #fbfbfa;
+  --pv-term: #e4e3df;
+  --pv-text: #13171f;
+  --pv-text2: #454d5e;
+  --pv-muted: #5a6478;
+  --pv-dim: #7b8497;
+  --pv-accent: #2e6bff;
   --pv-pos: #12876e;
   --pv-posbg: #e4f0eb;
   --pv-neg: #c4453a;
-  --pv-hover: #fbfbfe;
+  --pv-hover: #fbfbfa;
 
-  --pv-h10: rgba(69, 74, 117, 0.1);
-  --pv-h12: rgba(69, 74, 117, 0.12);
-  --pv-h16: rgba(69, 74, 117, 0.16);
-  --pv-h18: rgba(69, 74, 117, 0.18);
-  --pv-h20: rgba(69, 74, 117, 0.2);
-  --pv-h22: rgba(69, 74, 117, 0.22);
-  --pv-h25: rgba(69, 74, 117, 0.26);
-  --pv-h28: rgba(69, 74, 117, 0.28);
-  --pv-h30: rgba(69, 74, 117, 0.3);
-  --pv-h40: rgba(69, 74, 117, 0.4);
+  --pv-h10: rgba(19, 23, 31, 0.08);
+  --pv-h12: rgba(19, 23, 31, 0.1);
+  --pv-h16: rgba(19, 23, 31, 0.13);
+  --pv-h18: rgba(19, 23, 31, 0.15);
+  --pv-h20: rgba(19, 23, 31, 0.18);
+  --pv-h22: rgba(19, 23, 31, 0.2);
+  --pv-h25: rgba(19, 23, 31, 0.24);
+  --pv-h28: rgba(19, 23, 31, 0.28);
+  --pv-h30: rgba(19, 23, 31, 0.3);
+  --pv-h40: rgba(19, 23, 31, 0.4);
 }
 
-/* ── Explorer · claro por defecto ───────────────────────────────────────── */
+/* ── Explorer · oscuro por defecto ─────────────────────────────────────── */
 body[data-app="explorer"] {
-  --pv-body: #dddfe9;
-  --pv-surface: #f1f2f7;
-  --pv-sunken: #e5e7f0;
-  --pv-card: #fbfbfe;
-  --pv-term: #e5e7f0;
-  --pv-text: #171a28;
-  --pv-text2: #454a75;
-  --pv-muted: #6e7490;
-  --pv-dim: #8a92b2;
-  --pv-accent: #5b44c9;
-  --pv-pos: #12876e;
-  --pv-posbg: #e4f0eb;
-  --pv-neg: #c4453a;
-  --pv-hover: #e5e7f0;
-
-  --pv-h10: rgba(69, 74, 117, 0.1);
-  --pv-h12: rgba(69, 74, 117, 0.12);
-  --pv-h16: rgba(69, 74, 117, 0.16);
-  --pv-h18: rgba(69, 74, 117, 0.18);
-  --pv-h20: rgba(69, 74, 117, 0.2);
-  --pv-h22: rgba(69, 74, 117, 0.22);
-  --pv-h25: rgba(69, 74, 117, 0.25);
-  --pv-h28: rgba(69, 74, 117, 0.28);
-  --pv-h30: rgba(69, 74, 117, 0.3);
-  --pv-h40: rgba(91, 68, 201, 0.4);
-}
-
-body[data-app="explorer"][data-tema="invertido"] {
-  --pv-body: #07080c;
-  --pv-surface: #1b1e2b;
-  --pv-sunken: #272c3e;
-  --pv-card: #222637;
-  --pv-term: #272c3e;
-  --pv-text: #edeef5;
-  --pv-text2: #b6bcd4;
-  --pv-muted: #969db6;
-  --pv-dim: #8a92b2;
-  --pv-accent: #c9b3f5;
+  --pv-body: #07090f;
+  --pv-surface: #0e1219;
+  --pv-sunken: #0a1226;
+  --pv-card: #12161f;
+  --pv-term: #0a1226;
+  --pv-text: #edeae6;
+  --pv-text2: #a7afc0;
+  --pv-muted: #5a6478;
+  --pv-dim: #454d5e;
+  --pv-accent: #7aa2ff;
   --pv-pos: #5fd0b4;
   --pv-posbg: #101c1a;
   --pv-neg: #ee7a6a;
-  --pv-hover: #272c3e;
+  --pv-hover: #12161f;
 
-  --pv-h10: rgba(201, 179, 245, 0.08);
-  --pv-h12: rgba(201, 179, 245, 0.1);
-  --pv-h16: rgba(201, 179, 245, 0.14);
-  --pv-h18: rgba(201, 179, 245, 0.16);
-  --pv-h20: rgba(201, 179, 245, 0.18);
-  --pv-h22: rgba(201, 179, 245, 0.2);
-  --pv-h25: rgba(201, 179, 245, 0.24);
-  --pv-h28: rgba(201, 179, 245, 0.26);
-  --pv-h30: rgba(201, 179, 245, 0.3);
-  --pv-h40: rgba(201, 179, 245, 0.45);
+  --pv-h10: rgba(237, 234, 230, 0.08);
+  --pv-h12: rgba(237, 234, 230, 0.1);
+  --pv-h16: rgba(237, 234, 230, 0.14);
+  --pv-h18: rgba(237, 234, 230, 0.16);
+  --pv-h20: rgba(237, 234, 230, 0.18);
+  --pv-h22: rgba(237, 234, 230, 0.2);
+  --pv-h25: rgba(237, 234, 230, 0.24);
+  --pv-h28: rgba(237, 234, 230, 0.26);
+  --pv-h30: rgba(237, 234, 230, 0.3);
+  --pv-h40: rgba(237, 234, 230, 0.42);
+}
+
+body[data-app="explorer"][data-tema="invertido"] {
+  --pv-body: #edeae6;
+  --pv-surface: #f4f4f1;
+  --pv-sunken: #e4e3df;
+  --pv-card: #fbfbfa;
+  --pv-term: #e4e3df;
+  --pv-text: #13171f;
+  --pv-text2: #454d5e;
+  --pv-muted: #5a6478;
+  --pv-dim: #7b8497;
+  --pv-accent: #2e6bff;
+  --pv-pos: #12876e;
+  --pv-posbg: #e4f0eb;
+  --pv-neg: #c4453a;
+  --pv-hover: #fbfbfa;
+
+  --pv-h10: rgba(19, 23, 31, 0.08);
+  --pv-h12: rgba(19, 23, 31, 0.1);
+  --pv-h16: rgba(19, 23, 31, 0.13);
+  --pv-h18: rgba(19, 23, 31, 0.15);
+  --pv-h20: rgba(19, 23, 31, 0.18);
+  --pv-h22: rgba(19, 23, 31, 0.2);
+  --pv-h25: rgba(19, 23, 31, 0.24);
+  --pv-h28: rgba(19, 23, 31, 0.28);
+  --pv-h30: rgba(19, 23, 31, 0.3);
+  --pv-h40: rgba(19, 23, 31, 0.4);
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */
@@ -147,7 +157,7 @@ body[data-app="explorer"][data-tema="invertido"] {
 body {
   margin: 0;
   background: var(--pv-body);
-  font-family: var(--pv-display);
+  font-family: var(--pv-ui);
   color: var(--pv-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -164,7 +174,7 @@ a:hover {
 }
 
 button {
-  font-family: var(--pv-display);
+  font-family: var(--pv-ui);
 }
 
 code {
@@ -174,7 +184,7 @@ code {
 /*
  * El diseño usa un atributo `style-hover` que no existe en React. Los seis
  * tratamientos de hover del sistema viven acá como clases; el resto de los
- * estilos sigue inline, igual que en el .dc.html.
+ * estilos sigue inline, igual que en el manual.
  */
 
 .pv-nav:hover {
@@ -182,9 +192,9 @@ code {
 }
 
 .pv-btn-primario {
-  background: var(--pv-violeta);
+  background: var(--pv-pulse);
   border: none;
-  color: #151520;
+  color: #0a1226;
   cursor: pointer;
 }
 .pv-btn-primario:hover {
@@ -195,7 +205,7 @@ code {
   opacity: 0.45;
 }
 .pv-btn-primario:disabled:hover {
-  background: var(--pv-violeta);
+  background: var(--pv-pulse);
 }
 
 .pv-btn-tinta {
@@ -220,7 +230,7 @@ code {
   cursor: pointer;
 }
 .pv-btn-fantasma:hover {
-  border-color: var(--pv-violeta);
+  border-color: var(--pv-pulse);
   color: var(--pv-text);
 }
 
@@ -228,7 +238,7 @@ code {
   cursor: pointer;
 }
 .pv-opcion:hover {
-  border-color: var(--pv-violeta);
+  border-color: var(--pv-pulse);
 }
 
 .pv-dropzone {
@@ -236,7 +246,7 @@ code {
 }
 .pv-dropzone:hover,
 .pv-dropzone[data-arrastrando="si"] {
-  border-color: var(--pv-violeta);
+  border-color: var(--pv-pulse);
   color: var(--pv-text);
 }
 

@@ -2,12 +2,12 @@ import type { CSSProperties, ReactNode } from "react";
 import { MONO, SG } from "./base";
 
 /**
- * `violeta` — la acción que firma y publica. Una por pantalla, nunca dos.
+ * `pulse`   — la acción que firma y publica. Una por pantalla, nunca dos.
  * `tinta`   — acciones fuertes que no tocan la cadena (descargar, comparar).
  * `fantasma`— controles de servicio: demo, reset, ocultar.
  */
 export function Boton({
-  variante = "violeta",
+  variante = "pulse",
   tamano = "grande",
   sub,
   children,
@@ -16,7 +16,7 @@ export function Boton({
   style,
   title,
 }: {
-  variante?: "violeta" | "tinta" | "fantasma";
+  variante?: "pulse" | "tinta" | "fantasma";
   tamano?: "grande" | "medio" | "chico";
   /** El nombre del circuito, en monoespaciado y atenuado. */
   sub?: ReactNode;
@@ -27,7 +27,7 @@ export function Boton({
   title?: string;
 }) {
   const clase =
-    variante === "violeta"
+    variante === "pulse"
       ? "pv-btn-primario"
       : variante === "tinta"
         ? "pv-btn-tinta"

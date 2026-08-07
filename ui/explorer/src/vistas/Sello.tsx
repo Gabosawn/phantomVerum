@@ -157,7 +157,7 @@ export function Sello() {
           maxWidth: "62ch",
         }}
       >
-        Honestidad para el Q&amp;A: PhantomVerum no prueba que el contenido sea <em>verdadero</em>.
+        Honestidad para el Q&amp;A: Phantom Trace no prueba que el contenido sea <em>verdadero</em>.
         Prueba que viene de adentro y que <strong>nadie lo tocó después</strong>. La veracidad la
         evalúa el fiscal, como siempre.
       </div>

@@ -2,8 +2,9 @@
 
 ## Stack
 - Compact (contracts) + TypeScript/React (dApp) + midnight-js (SDK)
-- Node 22+ · Compact Compiler 0.5.1 · Proof server local (Docker)
-- Target network: **Preview** (no devnet/testnet)
+- Node 22+ · Compact Compiler 0.31.1 (language 0.23.0, runtime 0.16.0) · Proof server local (Docker)
+- Target network: **Preview**. A local devnet is the rehearsal step before it —
+  see `docs/05-deploy-local.md`
 
 ## Monorepo structure (npm workspaces)
 ```
@@ -22,12 +23,14 @@ tests/       → @phantomtrace/tests      (Vitest + E2E simulation)
 - After installing: `compact update` is MANDATORY (downloads compactc and sets it as default).
   `compact --version` works even if it's missing — ALWAYS verify `compact compile --version`
 - Compile: `compact compile contract.compact output/` → generates JS/TS + zkir/
-- Proof server: `docker run -p 6300:6300 midnightntwrk/proof-server:latest midnight-proof-server -v`
-  (docker = podman alias on this machine, works the same)
+- Proof server: `docker run -d -p 6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server -v`
+  (pin the tag to 8.1.0 — `:latest` drifts away from ledger-v8 8.1.0.
+  This machine runs real Docker 29.6.2, not a podman alias)
 - Quick verification:
   - `which compact && compact --version && compact compile --version`
   - `ss -tlnp | grep 6300` (proof server listening)
-  - `curl -s http://localhost:6300/health` (or test a local deploy)
+  - `curl -s http://localhost:6300/` → `{"status":"ok","timestamp":...}`
+    (`/health` answers the same on 8.1.0; an unknown path 404s)
 
 ## Services
 - Node: ws://localhost:9944 (local) · wss://rpc.preview.midnight.network (preview)

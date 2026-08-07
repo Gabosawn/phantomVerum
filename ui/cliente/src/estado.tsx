@@ -280,11 +280,11 @@ function useEstado() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "phantomverum-autoria.key";
+    a.download = "phantom-trace-autoria.key";
     a.click();
     URL.revokeObjectURL(url);
     setLlaveGuardada(true);
-    log("phantomverum-autoria.key escrita en disco · secret + evidenciaHash");
+    log("phantom-trace-autoria.key escrita en disco · secret + evidenciaHash");
   }, [llave, log]);
 
   const cargarLlave = useCallback(
@@ -311,7 +311,7 @@ function useEstado() {
         });
         setFaseRevelar("idle");
         setAutoria(null);
-        log("phantomverum-autoria.key leída · witnesses restaurados en memoria local");
+        log("phantom-trace-autoria.key leída · witnesses restaurados en memoria local");
       } catch (e) {
         fallar(e);
       }

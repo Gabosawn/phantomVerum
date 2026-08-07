@@ -91,7 +91,7 @@ export function Denunciar() {
                   padding: "13px 15px",
                 }}
               >
-                <span style={{ font: `500 18px/1 ${MONO}`, color: "var(--pv-violeta)", flex: "none" }}>
+                <span style={{ font: `500 18px/1 ${MONO}`, color: "var(--pv-pulse)", flex: "none" }}>
                   ▤
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
@@ -183,7 +183,7 @@ export function Denunciar() {
       {e.faseDenuncia === "listo" && e.denuncia && (
         <>
           <div
-            style={{ border: "2px solid var(--pv-violeta)", background: "var(--pv-card)", position: "relative" }}
+            style={{ border: "2px solid var(--pv-pulse)", background: "var(--pv-card)", position: "relative" }}
           >
             <div
               style={{
@@ -209,9 +209,32 @@ export function Denunciar() {
                 paddingRight: 124,
               }}
             >
+              <div
+                style={{
+                  font: `600 clamp(22px, 2.2vw, 30px)/1.15 ${SG}`,
+                  letterSpacing: "-.03em",
+                  maxWidth: "26ch",
+                }}
+              >
+                Tu rastro quedó registrado.
+              </div>
               <Campo etiqueta="denunciaId" valor={completo(e.denuncia.denunciaId)} tamano={17} />
               <Campo etiqueta="nullifier" valor={completo(e.denuncia.nullifier)} tamano={17} />
               <div style={{ height: 1, background: "var(--pv-h16)" }} />
+              <div
+                style={{
+                  display: "flex",
+                  gap: 11,
+                  alignItems: "baseline",
+                  font: `500 12.5px/1.6 ${MONO}`,
+                  color: "var(--pv-muted)",
+                }}
+              >
+                <span style={{ color: "var(--pv-pos)", flex: "none" }}>✓</span>
+                <span>
+                  identidad <span style={{ color: "var(--pv-dim)" }}>· nunca on-chain</span>
+                </span>
+              </div>
               <div
                 className="pv-hex"
                 style={{ font: `500 12.5px/1.6 ${MONO}`, color: "var(--pv-muted)" }}
@@ -259,7 +282,7 @@ export function Denunciar() {
               </p>
               {!e.llaveGuardada ? (
                 <Boton variante="tinta" tamano="medio" onClick={e.guardarLlave}>
-                  ↓ Descargar phantomverum-autoria.key
+                  ↓ Descargar phantom-trace-autoria.key
                 </Boton>
               ) : (
                 <div
