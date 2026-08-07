@@ -147,23 +147,17 @@ function useEstado() {
   // The commitment derivation happens on the EMPLOYEE's side: the issuer only
   // ever receives `credCommitmentOf(credSecret)`, never the secret itself.
   useEffect(() => {
-    let vigente = true;
-    Promise.all(
-      DIRECTORIO.map(async (emp) => {
-        const credCommitment = await credCommitmentOf(emp.credencialSecret);
+    setDirectorioConHojas(
+      DIRECTORIO.map((emp) => {
+        const credCommitment = credCommitmentOf(emp.credencialSecret);
         return {
           nombre: emp.nombre,
           rol: emp.rol,
           credCommitment,
-          hoja: await leafOf(ORG_ID, credCommitment),
+          hoja: leafOf(ORG_ID, credCommitment),
         };
       }),
-    ).then((conHojas) => {
-      if (vigente) setDirectorioConHojas(conHojas);
-    });
-    return () => {
-      vigente = false;
-    };
+    );
   }, []);
 
   useEffect(() => {
@@ -201,7 +195,7 @@ function useEstado() {
       for (const empleado of DIRECTORIO) {
         await cliente.emitirCredencial({
           orgId: ORG_ID,
-          credCommitment: await credCommitmentOf(empleado.credencialSecret),
+          credCommitment: credCommitmentOf(empleado.credencialSecret),
         });
       }
       setHojasEmitidas(cliente.instantanea().credenciales.length);

@@ -133,7 +133,7 @@ function useEstado() {
    */
   const verificarSello = useCallback(async () => {
     if (!documento || !material) return;
-    const recomputado = await reportIdOf(documento.hash, material.secret);
+    const recomputado = reportIdOf(documento.hash, material.secret);
     setSelloRecomputado(recomputado);
     const enCadena = DENUNCIAS.some((d) => d.denunciaId === recomputado);
     setVeredictoSello(recomputado === material.denunciaId && enCadena ? "ok" : "fail");

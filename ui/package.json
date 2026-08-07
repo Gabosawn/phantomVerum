@@ -5,20 +5,23 @@
   "type": "module",
   "description": "PhantomVerum — Cliente (local, privado) + Explorer (público) + Sistema visual",
   "scripts": {
-    "dev": "node ../node_modules/concurrently/dist/bin/concurrently.js -n cliente,explorer,sistema -c magenta,cyan,gray \"npm:dev:cliente\" \"npm:dev:explorer\" \"npm:dev:sistema\"",
-    "dev:cliente": "node ../node_modules/vite/bin/vite.js --config vite.cliente.config.ts",
-    "dev:explorer": "node ../node_modules/vite/bin/vite.js --config vite.explorer.config.ts",
-    "dev:sistema": "node ../node_modules/vite/bin/vite.js --config vite.sistema.config.ts",
-    "build": "node ../node_modules/typescript/lib/tsc.js --noEmit && npm run build:cliente && npm run build:explorer && npm run build:sistema",
-    "build:cliente": "node ../node_modules/vite/bin/vite.js build --config vite.cliente.config.ts",
-    "build:explorer": "node ../node_modules/vite/bin/vite.js build --config vite.explorer.config.ts",
-    "build:sistema": "node ../node_modules/vite/bin/vite.js build --config vite.sistema.config.ts",
-    "test": "node ../node_modules/vitest/vitest.mjs run",
-    "test:watch": "node ../node_modules/vitest/vitest.mjs"
+    "dev": "npm run build:shared && concurrently -n cliente,explorer,sistema -c magenta,cyan,gray \"npm:dev:cliente\" \"npm:dev:explorer\" \"npm:dev:sistema\"",
+    "dev:cliente": "vite --config vite.cliente.config.ts",
+    "dev:explorer": "vite --config vite.explorer.config.ts",
+    "dev:sistema": "vite --config vite.sistema.config.ts",
+    "build": "npm run build:shared && tsc --noEmit && npm run build:cliente && npm run build:explorer && npm run build:sistema",
+    "build:cliente": "vite build --config vite.cliente.config.ts",
+    "build:explorer": "vite build --config vite.explorer.config.ts",
+    "build:sistema": "vite build --config vite.sistema.config.ts",
+    "build:shared": "npm run build --workspace=@phantomtrace/shared",
+    "test": "npm run build:shared && vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.1.0",
     "@fontsource/space-grotesk": "^5.1.0",
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@phantomtrace/shared": "0.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
@@ -29,6 +32,8 @@
     "concurrently": "^9.1.0",
     "typescript": "^5.5.0",
     "vite": "^6.0.0",
-    "vitest": "^2.0.0"
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.6.0",
+    "vitest": "^4.1.10"
   }
 }

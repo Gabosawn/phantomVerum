@@ -78,8 +78,8 @@ export const witnesses = {
    * so the witness cannot choose which leaf gets proven.
    *
    * It takes no argument, which means it has to work out its own leaf. That is why `orgId`
-   * lives in the private state: `leafOf(orgId, credCommitmentOf(credentialSecret))` is the leaf
-   * this reporter can legitimately produce a path for (matches in-circuit construction).
+   * lives in the private state: `leafOf(orgId, credCommitmentOf(credSecret))` is the leaf this
+   * reporter can legitimately produce a path for — the same commitment the issuer was handed.
    */
   credentialPath: (ctx: WitnessCtx): [TestigoPrivateState, MerkleTreePathEntry[]] => {
     const { orgIdHex, credentialSecretHex } = ctx.privateState;
