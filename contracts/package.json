@@ -5,6 +5,9 @@
   "description": "Contratos Compact — Testigo (Midnight Hack BA 2026)",
   "scripts": {
     "compile": "compact compile src/testigo.compact output/",
+    "compile:fast": "compact compile --skip-zk src/testigo.compact output/",
+    "check:fallback": "compact compile --skip-zk src/fallback/testigo-b.compact output/fallback-check/",
+    "format": "compact format src/testigo.compact src/fallback/testigo-b.compact",
     "clean": "rm -rf output/ zkir/"
   }
 }
