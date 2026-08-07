@@ -1,85 +1,84 @@
-# 00 — Testigo: la idea
+# 00 — PhantomTrace: the idea
 
-## 1. La idea en una frase
+## 1. The idea in one sentence
 
-**Testigo** es un sistema de denuncias de corrupción donde el denunciante
-prueba que es de adentro de la organización sin revelar quién es, la evidencia
-queda sellada e inalterable — y, a diferencia de **todos** los sistemas que
-existen, **el anonimato es reversible: solo por el denunciante, solo ante la
-autoridad que él elija, solo cuando le convenga.**
+**PhantomTrace** is a corruption reporting system where the whistleblower
+proves they are an insider without revealing who they are, the evidence
+is sealed and immutable — and, unlike **all** existing systems,
+**the anonymity is reversible: only by the whistleblower, only before the
+authority they choose, only when it suits them.**
 
-El nombre es literal: en Midnight, el estado privado se llama `witness` —
-testigo.
+The name is literal: in Midnight, the private state is called `witness` —
+witness.
 
-## 2. El problema
+## 2. The problem
 
-Quien descubre fraude dentro de su organización necesita tres cosas hoy
-incompatibles entre sí:
+Whoever discovers fraud within their organization today needs three things
+that are incompatible with each other:
 
-1. **Probar que es de adentro** — si no, es un rumor anónimo sin valor.
-2. **Evidencia inalterable** — que ni él ni la empresa puedan cambiarla después.
-3. **Que nadie sepa quién es** — probar pertenencia es achicar la lista de
-   sospechosos.
+1. **Prove they are an insider** — otherwise, it's a worthless anonymous rumor.
+2. **Unalterable evidence** — that neither they nor the company can change later.
+3. **That nobody knows who they are** — proving membership narrows the list of
+   suspects.
 
-Y una cuarta que ningún sistema existente resuelve: **la protección legal real
-exige revelar la identidad tarde o temprano.** El programa de recompensas de la
-SEC paga 10–30 % de la multa *solo a quien demuestra haber sido el primero en
-reportar*. Hay que poder probar "esa denuncia la escribí yo" — sin que esa
-prueba pueda caer en manos del empleador.
+And a fourth that no existing system solves: **real legal protection
+requires revealing one's identity sooner or later.** The SEC whistleblower
+program pays 10–30 % of the fine *only to whoever proves they were the first to
+report*. You need to be able to prove "I wrote that report" — without that
+proof ever falling into the employer's hands.
 
-## 3. Cómo funciona
+## 3. How it works
 
-Tres circuitos Compact sobre el modelo dual-ledger de Midnight (detalle en
+Three Compact circuits on Midnight's dual-ledger model (detail in
 `01-arquitectura.md`):
 
-1. **`registrarOrganizacion`** — la organización publica el ancla de sus
-   credenciales en el ledger público.
-2. **`denunciar`** — el corazón. Verifica *en privado* que el denunciante tiene
-   credencial válida de esa organización y publica solo dos cosas: el hash de
-   la evidencia (sellado) y un nullifier anti-spam (una denuncia por persona,
-   por organización, por período). Identidad, credencial y evidencia nunca
-   tocan la cadena.
-3. **`revelarAutoria`** — el diferencial. Meses después, el denunciante prueba
-   ante un fiscal que él escribió *esa* denuncia, sin revelar la evidencia ni
-   su secret, **ligando la prueba a la clave pública del fiscal** (*designated
-   verifier*): mostrada a cualquier otro — por ejemplo al empleador — no prueba
-   nada.
+1. **`registerOrganization`** — the organization publishes the anchor of its
+   credentials on the public ledger.
+2. **`report`** — the core. Verifies *privately* that the whistleblower has a
+   valid credential for that organization and publishes only two things: the
+   evidence hash (sealed) and an anti-spam nullifier (one report per person,
+   per organization, per period). Identity, credential, and evidence never
+   touch the chain.
+3. **`revealAuthorship`** — the differentiator. Months later, the whistleblower
+   proves to a prosecutor that they wrote *that* report, without revealing the
+   evidence or their secret, **binding the proof to the prosecutor's public key**
+   (*designated verifier*): shown to anyone else — the employer, for instance
+   — it proves nothing.
 
-**Flujo de cuatro tiempos:** (1) la organización se registra → (2) un empleado
-denuncia y la empresa mira el ledger sin poder saber quién fue → (3) la empresa
-intenta alterar la evidencia y no puede → (4) meses después, el denunciante
-prueba autoría ante el fiscal y obtiene protección legal.
+**Four stages:** (1) the organization registers → (2) an employee reports and
+the company looks at the ledger without being able to know who did it → (3) the
+company tries to alter the evidence and cannot → (4) months later, the
+whistleblower proves authorship to the prosecutor and obtains legal protection.
 
-## 4. El diferencial — verificado, no supuesto
+## 4. The differentiator — verified, not assumed
 
-**La idea base ya existe; el diferencial, no — en ninguna chain.**
+**The base idea already exists; the differentiator does not — on any chain.**
 
-| Proyecto | Dónde | ¿Buzón anónimo? | ¿Autoría diferida? |
+| Project | Where | Anonymous mailbox? | Delayed authorship? |
 |---|---|---|---|
-| midnight-whistleblower (depapp) | Midnight — ganó el challenge oficial en DEV.to | ✅ | ❌ |
-| Dawn | Midnight — ganó "Protect That Data" | ✅ | ❌ (irrecuperable por diseño) |
+| midnight-whistleblower (depapp) | Midnight — won the official challenge on DEV.to | ✅ | ❌ |
+| Dawn | Midnight — won "Protect That Data" | ✅ | ❌ (irrecoverable by design) |
 | SpillSafe | Midnight — Devpost 2025 | ✅ | ❌ |
-| ZK Whistleblower | Catalyst Fund 15 (pendiente) | ✅ | ❌ |
+| ZK Whistleblower | Catalyst Fund 15 (pending) | ✅ | ❌ |
 | StealthNote / Semaphore / ZK-Whistle | Aztec / Ethereum / Scroll | ✅ | ❌ |
-| Papers académicos 2023–2025 | MDPI, PriRPT | — | ✅ solo en teoría |
+| Academic papers 2023–2025 | MDPI, PriRPT | — | ✅ only in theory |
 
-La revelación de autoría diferida existe únicamente en papers. **Nadie la
-shippeó.** Acá se shippea, con el refinamiento que la literatura recomienda
+Delayed authorship disclosure exists only in papers. **Nobody has shipped it.**
+We are shipping it here, with the refinement the literature recommends
 (designated verifier).
 
-Segundo diferencial verificado: **el anonimato aguanta la pregunta difícil.**
-Las transacciones de Midnight no tienen `msg.sender` — los contract calls se
-autorizan por prueba ZK y los fees se pagan shielded. Límites honestos: el
-indexer ve viewing key e IP (mitigación: proof server local, Tor/nodo propio).
+Second verified differentiator: **the anonymity holds up to the hard question.**
+Midnight transactions have no `msg.sender` — contract calls are authorized by
+ZK proof and fees are paid shielded. Honest limits: the indexer sees viewing
+key and IP (mitigation: local proof server, Tor/own node).
 
-## 5. Qué NO es (limitaciones declaradas)
+## 5. What it is NOT (stated limitations)
 
-- **El emisor de credenciales es mock**, igual que en todos los proyectos
-  comparables. El sistema valida el flujo ZK; la integración con un directorio
-  corporativo real es roadmap.
-- **No prueba que la denuncia sea verdadera.** Prueba que viene de adentro y
-  que no fue alterada. La veracidad del contenido es un problema humano.
-- **El anonimato on-chain está verificado; el off-chain tiene límites
-  conocidos** (indexer ve viewing key e IP). Mitigaciones declaradas: proof
-  server local, Tor/nodo propio, roadmap de fee-sponsor vía
-  `Transaction.merge`.
+- **The credential issuer is a mock**, same as in all comparable projects. The
+  system validates the ZK flow; integration with a real corporate directory is
+  roadmap.
+- **It does not prove that the report is truthful.** It proves it comes from an
+  insider and was not altered. Content veracity is a human problem.
+- **On-chain anonymity is verified; off-chain has known limits** (indexer sees
+  viewing key and IP). Declared mitigations: local proof server, Tor/own node,
+  fee-sponsor roadmap via `Transaction.merge`.
