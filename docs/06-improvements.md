@@ -1,236 +1,77 @@
 # 06 — Improvements backlog
 
 > Findings from an external audit run on Fri 7/8 (~20:30): official Midnight docs,
-> npm registry, the Docker Hub tags, the eight competing repos published today under
-> the `midnightntwrk` topic, and this repository's own source.
+> npm registry, Docker Hub tags, the eight competing repos published today under the
+> `midnightntwrk` topic, and this repository's own source.
 >
-> **Every item below was re-verified against the current tree after the English
-> translation.** One finding from the first pass turned out to be false and is
-> recorded as such at the bottom — do not re-investigate it. Every `file:line`
-> reference here was opened and confirmed; if one drifts, fix the reference rather
-> than deleting the item.
+> **Revised ~21:15 after a second verification pass.** The first draft of this file
+> over-rated several items. Four were downgraded or dropped once their premises were
+> actually checked against the tree — the reasoning is kept at the bottom so nobody
+> re-raises them. What survives is one item that genuinely matters and two cheap
+> deck wins.
 >
-> Split by owner so nobody has to read the other two sections. Priorities are
-> **P1** (before the Preview deploy), **P2** (today), **P3** (roadmap slide only).
+> **The honest headline: this project does not need most of this. It needs B5.**
+> `app/src/config/deployment.json` is still all `null`. Engineering + QA is 55% of
+> the rubric, and our own analysis of prior editions concluded that a real deploy
+> was the difference between the $3,500 winner and the $500 one. Nothing in this
+> file moves that. Treat it as a place to stop thinking about these findings until
+> the contract is live.
 
-| Owner | Area | Items |
+| Owner | Load | Items |
 |---|---|---|
-| **Juan** | `app/` — Block B wiring | J1 · J2 |
-| **snattydev** | `contracts/`, test suites | S1 · S2 · S3 |
-| **gabosawn** | docs, UI, deck | G1 · G2 · G3 |
+| **snattydev** | ~15 min | S1 — the only thing here that matters |
+| **gabosawn** | ~10 min | G1 · G2 — deck lines, no code |
+| **Juan** | **nothing** | On the critical path (B5). See §3. |
 
 ---
 
-## Section 1 — Juan (`app/`)
+## Section 1 — snattydev · the one item worth doing now
 
-### J1 · P1 · Patch the indexer `offset: null` bug
+### S1 · P1 · Declare the anonymity set is countable, and bounded per organization
 
-- [ ] **P1** Wrap `buildPublicDataProvider` so "read latest contract state" never hits the SDK's no-offset path
+- [ ] **P1** Add to the declared-limitations section of `contracts/README.md` (~134-151)
 
-**Why this is first.** This is the only finding that can cost the deploy. The bug
-does **not** reproduce against a local devnet — it only fires against the *hosted*
-Preview/Preprod indexers. So it stays invisible through every local test and then
-surfaces during the real deploy looking like "the contract isn't readable", which is
-the worst possible moment to start debugging it.
+**This is a product-level weakness, not a code defect, and it is currently
+undeclared.**
 
-**Where it lives.** `app/src/config/providers.ts:256-257` builds the provider with
-the SDK default and no wrapper:
-
-```ts
-export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvider =>
-  indexerPublicDataProvider(network.indexer, network.indexerWS);
-```
-
-`queryContractState` is then called with no offset argument in three places:
-
-| File | Line |
-|---|---|
-| `app/src/api/ledger.ts` | 63 |
-| `app/src/api/executor-network.ts` | 216 |
-| `app/src/config/smoke.ts` | 169 |
-
-Aggravating factor: `app/src/config/networks.ts:63` sets
-`DEFAULT_NETWORK = 'preview'`, so the hosted indexer is the default path, not an
-opt-in.
-
-**The fix.** `.agents/skills/indexer/SKILL.md` §2 documents it: calling
-`contractAction` / `queryContractState` *without* an offset triggers an internal
-error on the hosted indexers. Passing an explicit `offset` works, and so does a
-plain GraphQL query that omits the field entirely. Use the latter for "get latest":
-
-```graphql
-query LATEST_STATE($address: HexEncoded!) {
-  contractAction(address: $address) { state }
-}
-```
-
-Wrap it as a patched provider (delegate everything else to the SDK object) so the
-three call sites stay unchanged. Roughly 15 lines.
-
-**✓ Acceptance:** with `NETWORK=preview`, reading ledger state returns the state
-without a GraphQL error. Ideally add the failing-then-passing check to
-`app/src/config/smoke.ts`, which already reports on this exact call.
-
-### J2 · P2 · Settle the `wallet-sdk` version
-
-- [ ] **P2** Verify against the official support matrix, then pin deliberately
-
-`app/package.json:28` pins `@midnight-ntwrk/wallet-sdk` at `1.1.0`. The audit
-reported that the Preview support matrix asks for `1.2.0`, but **that could not be
-confirmed from inside this repo** — treat it as unverified until someone opens
-`docs.midnight.network/relnotes/support-matrix` and reads the Preview row.
-
-Important trap: npm's `latest` dist-tag for this package points at `1.1.0` even
-though `1.2.0` is published, so `npm view @midnight-ntwrk/wallet-sdk version`
-returns the wrong answer. Use `npm view … versions --json` and the matrix, not
-`latest`.
-
-**✓ Acceptance:** the chosen version and its source are written into
-`docs/02-entorno.md`, so nobody re-litigates it.
-
-> **Verified clean — no action, just don't undo it.** No `@midnight-ntwrk/wallet`,
-> `wallet-api` or `zswap` appears in any of the six `package.json` files. Those are
-> the previous generation (unpublished for ~a year); mixing them with `ledger-v8`
-> risks loading two WASM ledger implementations at once. If a snippet from an older
-> tutorial tells you to add them, don't.
-
----
-
-## Section 2 — snattydev (`contracts/`, tests)
-
-### S1 · P1 · Repair and wire up the transcript-privacy test
-
-- [ ] **P1** Fix the broken file, translate it, hook it into `contracts/package.json`
-
-**State.** `contracts/test/transcript-org-anonimato.mjs` exists **untracked and
-broken**. It was written against the pre-translation Spanish API and currently dies
-at import time:
-
-```
-SyntaxError: The requested module './harness.mjs' does not provide an export named 'EPOCA'
-```
-
-**This is a rename, not a rewrite** — the harness shape did not change, only its
-identifiers:
-
-| Broken | Current |
-|---|---|
-| `nuevoMundo` | `newWorld` |
-| `callComo` | `callAs` |
-| `resumen` | `summary` |
-| `EPOCA` | `EPOCH` |
-| `'denunciar'` | `'report'` |
-| `'registrarOrganizacion'` | `'registerOrganization'` |
-| `'emitirCredencial'` | `'issueCredential'` |
-| `hojaDe` | `leafOf` |
-| `credCommitmentDe` | `credCommitmentOf` |
-
-(The last two confirmed in `tests/src/harness/contract-surface.ts:49-53`.) The file
-should also be translated to English — it is currently the only Spanish file in
-`contracts/test/`.
-
-**Where it belongs: `contracts/test/`, not `tests/src/`.** This is a deliberate
-architectural call, not convenience. `TestigoHarness`
-(`tests/src/harness/types.ts`) has no concept of a transcript, and `ModelHarness`
-*cannot* have one — it is plain JS reimplementing the spec, it never executes a
-circuit, so there are no opcodes to emit. Exposing `proofData` through that
-interface would break the model↔contract symmetry that is the entire reason that
-layer exists — the same reasoning `types.ts` already used to exclude the Merkle root
-from `LedgerSnapshot`. The precedent for the low-level approach already exists:
-`contracts/test/sec-audit.mjs` block A reads `r.proofData` to document the
-disclosure surface.
-
-**What it asserts** — three checks, and the third is deliberately inverted:
-
-1. The opcode *shape* is identical between two organizations. If the sequence of
-   operations differed, merely looking at the transcript's shape would tell two
-   reporters apart.
-2. **The disclosed Merkle root is byte-identical between organizations.** This is
-   the load-bearing one. `checkRoot` compiles to `member` + `popeq`, and `popeq`
-   writes its result into the public transcript. With a per-organization tree each
-   caller would publish *its* root. With one global tree and the `orgId` folded into
-   the leaf, everyone publishes the same one. Select it by `field` alignment so it
-   is not confused with nullifier/reportId, which are `bytes`.
-3. The **complete** transcript is *not* identical — and must not be. The nullifier
-   and the reportId vary by construction: they are the anti-spam and sealing
-   mechanism. If someone ever "fixes" the contract so the whole transcript matches,
-   they broke the anti-spam, and this check is what catches it.
-
-**✓ Acceptance:** appended to the `test` chain in `contracts/package.json` next to
-`sec-audit.mjs`, green, and added as a row to the table in `contracts/README.md`
-that documents what each test file proves.
-
-### S2 · P1 · Declare the missing limitation: the anonymity set is countable
-
-- [ ] **P1** Add it to the declared-limitations section of `contracts/README.md`
-
-`contracts/README.md` (~134-151) declares six limitations. **This one is missing**,
-and it is real and specific to this contract:
+A whistleblower's anonymity set is **not** bounded by the tree depth (8 → 256
+leaves globally). It is bounded by how many credentials **that specific
+organization** issued — and that number is publicly countable, because `orgId`
+travels in the clear:
 
 - `issueCredential(orgId, credCommitment)` — `contracts/src/testigo.compact:167`
 - `report(orgId, period)` — `contracts/src/testigo.compact:175`
 
-Both take `orgId` as a **public circuit argument** (the only witnesses are
-`credentialSecret`, `credentialPath`, `personalSecret`, `evidenceHash`, lines
-65-76). Any observer can therefore count how many credentials each organization
-issued, straight off the indexer.
+The only witnesses are `credentialSecret`, `credentialPath`, `personalSecret`,
+`evidenceHash` (lines 65-76). `orgId` is a public circuit argument in both, so any
+observer can count issuances per organization straight off the indexer.
 
-The consequence: a reporter's anonymity set is not bounded by the tree depth
-(8 → 256 leaves *globally*) but by how many credentials **that specific
-organization** issued. An org with one or two credentials leaves the reporter
-effectively identified, even though the Merkle proof is formally perfect.
+**Why it matters more than it sounds.** A company with three registered employees
+leaves the reporter effectively identified, *even though the Merkle proof is
+cryptographically perfect*. That is not an edge case — the small organization where
+reporting exposes you is the most common and most delicate use of a whistleblowing
+product. The README already declares that a cached Merkle path narrows the
+anonymity set (line 148); this is a sharper, structural version of the same class of
+leak, and it is not there.
 
-The project's own execution plan argues that preemptive honesty disarms the
-technical judge. This is exactly that card — and a judge who finds it themselves
-after we claimed anonymity is a much worse outcome.
+Two acceptable exits, pick either:
 
-**✓ Acceptance:** limitation written. Optionally add a roadmap line: require a
-minimum number of issued credentials before `report` is allowed against an org.
+1. **Declare it.** A judge who finds this themselves after reading "anonymous
+   whistleblowing" leaves with a worse impression than one who reads it in our own
+   limitations section.
+2. **Mitigate it.** Require a minimum number of issued credentials before `report`
+   is allowed against an organization. More work; only if there is time after B5.
 
-### S3 · P3 · Roadmap ideas from the official forum
-
-- [ ] **P3** Two design directions worth one roadmap slide, no code
-
-1. **Optional / threshold membership** via a witness that returns a deliberately
-   invalid dummy path when the caller is not a member — lets a circuit express
-   "member of at least one of these" without a caller-varying boolean.
-2. **Revocation via period-bound leaves + re-attestation** instead of a blocklist.
-   A blocklist forces disclosing a stable value and destroys unlinkability; leaves
-   tied to a period expire on their own. This attacks the already-declared "no
-   revocation" limitation head-on.
+**✓ Acceptance:** the limitation is written in `contracts/README.md`, phrased as a
+bound on the anonymity set, not as a vague privacy caveat.
 
 ---
 
-## Section 3 — gabosawn (docs, UI, deck)
+## Section 2 — gabosawn · two deck lines, zero code
 
-### G1 · P1 · Correct the privacy framing — the organization is NOT hidden
+### G1 · P2 · Claim the `blockTime` property the contract already has
 
-- [ ] **P1** Align README, `docs/00-idea.md`, and the UI split panel
-
-**This is the item most likely to be broken live by a judge.**
-`report(orgId, period)` takes `orgId` as a **public circuit argument**
-(`contracts/src/testigo.compact:175`). The organization is public on every report,
-regardless of how the Merkle tree is designed. No wording anywhere should suggest
-otherwise.
-
-What the design actually delivers — say precisely this instead:
-
-- **Anti-spoofing.** The leaf is reconstructed *inside the circuit* from the
-  declared `orgId`, so a witness cannot smuggle in another organization's
-  credential.
-- **Intra-organization anonymity.** Which employee of that org filed the report is
-  hidden. That is the real, defensible claim.
-
-Highest-risk surface is the UI's split panel ("what the chain sees / what never
-leaves your machine") — it is precisely where an over-promise becomes visible and
-falsifiable during the demo.
-
-**✓ Acceptance:** no text in README, docs, UI copy, or deck claims the organization
-is concealed.
-
-### G2 · P2 · Claim the `blockTime` property already in the contract
-
-- [ ] **P2** One deck line, zero code
+- [ ] **P2** One sentence in the deck
 
 `contracts/src/testigo.compact:189-190`:
 
@@ -242,21 +83,21 @@ assert(blockTimeLt(disclose(windowEnd as Uint<64>)), "period already over");
 A report is only valid inside its time window, **enforced inside the circuit — no
 oracle, no trusted clock**. One of today's competitors (asfalia, "proof of solvency
 that expires") sells exactly this property as its headline moment. We already have
-it and are not saying it anywhere.
+it and say it nowhere. Free.
 
-### G3 · P2 · Prior art with today's actual competitors
+### G2 · P2 · Prior art with today's actual competitors
 
-- [ ] **P2** Update the prior-art slide with the eight repos published today
+- [ ] **P2** Update the prior-art slide
 
 Eight teams published today under the `midnightntwrk` topic. Closest to us is
 **velo** — ZK attestation of forensic verdicts, evidence sealed locally. Name it
 precisely: velo proves *a verdict is legitimate*; it does not do deferred
 authorship. **Nobody in the field has deferred authorship** — the differentiator
-holds, and stating a competitor accurately is what makes the claim credible.
+holds, and describing a competitor accurately is what makes that claim credible.
 
-Also worth noting: `midnight-mail` already deployed to Preprod with a real contract
-address and block numbers. That is the 40% Engineering axis, and it is the one place
-we are behind.
+Worth knowing internally: `midnight-mail` already deployed to Preprod with a real
+contract address and block numbers. That is the Engineering axis, and it is the one
+place we are behind.
 
 Sentence pattern borrowed from velo, applicable to the nullifier and the domain
 separation:
@@ -266,11 +107,97 @@ separation:
 
 ---
 
-## Dismissed findings — do not re-investigate
+## Section 3 — Juan · deliberately empty
+
+**No items assigned until `deployment.json` has a real contract address.**
+
+Juan owns `app/` and B5 is the critical path. The two items that live in his area
+were both downgraded below the value of one hour of deploy work, and one of them
+turns into a troubleshooting entry rather than a task:
+
+### Runbook, not a task — if the Preview deploy fails reading ledger state
+
+If `NETWORK=preview` produces a GraphQL error when reading contract state, the
+likely cause is the indexer's no-offset path. `queryContractState` is called with
+no offset in three places:
+
+| File | Line |
+|---|---|
+| `app/src/api/ledger.ts` | 63 |
+| `app/src/api/executor-network.ts` | 216 |
+| `app/src/config/smoke.ts` | 169 |
+
+and `app/src/config/providers.ts:256-257` builds the provider with no wrapper:
+
+```ts
+export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvider =>
+  indexerPublicDataProvider(network.indexer, network.indexerWS);
+```
+
+`DEFAULT_NETWORK` is `'preview'` (`app/src/config/networks.ts:63`), so this is the
+default path, not an opt-in.
+
+**Fix if it fires:** a patched provider that issues the query directly, omitting the
+`offset` field entirely, delegating everything else to the SDK object:
+
+```graphql
+query LATEST_STATE($address: HexEncoded!) {
+  contractAction(address: $address) { state }
+}
+```
+
+~15 lines. **Honest status:** this failure has **not** been reproduced against
+Preview by anyone here. The source is `.agents/skills/indexer/SKILL.md`, which comes
+from a third-party skill pack (`Kali-Decoder/Midnight-skills`), not from
+midnightntwrk. What was verified is that our code has the shape the skill warns
+about — not that the bug fires. Do not spend deploy time pre-patching it; know where
+the fix is if the error appears.
+
+---
+
+## Post-deploy backlog
+
+Only after the contract is live. Both are optional.
+
+- [ ] **P3** *(snattydev)* Repair the transcript-privacy test.
+      `contracts/test/transcript-org-anonimato.mjs` exists untracked and broken —
+      it was written against the pre-translation Spanish API and dies at import with
+      `does not provide an export named 'EPOCA'`. It is a rename, not a rewrite:
+      `nuevoMundo`→`newWorld`, `callComo`→`callAs`, `resumen`→`summary`,
+      `EPOCA`→`EPOCH`, and the circuit names `denunciar`→`report`,
+      `registrarOrganizacion`→`registerOrganization`,
+      `emitirCredencial`→`issueCredential`, `hojaDe`→`leafOf`,
+      `credCommitmentDe`→`credCommitmentOf` (confirmed in
+      `tests/src/harness/contract-surface.ts:49-53`).
+      It belongs in `contracts/test/`, **not** `tests/src/` — `TestigoHarness`
+      (`tests/src/harness/types.ts`) has no transcript concept and `ModelHarness`
+      cannot have one (plain JS, never executes a circuit). Precedent:
+      `contracts/test/sec-audit.mjs` block A already reads `r.proofData`.
+      **Value, stated honestly:** it is QA evidence you can show a judge, and a net
+      against a future refactor. It is *not* a privacy defense — see the downgrade
+      note below.
+
+- [ ] **P3** *(Juan)* Settle `@midnight-ntwrk/wallet-sdk`, pinned at `1.1.0`
+      (`app/package.json:28`). The claim that Preview requires `1.2.0` is
+      unverified. Trap if anyone checks: npm's `latest` dist-tag points at `1.1.0`
+      even though `1.2.0` is published, so `npm view … version` returns the wrong
+      answer — use `versions --json` plus the official support matrix.
+
+- [ ] **P3** *(snattydev)* Roadmap slide only: optional/threshold membership via an
+      invalid dummy path, and revocation via period-bound leaves + re-attestation
+      instead of a blocklist. The second attacks the already-declared "no
+      revocation" limitation.
+
+---
+
+## Downgraded and dismissed — with reasons, so nobody re-raises them
 
 | Finding | Verdict |
 |---|---|
-| Missing DUST poll before deploy | **FALSE.** `deployContract({ waitForFunds: true })` → `walletProvider.start(true)` already blocks until funded, at `app/src/api/executor-network.ts:152-164`, before the first deploy call. |
-| `docs.midnight.network/compact/merkle-membership-privacy` | **404.** The page does not exist, in the sitemap or the nav. A third-party probe cites it; do not cite it ourselves. |
-| Legacy `wallet` / `wallet-api` / `zswap` in package.json | Absent across all six manifests. Clean. |
-| "B1–B5 not started" (`docs/04-bloque-b-pasos.md`) | Stale. B1–B4 are done — `app/src/scripts/` holds 8 scripts including `deploy.ts` and `e2e.ts`. Only B5 remains: `app/src/config/deployment.json` is still all `null`. |
+| **"The docs over-claim that the organization is hidden" — dropped** | **Checked, they don't.** `docs/00-idea.md:40` says "Identity, credential, and evidence never touch the chain", which is literally true and never mentions the org. §5 already declares "On-chain anonymity is verified; off-chain has known limits", and `contracts/README.md:148` already declares that a revealed Merkle root narrows the anonymity set. The docs were more honest than the audit assumed. At most, spot-check the UI split panel. |
+| **Transcript test as a privacy defense — downgraded to P3** | The test proves the disclosed Merkle root is identical across organizations. But `orgId` is *already* a public argument of `report` (`testigo.compact:175`), so the organization leaks via the argument regardless of tree design. A global tree buys no marginal org privacy over a per-org tree. Real value is QA evidence, not protection. |
+| **Indexer offset bug as P1 — downgraded to a runbook entry** | The code shape was confirmed; the failure was not reproduced. Source is a third-party skill pack, not official Midnight docs. Cheap to fix *if* it fires; not worth pre-emptying deploy time. |
+| **Missing DUST poll before deploy** | **False.** `deployContract({ waitForFunds: true })` → `walletProvider.start(true)` already blocks until funded, at `app/src/api/executor-network.ts:152-164`, before the first deploy call. |
+| **`docs.midnight.network/compact/merkle-membership-privacy`** | **404.** The page does not exist, in the sitemap or the nav. A third-party probe cites it; do not cite it ourselves. |
+| **Legacy `wallet` / `wallet-api` / `zswap` in package.json** | Absent across all six manifests. Clean — just don't let an old tutorial talk anyone into adding them alongside `ledger-v8`. |
+| **"B1–B5 not started" (`docs/04-bloque-b-pasos.md`)** | Stale. B1–B4 are done — `app/src/scripts/` holds 8 scripts including `deploy.ts` and `e2e.ts`. Only B5 remains. |
