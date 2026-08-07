@@ -13,6 +13,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -21,6 +22,10 @@ import {
 import { hashDeArchivo, reportIdOf, type Hex32 } from "@shared/cripto";
 import { ORG_ID, ORG_NOMBRE, PERIODO, PK_ACME_LEGAL, VERIFICADORES } from "@shared/demo";
 import { ClienteMock, ledgerVacio } from "@shared/servicio/ClienteMock";
+import {
+  type PreviewExplorerReader,
+  conectarExplorerPreview,
+} from "@shared/servicio/ExplorerPreview";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
 import { ALTURA_ACTUAL, AUTORIAS, DENUNCIAS } from "./ledgerFixture";
@@ -78,11 +83,17 @@ function useEstado() {
   const [autoriaRecomputada, setAutoriaRecomputada] = useState<Hex32 | null>(null);
 
   /**
+   * "mock" — in-memory fixture (always works, no network).
+   * "preview" — real Midnight Preview indexer (needs deployed contract).
+   */
+  const [modo, setModo] = useState<"mock" | "preview">("mock");
+
+  /**
    * Sembrado con lo que el indexer ya conoce. Cuando entre el Bloque B esto se
    * reemplaza por `ClienteReal` leyendo el GraphQL del indexer, con la misma
    * interfaz y sin tocar ninguna vista.
    */
-  const cliente = useMemo<TestigoClient>(() => {
+  const mockCliente = useMemo<TestigoClient>(() => {
     const l = ledgerVacio(ALTURA_ACTUAL);
     l.denuncias = DENUNCIAS.map((d) => d.denunciaId);
     l.nullifiers = DENUNCIAS.map((d) => d.nullifier);
@@ -90,6 +101,39 @@ function useEstado() {
     l.organizaciones = { [ORG_ID]: "" };
     return new ClienteMock({ ritmoMs: 0, ledgerInicial: l });
   }, []);
+
+  const [previewCliente, setPreviewCliente] = useState<PreviewExplorerReader | null>(null);
+  const [denunciasPreview, setDenunciasPreview] = useState<typeof DENUNCIAS>(DENUNCIAS);
+
+  // Try to connect to the Preview indexer on mount. If it works, switch to "preview" mode.
+  useEffect(() => {
+    let cancelado = false;
+    conectarExplorerPreview().then(async (reader) => {
+      if (cancelado || !reader) return;
+      setPreviewCliente(reader);
+      setModo("preview");
+      try {
+        const estado = await reader.leerEstadoLedger();
+        if (!cancelado) {
+          setDenunciasPreview(
+            estado.denuncias.map((d) => ({ denunciaId: d, nullifier: "" as Hex32, bloque: 0 })),
+          );
+        }
+      } catch {
+        // Keep fixture data if the indexer read fails.
+      }
+    }).catch(() => {
+      // Preview not available — stay in mock mode silently.
+    });
+    return () => { cancelado = true; };
+  }, []);
+
+  const denuncias = modo === "preview" ? denunciasPreview : DENUNCIAS;
+
+  /** The active client: Preview reader if available, mock otherwise. */
+  const cliente: TestigoClient = modo === "preview" && previewCliente
+    ? previewCliente
+    : mockCliente;
 
   const pegarMaterial = useCallback((texto: string) => {
     setMaterialCrudo(texto);
@@ -167,7 +211,8 @@ function useEstado() {
     periodo: PERIODO,
     orgId: ORG_ID,
     altura: ALTURA_ACTUAL,
-    denuncias: DENUNCIAS,
+    denuncias,
+    modo,
 
     materialCrudo,
     material,

@@ -29,6 +29,12 @@ import { ANCLA, MUESTRA_ORIGINAL, ORG_ID, ORG_NOMBRE, VERIFICADORES } from "@sha
 import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
+import {
+  type ClientePreview,
+  type LaceSession,
+  conectarLace,
+  conectarClientePreview,
+} from "@shared/servicio/ClientePreview";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "./demoPrivado";
@@ -119,6 +125,29 @@ function useEstado() {
   const [pasosRevelar, setPasosRevelar] = useState<string[]>([]);
   const [autoria, setAutoria] = useState<{ autoriaHash: Hex32; bloque: number } | null>(null);
   const [copiado, setCopiado] = useState(false);
+
+  // ── Preview / Lace detection ────────────────────────────────────────────
+  const [modo, setModo] = useState<"mock" | "preview">("mock");
+  const [laceSession, setLaceSession] = useState<LaceSession | null>(null);
+
+  // Try to connect to Lace on mount. The mock is always the fallback.
+  useEffect(() => {
+    let cancelado = false;
+    conectarClientePreview().then((cp) => {
+      if (cancelado || !cp) return;
+      setModo("preview");
+      // The Lace session is stored for reference but ClientePreview
+      // is the TestigoClient that wraps it.
+    }).catch(() => {
+      // Lace not available — stay in mock mode silently.
+    });
+    // Also check Lace presence for the header indicator.
+    conectarLace().then((s) => {
+      if (cancelado || !s) return;
+      setLaceSession(s);
+    }).catch(() => {});
+    return () => { cancelado = true; };
+  }, []);
 
   const log = useCallback((m: string) => {
     setLogs((previos) => [...previos, { t: horaLog(new Date()), m }]);
@@ -492,6 +521,8 @@ function useEstado() {
     demoT4,
     reiniciar,
     nuevaIdentidad,
+    modo,
+    laceSession,
   };
 }
 

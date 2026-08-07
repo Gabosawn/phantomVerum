@@ -12,7 +12,8 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["shared/*"],
+      "@contracts/*": ["../contracts/output/*"]
     }
   },
   "include": ["cliente", "explorer", "sistema", "shared", "vite.base.ts", "vite.cliente.config.ts", "vite.explorer.config.ts", "vite.sistema.config.ts"]

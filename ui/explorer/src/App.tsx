@@ -55,7 +55,11 @@ export function App() {
           <span style={{ color: "var(--pv-dim)" }}>{altura(e.altura)}</span>
         </DatoHeader>
         <DatoHeader titulo="indexer" color="var(--pv-text2)">
-          <span style={{ color: "var(--pv-pos)" }}>✓ sincronizado</span>
+          {e.modo === "preview" ? (
+            <span style={{ color: "var(--pv-pos)" }}>✓ preview</span>
+          ) : (
+            <span style={{ color: "var(--pv-dim)" }}>mock</span>
+          )}
         </DatoHeader>
         <a
           href={URL_CLIENTE}
@@ -109,18 +113,30 @@ export function App() {
         }}
       >
         <span
-          style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--pv-dim)", flex: "none" }}
+          style={{
+            width: 7,
+            height: 7,
+            borderRadius: "50%",
+            background: e.modo === "preview" ? "var(--pv-pos)" : "var(--pv-dim)",
+            flex: "none",
+          }}
         />
         <Rotulo color="var(--pv-text2)" tracking=".12em">
-          sin proof server
+          {e.modo === "preview" ? "indexer · preview" : "sin proof server · mock"}
         </Rotulo>
         <span style={{ font: `400 12.5px/1.4 ${SG}`, color: "var(--pv-muted)" }}>
-          Este explorador no genera pruebas ni recibe witnesses — sólo lee la cadena. Todo lo
-          privado vive en el{" "}
-          <a href={URL_CLIENTE} target="_blank" rel="noreferrer">
-            Cliente
-          </a>
-          .
+          {e.modo === "preview"
+            ? "Leyendo directamente del indexer de Midnight Preview. Datos reales on-chain."
+            : (
+              <>
+                Este explorador no genera pruebas ni recibe witnesses — sólo lee la cadena. Todo lo
+                privado vive en el{" "}
+                <a href={URL_CLIENTE} target="_blank" rel="noreferrer">
+                  Cliente
+                </a>
+                .
+              </>
+            )}
         </span>
       </div>
     </div>

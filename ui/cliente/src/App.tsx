@@ -24,7 +24,7 @@ export function App() {
       }}
     >
       <Cabecera
-        etiqueta={["Cliente", "local"]}
+        etiqueta={["Cliente", e.modo === "preview" ? "preview" : "local"]}
         pestanas={
           <>
             <Pestana
@@ -54,7 +54,7 @@ export function App() {
               width: 7,
               height: 7,
               borderRadius: "50%",
-              background: "var(--pv-pos)",
+              background: e.modo === "preview" ? "var(--pv-pos)" : "var(--pv-pos)",
               flex: "none",
               boxShadow: "0 0 0 3px rgba(95, 208, 180, .16)",
             }}
@@ -64,7 +64,11 @@ export function App() {
           </DatoHeader>
         </div>
         <DatoHeader titulo="wallet">
-          <span style={{ color: "var(--pv-muted)" }}>shielded</span>
+          {e.modo === "preview" ? (
+            <span style={{ color: "var(--pv-pos)" }}>lace ✓</span>
+          ) : (
+            <span style={{ color: "var(--pv-muted)" }}>mock</span>
+          )}
         </DatoHeader>
         <a
           href={URL_EXPLORER}

@@ -23,7 +23,10 @@ export function appConfig(nombre: string, puerto: number): UserConfig {
     // onchain-runtime entry it resolves to in the browser uses top-level await.
     plugins: [react(), wasm(), topLevelAwait()],
     resolve: {
-      alias: { "@shared": aca("./shared") },
+      alias: {
+        "@shared": aca("./shared"),
+        "@contracts": aca("../contracts/output"),
+      },
     },
     server: {
       port: puerto,
