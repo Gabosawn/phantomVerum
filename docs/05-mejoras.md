@@ -413,16 +413,50 @@ decirlo en el deck antes de que lo pregunte un juez.
 transacciones pendientes a cualquiera. La doc de Midnight recomienda
 `--rpc-methods Safe`, que el endpoint público **no** aplica.
 
-### Lo que SÍ está bien por diseño
+### Lo que SÍ está bien por diseño — y nuestra decisión más importante, validada
 
 **La fee NO revela quién paga.** `DustSpend` tiene exactamente cuatro campos
-(`newCommitment`, `oldNullifier`, `proof`, `vFee`) — **sin owner, sin address**.
-El gasto de DUST se autoriza por prueba ZK. Confirmado por introspección del
-indexer: `DustSpendProcessed` y `DustOutput` no exponen address.
+(`vFee`, `oldNullifier`, `newCommitment`, `proof`) — **sin owner, sin address,
+sin firma**. El gasto de DUST se autoriza por prueba ZK, y el nullifier hashea la
+clave **secreta**, así que no es computable por un observador.
 
-⚠️ **Pero cualquier movimiento unshielded sí publica la address**
-(`UnshieldedUtxo.owner` es público y consultable sin auth). **Regla de diseño:
-el circuito de denuncia no debe mover tokens unshielded.** El nuestro no lo hace.
+**Verificado empíricamente sobre transacciones reales de la cadena:** un contract
+call que no mueve tokens unshielded tiene `unshieldedSpentOutputs: []` y
+`unshieldedCreatedOutputs: []`. Se dumpeó el `raw` completo (10 KB) de una tx real
+y **no hay ni un `mn_addr` en ningún byte**. Confirmado en 7+ transacciones.
+
+⚠️ **En cambio, un solo `receiveUnshielded`/`sendUnshielded` publica la address
+bech32m del denunciante más su verifying key de firma.** Es, en palabras del
+análisis, *"la decisión de diseño más importante de todo el sistema"*.
+
+✅ **Nuestro circuito no mueve tokens unshielded.** Esto es lo que hace que
+cortar la recompensa y la fianza anti-spam (§8) no sea una renuncia sino una
+condición de que el producto funcione.
+
+### El grafo del faucet: dónde se corta y dónde no
+
+- **faucet → wallet: público y enumerable.** Se reconstruyó la cadena de drips del
+  faucet y 6 direcciones destinatarias **solo con datos públicos** (el faucet se
+  identifica por su patrón de cambio autoencadenado y el monto constante).
+- **wallet → denuncia: NO existe on-chain** para un call privado puro. **La
+  cadena se corta criptográficamente en el nullifier de DUST.**
+- ⚠️ Pero el **registro de DUST es público** y liga `unshielded address ↔
+  DustPublicKey` (verificado a nivel de bytes). No liga al *gasto*, pero sí
+  publica el conjunto de candidatos.
+
+**Consecuencia operativa:** una wallet desechable **no puede transar al instante** —
+NIGHT hay que registrarlo on-chain y el DUST acumula a 8267 Specks/Star/s
+(~1-2 min para lo mínimo en Preview, 7 días al tope). Eso es *bueno* para la
+unlinkability: **hay que fondear y registrar la wallet días antes de la denuncia**,
+no minutos. Que el denunciante lo haga deliberadamente es parte del protocolo de uso.
+
+### Canal lateral nuevo: cada tx declara cuándo fue construida
+
+Cada transacción publica un `ctime` autodeclarado en `DustActions` — **el momento
+en que su autor la construyó**, con precisión de segundos. En las muestras
+decodificadas aparece ~24 s antes del timestamp del bloque, con una ventana de
+gracia de 3 h. **Filtra el reloj local del denunciante y una ventana de actividad.**
+No documentado por Midnight como riesgo.
 
 ### Tres bombas no documentadas por Midnight
 
