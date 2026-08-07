@@ -28,8 +28,9 @@ Findings from bringing up the monorepo (`npm install`, `npm run compile`, `npm t
 
 ## Local deploy (plan: docs/05-deploy-local.md)
 
-- [ ] **P1** Write `app/src/scripts/deploy.ts` (B5.1) — does not exist; API
-      (`deployContract` + `writeDeployment`) is ready, just no CLI wrapper
+- [x] **P1** Write `app/src/scripts/deploy.ts` (B5.1) + `deploy` npm script —
+      written, not yet type-checked/run (machine broken; run `npm run build
+      --workspace=app` on the healthy machine)
 - [ ] **P1** Verify local genesis-funded seed (`LOCAL.faucet` is `undefined`)
 - [ ] **P1** Bring up local devnet + `NETWORK=local` deploy → commit `deployment.json`
 - [ ] **P1** `NETWORK=local npm run e2e -- --network` green (4 acts, real proving)
