@@ -156,49 +156,46 @@ The blocks **don't block each other**: each works against the spec in
 names, ledger state and types) and against mocks of neighboring layers.
 Integration happens at the end of each block.
 
-### Block A — Compact Contracts (`contracts/`)
+### Block A — Compact Contracts (`contracts/`) ✅
 
-- [ ] Official template compiling untouched (validate toolchain and current syntax)
-- [ ] `registerOrganization` — insert org, fail if already exists
-- [ ] `report` — credential verification (Option A Merkle, fallback B), `reportId` + nullifier
-- [ ] `revealAuthorship` — preimage + designated verifier (`prosecutorPk`)
+- [x] Option A (`testigo.compact`) compiles with keys; Option B frozen in `fallback/`
+- [x] `registrarOrganizacion` / `emitirCredencial` / `denunciar` / `revelarAutoria`
+- [x] Domain separation, epoch tied to `blockTime`, Merkle membership (HistoricMerkleTree)
 
 **Deliverable:** `compact compile` green. Derived values and ledger
 match the spec *exactly* (§3–§4).
 
-### Block B — TypeScript Wiring (`app/`)
+### Block B — TypeScript Wiring (`app/`) 🟡
 
-- [ ] Network config (Preview), local proof server, indexer
-- [ ] Witness providers for the 3 circuits + local persistence of secrets/credentials (file)
-- [ ] Local evidence hash (the file never leaves the machine)
-- [ ] CLI scripts: `register-org`, `report`, `reveal-authorship`, `verify-authorship`
-- [ ] Contract deploy
+- [x] Network config (Preview/local), proof server, indexer providers
+- [x] Witness providers for the circuits + local persistence of secrets/credentials (file)
+- [x] Local evidence hash (the file never leaves the machine)
+- [x] Core API (§3.1) + simulator selftest (deploy/connect + circuit calls)
+- [ ] CLI scripts wired end-to-end (`app/src/scripts/` still empty)
+- [ ] Contract deploy to Preview (`deployment.json` still null)
 
-**Can start without Block A** by mocking the compiled contract
-module with the spec signatures. **Deliverable:** one command runs the 4
-stages E2E; the "wrong secret" case fails at proof time without emitting a tx.
+**Deliverable:** one command runs the 4 stages E2E against Preview; the
+"wrong secret" case fails at proof time without emitting a tx.
 
-### Block C — UI (`ui/`)
+### Block C — UI (`ui/`) 🟡
 
-- [ ] Organization view: registration + mock credential issuance + ledger panel
-- [ ] Whistleblower view: evidence loading (local hash), report, export key
-- [ ] Prosecutor view: verification ✅/❌ against ledger
+- [x] Scaffold: three views + Vite entry (English stubs)
+- [ ] Organization view wired to `app/` (registration + credential + ledger panel)
+- [ ] Whistleblower view wired (local hash, report, export key)
+- [ ] Prosecutor view wired (verification ✅/❌ against ledger)
 
-**Can start without Blocks A and B** behind a service layer
-mock with the CLI script API. **Deliverable:** the 3 views connected to
-the real `app/` layer.
+**Deliverable:** the 3 views connected to the real `app/` layer.
 
 ### Block D — Tests (`tests/`) ✅
 
-- [x] Per-circuit suite — 22 cases (see [Tests](#tests))
+- [x] Per-circuit suite against the compiled contract (model + simulator backends)
 - [x] E2E simulation of the 4 stages printing ledger state at each step
-- [x] Two-backend seam: spec model (always) + compiled contract (when it exists)
-- [x] Mutation testing: 13 mutants injected, 13 killed
-- [ ] Run the suite against the real contract — pending Block A
+- [x] Two-backend seam: spec model + compiled Compact contract
+- [x] Hardening / adversarial regressions (epoch, domain separation, guards)
+- [x] `npm test` + `npm run simulate` green on `dev` (incl. noexec/`index.js` harness fixes)
 
 **Deliverable:** `npm test` green + `npm run simulate` with one command. The seam
-(`tests/src/harness/`) makes plugging in the compiled contract a single `npm run compile`,
-without touching a single assertion.
+(`tests/src/harness/`) swaps backends without touching assertions.
 
 ### Contracts between blocks (the only thing frozen upfront)
 

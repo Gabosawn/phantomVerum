@@ -31,7 +31,7 @@ Findings from bringing up the monorepo (`npm install`, `npm run compile`, `npm t
 - [ ] End-to-end coherence: idea ↔ architecture ↔ Compact ↔ app wiring ↔ UI ↔ tests
 - [ ] Privacy: no secrets / evidence in logs, transcript, or UI
 - [ ] UI: three views wired to the same API
-- [ ] README: accurate block A/B/C/D status
+- [x] README: accurate block A/B/C/D status (vie 7/8 ~16:35)
 
 ## Final verification
 
