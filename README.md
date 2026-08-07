@@ -32,8 +32,20 @@ npm install                        # installs all workspaces
 npm run compile                    # compiles Compact contracts
 npm test                           # runs the test suite
 npm run simulate                   # E2E simulation of the 4 stages
-npm run dev --workspace=ui         # starts the frontend on :3000
+npm run dev --workspace=ui         # starts the two apps + the visual system
 ```
+
+`npm run dev` opens three servers:
+
+| URL | What it is |
+|---|---|
+| `localhost:3000` | **PhantomVerum Client** — runs on your machine. Dark. Has a proof server |
+| `localhost:3001` | **PhantomVerum Explorer** — the public ledger. Light. **No** proof server |
+| `localhost:3002` | Visual system (palette, typography, assets) — reference for the deck |
+
+They are **two distinct origins on purpose**: the browser gives each its own
+`localStorage`, so the separation between private and public does not depend
+on us behaving well. The only thing connecting them is the clipboard.
 
 CLI scripts (workspace `app`):
 
@@ -56,12 +68,12 @@ phantomtrace/
 │       ├── witnesses/       #   witness providers for the 3 circuits
 │       ├── scripts/         #   CLI: register-org, report, reveal-authorship, verify-authorship
 │       └── config/          #   Preview network, proof server, indexer
-├── ui/                      # @phantomtrace/ui — React + Vite
-│   └── src/
-│       ├── views/           #   Organization / Whistleblower / Prosecutor
-│       ├── components/      #   reusable components
-│       ├── hooks/           #   wallet, contract
-│       └── lib/             #   helpers and constants
+├── ui/                      # @phantomtrace/ui — React + Vite, TWO apps
+│   ├── cliente/             #   local, private app (:3000)
+│   ├── explorer/            #   public app, no proof server (:3001)
+│   ├── sistema/             #   visual system sheet (:3002)
+│   ├── shared/              #   crypto, types, service, components, tokens
+│   └── pruebas/             #   the tests that cross the two apps
 ├── tests/                   # @phantomtrace/tests — Vitest + E2E simulation
 │   └── src/
 │       ├── circuits/        #   per-circuit tests
@@ -70,16 +82,49 @@ phantomtrace/
 └── docs/                    # idea, architecture, environment
 ```
 
-### The 3 UI views
+### The two applications
+
+Midnight's dual ledger is not explained with a sign: it translates into **two
+separate programs**, with opposite visual registers and no shared state.
+
+**PhantomVerum Client** — dark, runs on your machine, has a proof server and
+keeps the witnesses.
 
 | View | What it does |
 |---|---|
-| **Organization** | Register org (anchor) + issue credential (mock) + ledger panel: there are N reports, none attributable |
-| **Whistleblower** | Load evidence (hashed locally — stated on screen), choose org/period, report, export authorship key |
-| **Prosecutor** | Load reportId + key + delivered material → verify against ledger → ✅ / ❌ |
+| **Issue credentials** (T1) | ACME's internal directory, never published. Only the anchor goes to the ledger |
+| **Report** (T2) | You load the evidence — hashed **here**, with Web Crypto — pick org and period, and two hashes come out |
+| **Reveal authorship** (T4) | You load your key, choose before whom, and the proof gets bound to that public key |
 
-UI rules: legible and projectable (large font, high contrast). The whistleblower
-view explicitly states what does NOT leave the machine.
+**PhantomVerum Explorer** — light, public, **no proof server**, and it says so
+in the footer: there is nothing private to process.
+
+| View | What it does |
+|---|---|
+| **Ledger** | 3 reports, 0 attributable. The "author" column is not censored: it does not exist |
+| **Verify seal** (T3) | Drag a document and it is compared against the chain. One different byte ⇒ red |
+| **Verify authorship** (T4) | Paste the material and verify **with your own key**. Change it and the verdict flips |
+
+UI rules: legible and projectable (large font, high contrast), verdicts in
+solid full-width panels. Everything that never leaves your machine is shown
+behind a censor bar: it exists, without being shown.
+
+### What is real and what is mocked
+
+Until Block B is plugged in, the UI runs against a local service layer. This is
+declared upfront because the difference matters:
+
+| Real, verifiable | Fabricated |
+|---|---|
+| The evidence's SHA-256 — check it with `sha256sum` against what the screen shows | The `txId`s and block heights |
+| The four derivations, an exact mirror of `contracts/src/testigo.compact` (same domain tags, same arity) | The indexer's "✓ synced" |
+| The circuit asserts: someone else's credential, a double report in the same period and a secret that is not the author's genuinely fail, before emitting anything | Proving times |
+| The ✅/❌ verdicts: a genuine local recomputation, not an `if` branch | The existence of a chain |
+
+The mocked part lives in exactly two files —`ui/shared/cripto.ts` and
+`ui/shared/servicio/ClienteMock.ts`— behind the `TestigoClient` interface.
+No view knows about them. `H` here is SHA-256; in the circuit it is
+`persistentHash`, so the values change at integration time.
 
 ### Tests
 
@@ -123,15 +168,19 @@ match the spec *exactly* (§3–§4).
 module with the spec signatures. **Deliverable:** one command runs the 4
 stages E2E; the "wrong secret" case fails at proof time without emitting a tx.
 
-### Block C — UI (`ui/`)
+### Block C — UI (`ui/`) ✅
 
-- [ ] Organization view: registration + mock credential issuance + ledger panel
-- [ ] Whistleblower view: evidence loading (local hash), report, export key
-- [ ] Prosecutor view: verification ✅/❌ against ledger
+- [x] **Client** (`:3000`): issue credentials, report with a real local hash,
+      reveal designated authorship. Proof server terminal with live logs
+- [x] **Explorer** (`:3001`): public ledger, verify seal, verify authorship
+      with full-screen green/red verdicts
+- [x] Separation by origin: two ports ⇒ different `localStorage`. The bridge is
+      the clipboard and nothing else
+- [x] Service layer with the frozen §3.1 API, ready to plug `app/` in
+- [x] 42 tests, including one verifying the Explorer **cannot** import
+      anything private from the Client
 
-**Can start without Blocks A and B** behind a service layer
-mock with the CLI script API. **Deliverable:** the 3 views connected to
-the real `app/` layer.
+**Integration pending:** connect the real client when Block B is wired in.
 
 ### Block D — Tests (`tests/`)
 

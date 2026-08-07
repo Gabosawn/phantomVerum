@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" fill="none" role="img" aria-labelledby="pv-title">
+  <title id="pv-title">PhantomVerum</title>
+  <defs>
+    <linearGradient id="tg-bezel" gradientUnits="userSpaceOnUse" x1="40.8" y1="40.8" x2="215.2" y2="215.2">
+      <stop offset="0" stop-color="#ddd8e2"></stop>
+      <stop offset=".35" stop-color="#aaa3b0"></stop>
+      <stop offset=".7" stop-color="#66606d"></stop>
+      <stop offset="1" stop-color="#37323e"></stop>
+    </linearGradient>
+    <linearGradient id="tg-hub" gradientUnits="userSpaceOnUse" x1="108.9" y1="103.6" x2="147.1" y2="152.4">
+      <stop offset="0" stop-color="#a9a5b4"></stop>
+      <stop offset=".55" stop-color="#7b7686"></stop>
+      <stop offset="1" stop-color="#514d5c"></stop>
+    </linearGradient>
+    <linearGradient id="tg-light" gradientUnits="userSpaceOnUse" x1="40.8" y1="40.8" x2="215.2" y2="215.2">
+      <stop offset="0" stop-color="#fff" stop-opacity=".10"></stop>
+      <stop offset=".5" stop-color="#fff" stop-opacity="0"></stop>
+      <stop offset="1" stop-color="#000" stop-opacity=".16"></stop>
+    </linearGradient>
+    <radialGradient id="tg-core" gradientUnits="userSpaceOnUse" cx="132" cy="132" r="21.2">
+      <stop offset="0" stop-color="#0d0b16"></stop>
+      <stop offset=".6" stop-color="#191527"></stop>
+      <stop offset="1" stop-color="#3d3750"></stop>
+    </radialGradient>
+  </defs>
+
+  <path d="M251.8,76.7L179.3,4.2L76.7,4.2L4.2,76.7L4.2,179.3L76.7,251.8L179.3,251.8L251.8,179.3Z M235.6,83.4Q201,55 172.6,20.4Q128,24.8 83.4,20.4Q55,55 20.4,83.4Q24.8,128 20.4,172.6Q55,201 83.4,235.6Q128,231.2 172.6,235.6Q201,201 235.6,172.6Q231.2,128 235.6,83.4Z" fill="url(#tg-bezel)" fill-rule="evenodd"></path>
+  <path d="M238.9,82.1Q203.4,52.6 173.9,17.1Q128,21.3 82.1,17.1Q52.6,52.6 17.1,82.1Q21.3,128 17.1,173.9Q52.6,203.4 82.1,238.9Q128,234.7 173.9,238.9Q203.4,203.4 238.9,173.9Q234.7,128 238.9,82.1Z" stroke="#fff" stroke-opacity=".28" stroke-width="1.6"></path>
+
+  <g>
+    <path d="M128,128L233.3,171.6Q228.7,128 233.3,84.4Z" fill="#8892b0"></path>
+    <path d="M128,128L233.3,84.4Q199.2,56.8 171.6,22.7Z" fill="#2a2d4c"></path>
+    <path d="M128,128L171.6,22.7Q128,27.3 84.4,22.7Z" fill="#8892b0"></path>
+    <path d="M128,128L84.4,22.7Q56.8,56.8 22.7,84.4Z" fill="#2a2d4c"></path>
+    <path d="M128,128L22.7,84.4Q27.3,128 22.7,171.6Z" fill="#8892b0"></path>
+    <path d="M128,128L22.7,171.6Q56.8,199.2 84.4,233.3Z" fill="#2a2d4c"></path>
+    <path d="M128,128L84.4,233.3Q128,228.7 171.6,233.3Z" fill="#8892b0"></path>
+    <path d="M128,128L171.6,233.3Q199.2,199.2 233.3,171.6Z" fill="#2a2d4c"></path>
+  </g>
+  <path d="M233.3,84.4Q199.2,56.8 171.6,22.7Q128,27.3 84.4,22.7Q56.8,56.8 22.7,84.4Q27.3,128 22.7,171.6Q56.8,199.2 84.4,233.3Q128,228.7 171.6,233.3Q199.2,199.2 233.3,171.6Q228.7,128 233.3,84.4Z" fill="url(#tg-light)"></path>
+  <path d="M233.3,84.4Q199.2,56.8 171.6,22.7Q128,27.3 84.4,22.7Q56.8,56.8 22.7,84.4Q27.3,128 22.7,171.6Q56.8,199.2 84.4,233.3Q128,228.7 171.6,233.3Q199.2,199.2 233.3,171.6Q228.7,128 233.3,84.4Z" stroke="#100d1a" stroke-width="4" stroke-linejoin="round"></path>
+
+  <g stroke-linecap="round">
+    <line x1="145.6" y1="120.7" x2="230.6" y2="85.5" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="135.3" y1="110.4" x2="170.5" y2="25.4" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="120.7" y1="110.4" x2="85.5" y2="25.4" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="110.4" y1="120.7" x2="25.4" y2="85.5" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="110.4" y1="135.3" x2="25.4" y2="170.5" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="120.7" y1="145.6" x2="85.5" y2="230.6" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="135.3" y1="145.6" x2="170.5" y2="230.6" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="145.6" y1="135.3" x2="230.6" y2="170.5" stroke="#8b5cf6" stroke-width="16" opacity="0.14"></line>
+    <line x1="145.6" y1="120.7" x2="230.6" y2="85.5" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="135.3" y1="110.4" x2="170.5" y2="25.4" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="120.7" y1="110.4" x2="85.5" y2="25.4" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="110.4" y1="120.7" x2="25.4" y2="85.5" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="110.4" y1="135.3" x2="25.4" y2="170.5" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="120.7" y1="145.6" x2="85.5" y2="230.6" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="135.3" y1="145.6" x2="170.5" y2="230.6" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="145.6" y1="135.3" x2="230.6" y2="170.5" stroke="#8b5cf6" stroke-width="10.5" opacity="0.30"></line>
+    <line x1="145.6" y1="120.7" x2="230.6" y2="85.5" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="145.6" y1="120.7" x2="230.6" y2="85.5" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="145.6" y1="120.7" x2="230.6" y2="85.5" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="135.3" y1="110.4" x2="170.5" y2="25.4" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="135.3" y1="110.4" x2="170.5" y2="25.4" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="135.3" y1="110.4" x2="170.5" y2="25.4" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="120.7" y1="110.4" x2="85.5" y2="25.4" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="120.7" y1="110.4" x2="85.5" y2="25.4" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="120.7" y1="110.4" x2="85.5" y2="25.4" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="110.4" y1="120.7" x2="25.4" y2="85.5" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="110.4" y1="120.7" x2="25.4" y2="85.5" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="110.4" y1="120.7" x2="25.4" y2="85.5" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="110.4" y1="135.3" x2="25.4" y2="170.5" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="110.4" y1="135.3" x2="25.4" y2="170.5" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="110.4" y1="135.3" x2="25.4" y2="170.5" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="120.7" y1="145.6" x2="85.5" y2="230.6" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="120.7" y1="145.6" x2="85.5" y2="230.6" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="120.7" y1="145.6" x2="85.5" y2="230.6" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="135.3" y1="145.6" x2="170.5" y2="230.6" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="135.3" y1="145.6" x2="170.5" y2="230.6" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="135.3" y1="145.6" x2="170.5" y2="230.6" stroke="#ddd0ff" stroke-width="1.8"></line>
+    <line x1="145.6" y1="135.3" x2="230.6" y2="170.5" stroke="#7c5ce0" stroke-width="6.4"></line>
+    <line x1="145.6" y1="135.3" x2="230.6" y2="170.5" stroke="#a78bfa" stroke-width="4.2"></line>
+    <line x1="145.6" y1="135.3" x2="230.6" y2="170.5" stroke="#ddd0ff" stroke-width="1.8"></line>
+  </g>
+
+  <circle cx="128" cy="128" r="34" fill="#100d1a"></circle>
+  <circle cx="128" cy="128" r="31" fill="url(#tg-hub)"></circle>
+  <circle cx="128" cy="128" r="30" stroke="#d6d1de" stroke-opacity=".35" stroke-width="1.4"></circle>
+  <circle cx="128" cy="128" r="19" fill="#171326"></circle>
+  <circle cx="128" cy="128" r="12.5" fill="url(#tg-core)"></circle>
+</svg>
