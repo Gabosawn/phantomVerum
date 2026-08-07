@@ -1,40 +1,39 @@
 /**
- * TypeScript bodies for the four witnesses the `.compact` declares.
+ * TypeScript bodies for the four witnesses `testigo.compact` declares.
+ *
+ * Shapes verified against `contracts/output/contract/index.d.ts`. A witness returns
+ * `[newPrivateState, value]`.
  *
  * These belong to Block D on purpose. Block B owns `app/src/witnesses/` for the real dApp;
- * duplicating ~30 lines here keeps the test suite from blocking on B's schedule. If the two
- * ever disagree, the contract surface is the arbiter, not either copy.
- *
- * A witness returns `[newPrivateState, value]`.
+ * duplicating ~40 lines here keeps the suite from blocking on B's schedule. If the two ever
+ * disagree, the contract is the arbiter, not either copy.
  */
 
 import { MERKLE_DEPTH } from "./contract-surface.js";
-import type { Hex32 } from "./types.js";
+import { hexToBytes, leafOf } from "./crypto.js";
+import type { Actor, Hex32 } from "./types.js";
 
 /** What the reporter keeps on their own machine. Never leaves it. */
 export interface TestigoPrivateState {
-  readonly credencialSecret: Uint8Array;
-  readonly secretPersonal: Uint8Array;
-  readonly evidenciaHash: Uint8Array;
+  readonly orgId: Uint8Array;
+  readonly credentialSecret: Uint8Array;
+  readonly personalSecret: Uint8Array;
+  readonly evidenceHash: Uint8Array;
+  /** Hex form of `orgId`, so `credentialPath` can derive its leaf without re-encoding. */
+  readonly orgIdHex: Hex32;
+  readonly credentialSecretHex: Hex32;
 }
 
-interface MerkleTreeDigest {
-  readonly field: bigint;
-}
 interface MerkleTreePathEntry {
-  readonly sibling: MerkleTreeDigest;
-  /** snake_case is Compact's one stdlib inconsistency (§2.5) — do not "fix" it. */
+  readonly sibling: { readonly field: bigint };
+  /** snake_case is Compact's one stdlib inconsistency — do not "fix" it. */
   readonly goes_left: boolean;
 }
-interface MerkleTreePath {
-  readonly leaf: Uint8Array;
-  readonly path: readonly MerkleTreePathEntry[];
-}
 
-/** The generated ledger wrapper, narrowed to what the witnesses actually touch. */
+/** The generated ledger wrapper, narrowed to what the witnesses touch. */
 interface LedgerView {
-  readonly credenciales: {
-    findPathForLeaf(leaf: Uint8Array): MerkleTreePath | undefined;
+  readonly credentials: {
+    findPathForLeaf(leaf: Uint8Array): { path: MerkleTreePathEntry[] } | undefined;
   };
 }
 
@@ -44,56 +43,59 @@ interface WitnessCtx {
 }
 
 /**
- * A path that cannot validate against any real root.
+ * Siblings that cannot validate against any real root.
  *
- * §2.1 flags handling `undefined` from `findPathForLeaf` as "you are not an employee". A
- * witness cannot return `undefined` — the circuit expects a `MerkleTreePath`. So we hand back
- * a zero path and let the in-circuit `checkRoot` reject it, which surfaces as the contract's
- * own "credencial invalida" assert rather than a TypeScript crash. That is the correct shape:
- * an invalid witness must fail the constraint, not the harness.
+ * `findPathForLeaf` returns `undefined` when the leaf is not in the tree — "you are not an
+ * employee". A witness cannot return `undefined`, because the circuit expects the siblings
+ * vector. So we hand back zeroes and let the in-circuit `checkRoot` reject them, which surfaces
+ * as the contract's own "credential does not belong to the organization" assert rather than a
+ * TypeScript crash. That is the right shape: an invalid witness must fail the constraint, not
+ * the harness.
  */
-function unsatisfiablePath(leaf: Uint8Array): MerkleTreePath {
-  return {
-    leaf,
-    path: Array.from({ length: MERKLE_DEPTH }, () => ({
-      sibling: { field: 0n },
-      goes_left: false,
-    })),
-  };
-}
+const UNSATISFIABLE_SIBLINGS: MerkleTreePathEntry[] = Array.from(
+  { length: MERKLE_DEPTH },
+  () => ({ sibling: { field: 0n }, goes_left: false }),
+);
 
 export const witnesses = {
-  credencialSecret: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
+  credentialSecret: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
     ctx.privateState,
-    ctx.privateState.credencialSecret,
+    ctx.privateState.credentialSecret,
   ],
 
-  secretPersonal: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
+  personalSecret: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
     ctx.privateState,
-    ctx.privateState.secretPersonal,
+    ctx.privateState.personalSecret,
   ],
 
-  evidenciaHash: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
+  evidenceHash: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
     ctx.privateState,
-    ctx.privateState.evidenciaHash,
+    ctx.privateState.evidenceHash,
   ],
 
-  /** §2.1: the generated TS gives us `findPathForLeaf` for free — this is the whole witness. */
-  credencialPath: (ctx: WitnessCtx, hoja: Uint8Array): [TestigoPrivateState, MerkleTreePath] => [
-    ctx.privateState,
-    ctx.ledger.credenciales.findPathForLeaf(hoja) ?? unsatisfiablePath(hoja),
-  ],
+  /**
+   * Returns ONLY the siblings — the circuit derives the leaf itself from the public `orgId`,
+   * so the witness cannot choose which leaf gets proven.
+   *
+   * It takes no argument, which means it has to work out its own leaf. That is why `orgId`
+   * lives in the private state: `leafOf(orgId, credentialSecret)` is the leaf this reporter can
+   * legitimately produce a path for.
+   */
+  credentialPath: (ctx: WitnessCtx): [TestigoPrivateState, MerkleTreePathEntry[]] => {
+    const { orgIdHex, credentialSecretHex } = ctx.privateState;
+    const leaf = leafOf(orgIdHex, credentialSecretHex);
+    const found = ctx.ledger.credentials.findPathForLeaf(hexToBytes(leaf));
+    return [ctx.privateState, found?.path ?? UNSATISFIABLE_SIBLINGS];
+  },
 };
 
-export function privateStateFor(a: {
-  credencialSecret: Hex32;
-  secretPersonal: Hex32;
-  evidenciaHash: Hex32;
-}): TestigoPrivateState {
-  const b = (h: Hex32): Uint8Array => Uint8Array.from(Buffer.from(h, "hex"));
+export function privateStateFor(a: Actor): TestigoPrivateState {
   return {
-    credencialSecret: b(a.credencialSecret),
-    secretPersonal: b(a.secretPersonal),
-    evidenciaHash: b(a.evidenciaHash),
+    orgId: hexToBytes(a.orgId),
+    credentialSecret: hexToBytes(a.credentialSecret),
+    personalSecret: hexToBytes(a.personalSecret),
+    evidenceHash: hexToBytes(a.evidenceHash),
+    orgIdHex: a.orgId,
+    credentialSecretHex: a.credentialSecret,
   };
 }

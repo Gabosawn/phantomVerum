@@ -2,7 +2,7 @@
  * The four acts of the demo, end to end, printing the public ledger after every step.
  * `npm run simulate`
  *
- * This is the script that gets recorded for the video (§4, Block E), so the output is written
+ * This is the script that gets recorded for the video (Block E), so the output is written
  * to be read on a projector. It is also self-checking: every act asserts its own invariant and
  * the process exits non-zero on failure. A demo that prints a pretty story while being wrong is
  * worse than no demo.
@@ -12,7 +12,7 @@
  */
 
 import { ASSERTS } from "../harness/contract-surface.js";
-import { autoriaDe, denunciaIdDe, hojaDe } from "../harness/crypto.js";
+import { authorshipOf, leafOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
   ACME_ANCHOR,
@@ -20,7 +20,7 @@ import {
   EMPLOYEE_A,
   EMPLOYEE_B,
   EMPLOYER_PK,
-  FISCAL_PK,
+  PROSECUTOR_PK,
 } from "../harness/fixtures.js";
 import { backendBanner, backends } from "../harness/index.js";
 import { AssertError } from "../harness/types.js";
@@ -41,18 +41,17 @@ function act(n: number, title: string, subtitle: string): void {
 
 function showLedger(l: LedgerSnapshot): void {
   console.log("  ── what the chain sees ───────────────────────────────────────────────");
-  console.log(`     organizaciones : ${l.organizaciones.size}`);
-  for (const [orgId, ancla] of l.organizaciones) {
-    console.log(`                      ${short(orgId)} → ancla ${short(ancla)}`);
+  console.log(`     organizations  : ${l.organizations.size}`);
+  for (const [orgId, anchor] of l.organizations) {
+    console.log(`                      ${short(orgId)} → anchor ${short(anchor)}`);
   }
-  const root = l.credencialesRoot;
-  console.log(`     credenciales   : root ${root === null ? "(empty tree)" : short(root)}`);
-  console.log(`     denuncias      : ${l.denuncias.size}`);
-  for (const d of l.denuncias) console.log(`                      ${short(d)}`);
+  console.log(`     credentials    : ${l.credentialsCount} leaves in the global tree`);
+  console.log(`     reports        : ${l.reports.size}`);
+  for (const d of l.reports) console.log(`                      ${short(d)}`);
   console.log(`     nullifiers     : ${l.nullifiers.size}`);
   for (const n of l.nullifiers) console.log(`                      ${short(n)}`);
-  console.log(`     autorias       : ${l.autorias.size}`);
-  for (const a of l.autorias) console.log(`                      ${short(a)}`);
+  console.log(`     authorships    : ${l.authorships.size}`);
+  for (const a of l.authorships) console.log(`                      ${short(a)}`);
 }
 
 function step(text: string): void {
@@ -79,83 +78,83 @@ function expectRejection(fn: () => void): string | null {
   }
 }
 
-// ── §3.2 — the export the reporter hands to the prosecutor, off-chain ───────────────────
+// ── The export the reporter hands to the prosecutor, off-chain ───────────────────
 
-interface ExportLlaveAutoria {
+interface AuthorshipKeyExport {
   readonly version: 1;
-  readonly denunciaId: Hex32;
-  readonly evidenciaHash: Hex32;
+  readonly reportId: Hex32;
+  readonly evidenceHash: Hex32;
   readonly secret: Hex32;
-  readonly fiscalPk: Hex32;
-  readonly autoriaHash: Hex32;
+  readonly prosecutorPk: Hex32;
+  readonly authorshipHash: Hex32;
 }
 
 /**
- * §3.1 `verificarAutoria` — 100 % off-chain: recompute with the pure circuits and read the
+ * `verifyAuthorship` — 100 % off-chain: recompute with the pure circuits and read the
  * ledger. No proof server, no transaction. `verifierPk` is the key of whoever is looking.
  */
-function verificarAutoria(
-  claim: ExportLlaveAutoria,
+function verifyAuthorship(
+  claim: AuthorshipKeyExport,
   verifierPk: Hex32,
   l: LedgerSnapshot,
-): { ok: boolean; enLedger: boolean; recomputed: Hex32 } {
-  const recomputed = autoriaDe(claim.secret, claim.denunciaId, verifierPk);
-  const enLedger = l.autorias.has(recomputed);
-  return { ok: enLedger && recomputed === claim.autoriaHash, enLedger, recomputed };
+): { ok: boolean; onLedger: boolean; recomputed: Hex32 } {
+  const recomputed = authorshipOf(claim.secret, claim.reportId, verifierPk);
+  const onLedger = l.authorships.has(recomputed);
+  return { ok: onLedger && recomputed === claim.authorshipHash, onLedger, recomputed };
 }
 
 // ── the demo ────────────────────────────────────────────────────────────────────────────
 
 function runDemo(h: TestigoHarness): void {
   console.log(`\n${line("═")}`);
-  console.log(`  TESTIGO — the four acts        backend: ${h.backend}`);
+  console.log(`  PHANTOMTRACE — the four acts        backend: ${h.backend}`);
   console.log(line("═"));
 
   // ── T1 ────────────────────────────────────────────────────────────────────────────────
   act(1, "ACME registers and issues credentials", "The anchor goes public. The secrets never do.");
 
-  h.registrarOrganizacion(ACME, ACME_ANCHOR);
-  step(`registrarOrganizacion(ACME, ancla) — ancla ${short(ACME_ANCHOR)}`);
+  h.registerOrganization(ACME, ACME_ANCHOR);
+  step(`registerOrganization(ACME, anchor) — ${short(ACME_ANCHOR)}`);
 
   for (const employee of [EMPLOYEE_A, EMPLOYEE_B]) {
-    const hoja = hojaDe(ACME, employee.credencialSecret);
-    h.emitirCredencial(ACME, hoja);
-    step(`emitirCredencial(ACME) → ${employee.name}: hoja ${short(hoja)}`);
+    const leaf = leafOf(ACME, employee.credentialSecret);
+    h.issueCredential(ACME, leaf);
+    step(`issueCredential(ACME) → ${employee.name}: leaf ${short(leaf)}`);
   }
   console.log("     the mock issuer only ever publishes H(tag ‖ orgId ‖ credSecret) — never the secret");
   showLedger(h.ledger());
-  require(h.ledger().organizaciones.size === 1, "ACME should be registered");
+  require(h.ledger().organizations.size === 1, "ACME should be registered");
 
   // ── T2 ────────────────────────────────────────────────────────────────────────────────
   act(2, "An employee reports fraud", "Membership proven in private. Identity never disclosed.");
 
-  h.as(EMPLOYEE_A).denunciar(ACME, AUGUST);
-  const denunciaId = denunciaIdDe(EMPLOYEE_A.evidenciaHash, EMPLOYEE_A.secretPersonal);
-  step(`denunciar(ACME, "${AUGUST}") as ${EMPLOYEE_A.name}`);
-  step(`sealed: denunciaId ${short(denunciaId)}`);
+  h.as(EMPLOYEE_A).report(ACME, AUGUST);
+  const reportId = reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret);
+  step(`report(ACME, "${AUGUST}") as ${EMPLOYEE_A.name}`);
+  step(`sealed: reportId ${short(reportId)}`);
   showLedger(h.ledger());
 
   console.log("  ── what never leaves the reporter's machine ──────────────────────────");
-  console.log(`     credencialSecret : ${short(EMPLOYEE_A.credencialSecret)}   (witness)`);
-  console.log(`     secretPersonal   : ${short(EMPLOYEE_A.secretPersonal)}   (witness)`);
-  console.log(`     evidenciaHash    : ${short(EMPLOYEE_A.evidenciaHash)}   (witness)`);
+  console.log(`     credentialSecret : ${short(EMPLOYEE_A.credentialSecret)}   (witness)`);
+  console.log(`     personalSecret   : ${short(EMPLOYEE_A.personalSecret)}   (witness)`);
+  console.log(`     evidenceHash     : ${short(EMPLOYEE_A.evidenceHash)}   (witness)`);
   console.log("     ACME can read the whole ledger and still cannot tell WHO reported.");
 
   const l2 = h.ledger();
-  require(l2.denuncias.has(denunciaId), "the report should be sealed on chain");
+  require(l2.reports.has(reportId), "the report should be sealed on chain");
   for (const leaked of [
-    EMPLOYEE_A.secretPersonal,
-    EMPLOYEE_A.credencialSecret,
-    EMPLOYEE_A.evidenciaHash,
+    EMPLOYEE_A.personalSecret,
+    EMPLOYEE_A.credentialSecret,
+    EMPLOYEE_A.evidenceHash,
   ]) {
     require(
-      !l2.denuncias.has(leaked) && !l2.nullifiers.has(leaked) && !l2.autorias.has(leaked),
+      !l2.reports.has(leaked) && !l2.nullifiers.has(leaked) && !l2.authorships.has(leaked),
       "no witness value may appear on chain",
     );
   }
 
   step(`a second report in "${AUGUST}" from the same person:`);
-  const blocked = expectRejection(() => h.as(EMPLOYEE_A).denunciar(ACME, AUGUST));
+  const blocked = expectRejection(() => h.as(EMPLOYEE_A).report(ACME, AUGUST));
   verdict(false, `rejected — "${blocked}"  (nullifier, anti-spam)`);
   require(blocked === ASSERTS.alreadyReportedThisPeriod, "the nullifier should block a replay");
 
@@ -163,54 +162,54 @@ function runDemo(h: TestigoHarness): void {
   act(3, "ACME tampers with the evidence", "The seal is on chain. Any edit breaks the hash.");
 
   const tampered: Hex32 = "de".repeat(32);
-  const tamperedId = denunciaIdDe(tampered, EMPLOYEE_A.secretPersonal);
-  step(`original evidence  → denunciaId ${short(denunciaId)}   in ledger: yes`);
-  step(`tampered evidence  → denunciaId ${short(tamperedId)}   in ledger: no`);
+  const tamperedId = reportIdOf(tampered, EMPLOYEE_A.personalSecret);
+  step(`original evidence  → reportId ${short(reportId)}   in ledger: yes`);
+  step(`tampered evidence  → reportId ${short(tamperedId)}   in ledger: no`);
   verdict(false, "the altered evidence matches nothing that was sealed");
-  require(!h.ledger().denuncias.has(tamperedId), "tampered evidence must not match the seal");
+  require(!h.ledger().reports.has(tamperedId), "tampered evidence must not match the seal");
 
   // ── T4 ────────────────────────────────────────────────────────────────────────────────
   act(4, "Months later: proving authorship", "Only the author. Only to the verifier they choose.");
 
-  h.as(EMPLOYEE_A).revelarAutoria(denunciaId, FISCAL_PK);
-  const autoriaHash = autoriaDe(EMPLOYEE_A.secretPersonal, denunciaId, FISCAL_PK);
-  step(`revelarAutoria(denunciaId, fiscalPk) — autoria ${short(autoriaHash)}`);
+  h.as(EMPLOYEE_A).revealAuthorship(reportId, PROSECUTOR_PK);
+  const authorshipHash = authorshipOf(EMPLOYEE_A.personalSecret, reportId, PROSECUTOR_PK);
+  step(`revealAuthorship(reportId, prosecutorPk) — authorship ${short(authorshipHash)}`);
   showLedger(h.ledger());
 
   step("someone else tries to claim the same report:");
   const stolen = expectRejection(() =>
-    h.as({ ...EMPLOYEE_A, secretPersonal: EMPLOYEE_B.secretPersonal }).revelarAutoria(
-      denunciaId,
-      FISCAL_PK,
+    h.as({ ...EMPLOYEE_A, personalSecret: EMPLOYEE_B.personalSecret }).revealAuthorship(
+      reportId,
+      PROSECUTOR_PK,
     ),
   );
   verdict(false, `rejected — "${stolen}"  (only the author knows the preimage)`);
   require(stolen === ASSERTS.notTheAuthor, "a foreign secret must not prove authorship");
 
-  // The climax (§4, Block E): one proof, two verifiers, two outcomes.
+  // The climax (Block E): one proof, two verifiers, two outcomes.
   console.log("\n  ── the same claim, read by two different people ──────────────────────");
 
-  const claim: ExportLlaveAutoria = {
+  const claim: AuthorshipKeyExport = {
     version: 1,
-    denunciaId,
-    evidenciaHash: EMPLOYEE_A.evidenciaHash,
-    secret: EMPLOYEE_A.secretPersonal,
-    fiscalPk: FISCAL_PK,
-    autoriaHash,
+    reportId,
+    evidenceHash: EMPLOYEE_A.evidenceHash,
+    secret: EMPLOYEE_A.personalSecret,
+    prosecutorPk: PROSECUTOR_PK,
+    authorshipHash,
   };
 
   const l4 = h.ledger();
-  const asFiscal = verificarAutoria(claim, FISCAL_PK, l4);
-  const asEmployer = verificarAutoria(claim, EMPLOYER_PK, l4);
+  const asProsecutor = verifyAuthorship(claim, PROSECUTOR_PK, l4);
+  const asEmployer = verifyAuthorship(claim, EMPLOYER_PK, l4);
 
-  console.log(`     PROSECUTOR  recomputes ${short(asFiscal.recomputed)}`);
-  verdict(asFiscal.ok, `on chain: ${asFiscal.enLedger} → authorship PROVEN`);
+  console.log(`     PROSECUTOR  recomputes ${short(asProsecutor.recomputed)}`);
+  verdict(asProsecutor.ok, `on chain: ${asProsecutor.onLedger} → authorship PROVEN`);
   console.log(`     EMPLOYER    recomputes ${short(asEmployer.recomputed)}`);
-  verdict(asEmployer.ok, `on chain: ${asEmployer.enLedger} → proves NOTHING`);
+  verdict(asEmployer.ok, `on chain: ${asEmployer.onLedger} → proves NOTHING`);
   console.log("     Same author, same report, different verifier ⇒ different record.");
   console.log("     The employer cannot replay a proof that was never bound to its key.");
 
-  require(asFiscal.ok, "the designated prosecutor must verify");
+  require(asProsecutor.ok, "the designated prosecutor must verify");
   require(!asEmployer.ok, "the employer must not be able to reuse the proof");
 }
 

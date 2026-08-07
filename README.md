@@ -83,66 +83,79 @@ view explicitly states what does NOT leave the machine.
 
 ## Tests
 
-> Everything under `tests/` is written in English. Contract-facing identifiers
-> (circuit names, ledger fields, witnesses, `assert` messages, domain tags) stay
-> in Spanish because they must match the compiled `.compact` byte for byte.
-
 ```bash
-npm test           # 22 cases across the three circuits + the hardening suite
-npm run simulate   # the four acts end to end, printing the ledger at each step
+npm run compile:fast --workspace=contracts   # compiles the contract (no proving keys needed)
+npm test                                     # 48 cases, every one against both backends
+npm run simulate                             # the four acts, printing the ledger at each step
 ```
 
 ```
- testigo · backends: model — contract backend OFF (no contracts/output/contract/index.cjs)
+ testigo · backends: model, contract — differential run, both must agree
 
- ✓ src/circuits/registrar-organizacion.test.ts (3 tests) 6ms
- ✓ src/circuits/hardening.test.ts            (8 tests) 58ms
- ✓ src/circuits/denunciar.test.ts            (6 tests) 113ms
- ✓ src/circuits/revelar-autoria.test.ts      (5 tests) 79ms
+ ✓ src/circuits/register-organization.test.ts  (8 tests) 113ms
+ ✓ src/circuits/hardening.test.ts             (11 tests) 226ms
+ ✓ src/circuits/contract-agreement.test.ts     (4 tests | 1 skipped) 227ms
+ ✓ src/circuits/reveal-authorship.test.ts     (10 tests) 402ms
+ ✓ src/circuits/report.test.ts                (16 tests) 551ms
 
- Test Files  4 passed (4)
-      Tests  22 passed (22)
-   Duration  598ms
+ Test Files  5 passed (5)
+      Tests  48 passed | 1 skipped (49)
+   Duration  1.10s
 ```
+
+### Two backends, one suite
+
+The suite runs behind a seam (`tests/src/harness/types.ts`) with two interchangeable backends.
+Tests never import a backend — they `describe.each` over whatever is available, so every case
+below runs twice.
+
+| Backend | What it is |
+|---|---|
+| `model` | The spec implemented in TypeScript on top of compact-runtime's own `persistentHash` and `StateBoundedMerkleTree`. Written from `docs/01-arquitectura.md`, deliberately **not** from the contract |
+| `contract` | The compiled `testigo.compact` driven through compact-runtime's local simulator — no network, no proof server, no proving keys |
+
+That independence is the whole point: the two implementations agree on every published digest
+and on the full public ledger, and they got there separately. `contract-agreement.test.ts`
+checks both directions — the four `pure circuit` digests over five input vectors, and a
+whole-snapshot comparison after a scenario that exercises every circuit and every rejection.
+
+What the `model` backend does *not* do is run the constraints inside a ZK circuit. It checks
+credential membership with `findPathForLeaf` instead of `checkRoot(merkleTreePathRoot(path))`.
+Only the `contract` backend proves the `.compact` actually enforces it.
+
+**One known divergence, by construction.** The contract inserts credential leaves through the
+on-chain VM's state ops (`StateValue.newCell(leafHash(leaf)).encode()`) while the model calls
+`StateBoundedMerkleTree.update()` directly. Both agree on *membership* — which leaf is provably
+in the tree, which is what the circuit constrains — but they reach different internal root
+digests. The root is therefore not part of the comparable ledger surface and is not printed in
+the demo; nothing in the product reads it (`leerEstadoLedger` returns counts and hashes, and
+`anchor` is a separate per-org marker). See the note on `LedgerSnapshot` in `types.ts`.
 
 ### What is covered
 
 | Circuit | Cases |
 |---|---|
-| `registrarOrganizacion` | registers ok · re-registration fails and cannot overwrite the anchor · two orgs stay independent |
-| `denunciar` | happy path (and nothing identifying reaches the ledger) · invalid credential fails · second report in the same period fails · a different period passes with unlinkable nullifiers · two orgs do not interfere · two employees of one org do not interfere |
-| `revelarAutoria` | real author passes · foreign secret fails · nonexistent report fails · same author + different prosecutor ⇒ different hash · double reveal to the same prosecutor fails |
-| hardening (§2.2, §2.6) | identical resubmission fails (idempotency guard) · exact replay fails · nullifier/autoria cross-collision impossible · same-arity domains separated · each hash bound to its own tag · frozen golden vectors · period reaches the nullifier digest |
-
-### Two backends, one suite
-
-The suite runs through a seam (`tests/src/harness/types.ts`) with two interchangeable
-backends. Tests never import a backend — they `describe.each` over whatever is available.
-
-| Backend | What it is | Available |
-|---|---|---|
-| `model` | The spec (§3–§4) implemented in TypeScript, over compact-runtime's **real** `persistentHash` and **real** `StateBoundedMerkleTree` — so digests and Merkle roots are byte-identical to the circuit's, not simulated | always |
-| `contract` | The compiled `.compact` driven through `@midnight-ntwrk/compact-runtime`'s local simulator — no network, no proof server | once `contracts/output/` exists |
-
-With both present, every case runs twice and **any divergence between them is a real bug in
-one of the two**. The model is written from the spec, deliberately not from the contract, which
-is what gives the comparison its value.
-
-What the `model` backend does *not* do is run the constraints inside a ZK circuit: it checks
-credential membership with `findPathForLeaf` rather than `checkRoot(merkleTreePathRoot(path))`.
-Same bytes, same outcome — but only the `contract` backend proves the `.compact` enforces it.
+| `registerOrganization` | registers ok · re-registration fails and cannot overwrite the anchor · two orgs stay independent · issuing for an unregistered org fails |
+| `report` | happy path (and nothing identifying reaches the ledger) · invalid credential fails · second report in the same period fails · a different period passes with unlinkable nullifiers · two orgs do not interfere · a BETA employee cannot report as ACME whichever leaf they aim the witness at · two employees of one org do not interfere · unregistered org fails |
+| `revealAuthorship` | real author passes · foreign secret fails · nonexistent report fails · same author + different prosecutor ⇒ different hash · double reveal to the same prosecutor fails |
+| hardening | identical resubmission fails (idempotency guard) · exact replay fails · nullifier/authorship cross-collision impossible · same-arity domains separated · each hash bound to its own tag · golden vectors taken from the compiled contract · period reaches the nullifier digest · the nullifier is keyed on the credential secret, not the personal one |
+| agreement | `crypto.ts` reproduces all four pure circuits over five input vectors · the contract is operand-order sensitive · both backends reach an identical public ledger |
 
 ### The suite has teeth
 
 Green tests against a hand-written model prove nothing on their own, so the suite was
 mutation-tested: 13 deliberate defects injected one at a time into the model and the hash
-construction (dropped idempotency guards, dropped membership check, dropped author check,
-swapped domain tags, swapped hash operands, `periodo` dropped from the nullifier).
+construction — dropped idempotency guards, dropped membership check, dropped author check,
+swapped domain tags, swapped hash operands, `period` dropped from the nullifier.
 
-The first pass killed 12 of 13. The survivor was a nullifier reusing `testigo:denuncia:v1` —
-the domain-separation test had been comparing a `Vector<3>` digest against a `Vector<4>` one,
-so the arity difference masked the tag collision. Two tests were added (tag binding + golden
-vectors) and all 13 mutants now fail the suite.
+The first pass killed 12 of 13. The survivor was a nullifier reusing the report domain tag: the
+domain-separation test had been comparing a `Vector<3>` digest against a `Vector<4>` one, so the
+arity difference masked the tag collision. Two tests were added — tag binding and golden vectors
+— and all 13 mutants now fail.
+
+The same technique confirms the two backends are genuinely independent: break a guard in the
+model alone and exactly the `['model']` variants fail while every `['contract']` variant
+survives.
 
 ## Development plan — 4 independent blocks
 
@@ -190,12 +203,15 @@ the real `app/` layer.
 
 ### Block D — Tests (`tests/`) ✅
 
-- [x] Per-circuit suite (see [Tests](#tests))
+- [x] Per-circuit suite — 48 cases, each run against both backends (see [Tests](#tests))
 - [x] E2E simulation of the 4 stages printing ledger state at each step
-- [x] Two-backend seam: spec model (always) + compiled contract (when present)
+- [x] Two-backend seam: spec model + the real compiled contract, differentially compared
 - [x] Mutation-tested: 13 injected defects, 13 killed
+- [x] Reconciled against Block A's contract: names, domain tags, assert strings, and the
+      nullifier secret
 
-**Deliverable:** `npm test` green + `npm run simulate` in one command.
+**Deliverable:** `npm test` green + `npm run simulate` in one command, both against the real
+compiled `testigo.compact`.
 
 ### Contracts between blocks (the only thing frozen upfront)
 

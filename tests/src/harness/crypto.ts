@@ -1,9 +1,12 @@
 /**
- * The contract's four hashes, computed with the SAME `persistentHash` the circuit uses.
+ * The contract's four hashes, recomputed in TypeScript with the SAME `persistentHash` the
+ * circuit uses.
  *
- * This is what makes the `model` backend a real oracle rather than a mock: the bytes coming
- * out of here are byte-identical to what the compiled `.compact` produces, because it is the
- * same implementation (`@midnight-ntwrk/compact-runtime`), not a reimplementation of it.
+ * This is deliberately an independent implementation of the four `export pure circuit`s, not a
+ * call into them. The contract exposes `pureCircuits.leafOf` and friends, and
+ * `hardening.test.ts` asserts these functions agree with them digest for digest. If it were a
+ * thin wrapper the agreement would be vacuous; because it is independent, the comparison
+ * actually pins the construction — tag, arity and operand order.
  *
  * Signature verified against compact-runtime 0.16.0:
  *   persistentHash<A>(rtType: CompactType<A>, value: A): Uint8Array
@@ -27,7 +30,7 @@ const BYTES32 = new CompactTypeBytes(32);
 const VECTOR3 = new CompactTypeVector(3, BYTES32);
 const VECTOR4 = new CompactTypeVector(4, BYTES32);
 
-/** Runtime type of `MerkleTreePath<8, Bytes<32>>`, to decode what the tree returns. */
+/** Runtime type of `MerkleTreePath<8, Bytes<32>>`. */
 export const MERKLE_PATH_TYPE = new CompactTypeMerkleTreePath(MERKLE_DEPTH, BYTES32);
 
 // ── conversions ─────────────────────────────────────────────────────────────────────────
@@ -44,7 +47,7 @@ export function pad32(s: string): Uint8Array {
   return out;
 }
 
-/** Like `pad32` but hex — for `periodo`, which is `Bytes<32>` in circuit (§2.5). */
+/** Like `pad32` but hex — for `period`, which is `Bytes<32>` in circuit. */
 export const padHex32 = (s: string): Hex32 => bytesToHex(pad32(s));
 
 /** Wraps a `Bytes<32>` as an `AlignedValue`, the shape `leafHash` expects. */
@@ -54,44 +57,57 @@ const alignedBytes32 = (b: Uint8Array): AlignedValue => ({
 });
 
 /** Compact's Merkle leaf hash. What gets inserted, and what gets looked up. */
-export const hojaHash = (hoja: Hex32): AlignedValue => leafHash(alignedBytes32(hexToBytes(hoja)));
+export const leafHashOf = (leaf: Hex32): AlignedValue => leafHash(alignedBytes32(hexToBytes(leaf)));
 
-// ── the four pure circuits (§2.4) ───────────────────────────────────────────────────────
+// ── the four pure circuits ──────────────────────────────────────────────────────────────
 
-/** `hoja = H(tag ‖ orgId ‖ credencialSecret)` — §2.1: orgId lives INSIDE the leaf. */
-export function hojaDe(orgId: Hex32, credencialSecret: Hex32): Hex32 {
+/** `leaf = H(tag ‖ orgId ‖ credSecret)` — orgId lives INSIDE the leaf, binding it to an org. */
+export function leafOf(orgId: Hex32, credSecret: Hex32): Hex32 {
   return bytesToHex(
-    persistentHash(VECTOR3, [pad32(DOMAIN_TAGS.hoja), hexToBytes(orgId), hexToBytes(credencialSecret)]),
+    persistentHash(VECTOR3, [pad32(DOMAIN_TAGS.cred), hexToBytes(orgId), hexToBytes(credSecret)]),
   );
 }
 
-/** `denunciaId = H(tag ‖ evidenciaHash ‖ secret)` — the seal. Only the author knows the preimage. */
-export function denunciaIdDe(evidenciaHash: Hex32, secret: Hex32): Hex32 {
+/** `reportId = H(tag ‖ evidenceHash ‖ personalSecret)` — the seal. Only the author knows it. */
+export function reportIdOf(evidenceHash: Hex32, personalSecret: Hex32): Hex32 {
   return bytesToHex(
-    persistentHash(VECTOR3, [pad32(DOMAIN_TAGS.denuncia), hexToBytes(evidenciaHash), hexToBytes(secret)]),
-  );
-}
-
-/** `nullifier = H(tag ‖ secret ‖ orgId ‖ periodo)` — anti-spam, one report per period. */
-export function nullifierDe(secret: Hex32, orgId: Hex32, periodo: Hex32): Hex32 {
-  return bytesToHex(
-    persistentHash(VECTOR4, [
-      pad32(DOMAIN_TAGS.nullifier),
-      hexToBytes(secret),
-      hexToBytes(orgId),
-      hexToBytes(periodo),
+    persistentHash(VECTOR3, [
+      pad32(DOMAIN_TAGS.report),
+      hexToBytes(evidenceHash),
+      hexToBytes(personalSecret),
     ]),
   );
 }
 
-/** `autoria = H(tag ‖ secret ‖ denunciaId ‖ fiscalPk)` — the designated verifier binding. */
-export function autoriaDe(secret: Hex32, denunciaId: Hex32, fiscalPk: Hex32): Hex32 {
+/**
+ * `nullifier = H(tag ‖ credSecret ‖ orgId ‖ period)` — anti-spam, one report per period.
+ *
+ * Note the secret: the CREDENTIAL one, not the personal one. See `NULLIFIER_SECRET` in
+ * contract-surface.ts for why that is the stronger choice and what it costs.
+ */
+export function nullifierOf(credSecret: Hex32, orgId: Hex32, period: Hex32): Hex32 {
   return bytesToHex(
     persistentHash(VECTOR4, [
-      pad32(DOMAIN_TAGS.autoria),
-      hexToBytes(secret),
-      hexToBytes(denunciaId),
-      hexToBytes(fiscalPk),
+      pad32(DOMAIN_TAGS.nullifier),
+      hexToBytes(credSecret),
+      hexToBytes(orgId),
+      hexToBytes(period),
+    ]),
+  );
+}
+
+/** `authorship = H(tag ‖ personalSecret ‖ reportId ‖ prosecutorPk)` — the verifier binding. */
+export function authorshipOf(
+  personalSecret: Hex32,
+  reportId: Hex32,
+  prosecutorPk: Hex32,
+): Hex32 {
+  return bytesToHex(
+    persistentHash(VECTOR4, [
+      pad32(DOMAIN_TAGS.authorship),
+      hexToBytes(personalSecret),
+      hexToBytes(reportId),
+      hexToBytes(prosecutorPk),
     ]),
   );
 }

@@ -1,110 +1,101 @@
 /**
- * CONTRACT SURFACE — the agreement between Block D (tests) and Block A (the contract).
+ * CONTRACT SURFACE — mirrors `contracts/src/testigo.compact`.
  *
- * This file is the single source of truth for names, domain tags and assert messages. If
- * Block A picks different names, this file changes and nothing else: neither the model nor
- * the 13 tests are touched.
+ * Reconciled against the real contract on 2026-08-07, after Block A landed. Before that this
+ * file held Block D's assumption of the surface; now it holds the surface itself, transcribed
+ * from the compiled artifact. The `.compact` is the authority — if it changes, this file
+ * follows, and the 22 test cases keep working untouched.
  *
- * Identifiers below stay in Spanish on purpose — they must match the compiled `.compact`
- * byte for byte. Everything else in `tests/` is English.
- *
- * Derived from docs/01-arquitectura.md §3–§4 and docs/03-plan-ejecucion.md §2.1, §2.2,
- * §2.4, §2.6.
+ * Everything here is verified against `contracts/output/contract/index.d.ts`.
  */
 
-/** Public ledger fields (§3 of 01-arquitectura). */
+/** Public ledger fields. */
 export const LEDGER = {
-  organizaciones: "organizaciones",
-  /** §2.1: GLOBAL tree with orgId inside the leaf. HistoricMerkleTree<8, Bytes<32>>. */
-  credenciales: "credenciales",
-  denuncias: "denuncias",
+  organizations: "organizations",
+  /** Global `HistoricMerkleTree<8, Bytes<32>>` — orgId lives inside each leaf. */
+  credentials: "credentials",
+  reports: "reports",
   nullifiers: "nullifiers",
-  autorias: "autorias",
+  authorships: "authorships",
 } as const;
 
-/** Credential tree depth (§5 of 01-arquitectura: 8 levels = 256 employees). */
+/** Credential tree depth. */
 export const MERKLE_DEPTH = 8;
 
 /** Exported impure circuits. */
 export const CIRCUITS = {
-  registrarOrganizacion: "registrarOrganizacion",
-  emitirCredencial: "emitirCredencial",
-  denunciar: "denunciar",
-  revelarAutoria: "revelarAutoria",
+  registerOrganization: "registerOrganization",
+  issueCredential: "issueCredential",
+  report: "report",
+  revealAuthorship: "revealAuthorship",
 } as const;
 
-/** `export pure circuit`s (§2.4) — let the app hash locally, with no proof server. */
+/** `export pure circuit`s — the app recomputes hashes locally, with no proof server. */
 export const PURE_CIRCUITS = {
-  hojaDe: "hojaDe",
-  denunciaIdDe: "denunciaIdDe",
-  nullifierDe: "nullifierDe",
-  autoriaDe: "autoriaDe",
+  leafOf: "leafOf",
+  reportIdOf: "reportIdOf",
+  nullifierOf: "nullifierOf",
+  authorshipOf: "authorshipOf",
 } as const;
 
 /** Witnesses declared in Compact, implemented in TypeScript. */
 export const WITNESSES = {
-  credencialSecret: "credencialSecret",
-  secretPersonal: "secretPersonal",
-  evidenciaHash: "evidenciaHash",
-  credencialPath: "credencialPath",
+  credentialSecret: "credentialSecret",
+  /** Takes NO argument and returns only the siblings — see `witnesses.ts`. */
+  credentialPath: "credentialPath",
+  personalSecret: "personalSecret",
+  evidenceHash: "evidenceHash",
 } as const;
 
 /**
- * Domain separation tags (§2.2 — MANDATORY, not optional).
+ * Domain separation tags, in position 0 of all four hashes.
  *
- * Without them `nullifier` and `autoria` share the same shape with the same secret in
- * position 0: an attacker who registers an org with `orgId = denunciaId` forces a
- * cross-domain collision. §2.2 fixes `"testigo:nullifier:v1"` verbatim; the other three are
- * the direct extension.
- *
- * They go in position 0 of all four hashes, as `pad(32, "...")`.
+ * Without them `nullifierOf` and `authorshipOf` share a shape — H(sec, X, Y) — so an attacker
+ * who registers an org whose `orgId` equals a victim's `reportId` forces a cross-domain
+ * collision. `hardening.test.ts` reproduces that attack.
  */
 export const DOMAIN_TAGS = {
-  hoja: "testigo:hoja:v1",
-  denuncia: "testigo:denuncia:v1",
-  nullifier: "testigo:nullifier:v1",
-  autoria: "testigo:autoria:v1",
+  cred: "phantomtrace:cred:v1",
+  report: "phantomtrace:report:v1",
+  nullifier: "phantomtrace:nullifier:v1",
+  authorship: "phantomtrace:authorship:v1",
 } as const;
 
-/**
- * `assert` messages. These must match the contract LITERALLY: the tests assert on them with
- * `toThrow(/.../)` against both backends.
- */
+/** `assert` messages, copied verbatim from the contract. Tests match on these. */
 export const ASSERTS = {
-  orgAlreadyRegistered: "organizacion ya registrada",
-  orgNotFound: "organizacion inexistente",
-  invalidCredential: "credencial invalida",
-  alreadyReportedThisPeriod: "ya denunciaste este periodo",
-  reportAlreadyExists: "denuncia ya existe",
-  notTheAuthor: "no sos el autor",
-  reportNotFound: "denuncia inexistente",
-  authorshipAlreadyRevealed: "autoria ya revelada",
+  orgAlreadyRegistered: "organization already registered",
+  orgNotRegistered: "organization not registered",
+  credentialNotInOrg: "credential does not belong to the organization",
+  alreadyReportedThisPeriod: "already reported this period",
+  reportAlreadySealed: "report already sealed",
+  notTheAuthor: "not the author",
+  reportDoesNotExist: "report does not exist",
+  authorshipAlreadyRevealed: "authorship already revealed to this prosecutor",
 } as const;
 
 /**
- * ⚠️ OPEN SPEC AMBIGUITY — must be resolved with Block A. It has a security consequence.
+ * Which secret feeds the nullifier — RESOLVED, and worth knowing why.
  *
- * `01-arquitectura.md` contradicts itself about which secret feeds the nullifier:
+ * `01-arquitectura.md` contradicted itself: §4.2's pseudocode fed it `personalSecret`, §5
+ * (Option A) said `credencialSecret`. Block D's model originally implemented §4.2. The
+ * contract chose §5 — `report()` calls `nullifierOf(cred, orgId, period)` — so the model was
+ * changed to match.
  *
- *   §4.2 (pseudocode):  nul = H([secretPersonal, orgId, periodo])
- *   §5 (Option A):      "the nullifier uses `credencialSecret` as `secret` →
- *                        one credential = one report per period"
+ * §5 is the better call, and the split matters:
  *
- * Neither reading is free:
+ *   - the NULLIFIER uses `credentialSecret`, so anti-spam is strong: one credential is one
+ *     report per period. With `personalSecret` the reporter picks their own value and can mint
+ *     N nullifiers from one credential, which is the weakness §5 attributes to Option B.
+ *   - the REPORT ID uses `personalSecret`, which the mock issuer never sees. That is what
+ *     keeps authorship unforgeable by the org that issued the credential.
  *
- *   - With `secretPersonal` (what this model implements, per §8: "adapt the syntax, never
- *     the semantics" → the pseudocode wins): anti-spam is WEAK. The reporter picks their own
- *     `secretPersonal`, so they can mint N distinct nullifiers from one credential. That is
- *     exactly the weakness §5 attributes to Option B.
- *
- *   - With `credencialSecret`: anti-spam is strong, BUT if the mock issuer (the org) knows
- *     the `credencialSecret` values it issued, it can compute
- *     `nullifierDe(credSecret_i, orgId, periodo)` for every employee i and check which one
- *     is in the ledger → it DEANONYMIZES the reporter. That breaks the product's core
- *     property. It is only safe if the employee generates `credencialSecret` and the org
- *     never sees it (the org only ever receives the leaf `H(tag ‖ orgId ‖ credSecret)`).
- *
- * This model implements §4.2 (`secretPersonal`) and declares it. If Block A resolves it the
- * other way, only `model.ts` changes — no assertion in the suite moves.
+ * ⚠️ Residual risk to state in the deck: whoever knows the issued `credentialSecret` values can
+ * compute `nullifierOf(cred_i, orgId, period)` for each employee i and check the ledger to see
+ * which one reported. It is only safe if the employee generates `credentialSecret` and the org
+ * only ever receives the leaf. That is a property of the mock issuer, not of the circuit —
+ * declare it alongside the other mock-issuer limits.
  */
-export const NULLIFIER_SECRET: "secretPersonal" | "credencialSecret" = "secretPersonal";
+export const NULLIFIER_SECRET = "credentialSecret" as const;
+
+/** The report id is bound to the secret the issuer never learns. */
+export const REPORT_ID_SECRET = "personalSecret" as const;
