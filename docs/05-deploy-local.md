@@ -94,22 +94,31 @@ the faucet. **On local there is no faucet**, so funding must come from a
 
 Before the deploy script is run on local, confirm ONE of:
 
-- [ ] The local devnet's genesis funds a **known seed**; put that seed in `.env`
-      as `DEPLOY_SEED=` (verify against the compose/chainspec the devnet skill
-      generated, or `@midnight-ntwrk/testkit-js`'s `LocalTestConfiguration` /
-      `GENESIS_MINT_WALLET_SEED` — **do not invent one**).
-- [ ] OR the deploy script must call `start(false)` on local and the wallet is
+- [x] The local devnet's genesis funds a **known seed** — the genesis-mint
+      wallet used across Midnight's standalone examples:
+
+      ```
+      0000000000000000000000000000000000000000000000000000000000000001
+      ```
+
+      (32 bytes: 63 zeros + `1`.) Put it in `.env` as `DEPLOY_SEED=`. This is a
+      **public devnet test seed, not a secret** — it holds tDUST on the local
+      chain only and must NEVER be reused on Preview.
+- [ ] OR the deploy script calls `start(false)` on local with the wallet
       pre-funded by another mechanism.
 
-**Action item:** verify the genesis seed source in testkit-js 4.1.1 and record
-it here before running. This is the single most likely thing to block the local
-deploy.
+> **Verify once on the healthy machine** (the value above is not confirmed from
+> this machine — no `node_modules` here): it should match testkit-js 4.1.1's
+> `LocalTestConfiguration` / `GENESIS_MINT_WALLET_SEED`, or the genesis balances
+> in the chainspec the `midnight-tooling:devnet` skill generated. If the local
+> deploy can't find funds, this seed is the first thing to re-check.
 
 ### 3.3 `.env` for local
 
 ```dotenv
 NETWORK=local
-DEPLOY_SEED=<genesis-funded 64-hex seed for the local devnet>   # see §3.2
+# genesis-mint wallet of the local devnet (public test seed — see §3.2)
+DEPLOY_SEED=0000000000000000000000000000000000000000000000000000000000000001
 PROOF_SERVER=http://localhost:6300
 ```
 
@@ -224,8 +233,9 @@ until local §5 is fully green.**
 
 ## 9. Open risks (ranked)
 
-1. **Local genesis funding (§3.2)** — highest. No faucet on local; need the
-   real genesis seed. Verify before anything else.
+1. **Local genesis funding (§3.2)** — seed recorded (`…0001`); still verify it
+   once against testkit-js / the chainspec on the healthy machine before the
+   first deploy.
 2. **Compiler / SDK version drift** — `readCompilerVersion` records whatever
    generated the keys; `findDeployedContract` rejects a stale address after a
    recompile. Recompile → redeploy, never reuse an old address.
@@ -239,7 +249,7 @@ until local §5 is fully green.**
 
 ## 10. Task list (for `dev`)
 
-- [ ] Verify local genesis seed source (§3.2) and record it
+- [x] Record local genesis seed (§3.2) — `…0001`; verify once on healthy machine
 - [ ] Write `app/src/scripts/deploy.ts` + `deploy` npm script (§4)
 - [ ] Bring up local devnet, health green (§3.1)
 - [ ] `npm run compile` (with keys) + `npm run build --workspace=app`
