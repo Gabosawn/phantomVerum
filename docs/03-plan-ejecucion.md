@@ -156,15 +156,23 @@ type TxResult = { txId: string; blockHeight?: number };
 
 registrarOrganizacion(p: { orgId: Hex32; ancla: Hex32 }): Promise<TxResult>;
 
-emitirCredencial(p: { orgId: Hex32 }): Promise<{ credencialSecret: Hex32; hojaIndex: number; tx: TxResult }>;   // solo Opción A
+// ⚠️ CAMBIADO tras el review de seguridad (§3.4): el cliente genera el secret,
+// el emisor solo recibe la hoja. Antes devolvía credencialSecret → permitía al
+// emisor recomputar el nullifier de cualquier empleado y desanonimizarlo.
+emitirCredencial(p: { orgId: Hex32; hoja: Hex32 }): Promise<{ hojaIndex: number; tx: TxResult }>;
+  // el CLIENTE hace: credSecret = randomBytes(32); hoja = pureCircuits.hojaDe(orgId, credSecret)
+  // y manda SOLO la hoja. El emisor nunca ve credSecret.
 
 denunciar(p: { orgId: Hex32; periodo: string; evidencia: Uint8Array }):
-  Promise<{ denunciaId: Hex32; nullifier: Hex32; tx: TxResult }>;
+  Promise<{ denunciaId: Hex32; nullifier: Hex32; secretDenuncia: Hex32; tx: TxResult }>;
   // hashea la evidencia LOCAL; lanza CredencialInvalidaError | NullifierRepetidoError (fallan en proof time, sin tx)
+  // ⚠️ genera un secretDenuncia FRESCO por denuncia (nunca reusa uno global)
 
 revelarAutoria(p: { denunciaId: Hex32; fiscalPk: Hex32 }):
   Promise<{ autoriaHash: Hex32; tx: TxResult }>;
   // lanza NoSosElAutorError (proof time, sin tx)
+  // la app selecciona el secretDenuncia correcto en el private state ANTES de llamar
+  // (los witnesses no toman argumentos)
 
 verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }>;
   // 100 % off-chain: recomputa con los pure circuits + lee el ledger vía indexer
@@ -176,11 +184,22 @@ leerEstadoLedger(): Promise<{ organizaciones: number; denuncias: Hex32[]; nullif
 ### 3.2 Formatos que cruzan fronteras
 
 - **Secrets del denunciante** → `secrets/denunciante.json` (ya ignorado por
-  git): `{ version: 1, secretPersonal, credencialSecret, orgId, hojaIndex }`.
+  git). ⚠️ **CAMBIADO tras el review (§3.4)** — secret POR DENUNCIA, no global:
+  ```jsonc
+  { "version": 2,
+    "credencialSecret": "…", "orgId": "…", "hojaIndex": 3,
+    "denuncias": { "<denunciaId>": { "secretDenuncia": "…", "evidenciaHash": "…" } } }
+  ```
+  Ambos secrets con `crypto.randomBytes(32)` — **nunca** derivados de password
+  o seed: la entropía de `secretDenuncia` es lo único que impide invertir
+  `denunciaId`, porque `evidenciaHash` es enumerable por el empleador (los
+  documentos son suyos).
 - **Export de llave de autoría** (lo que la UI exporta y el fiscal carga) →
-  `ExportLlaveAutoria = { version: 1, denunciaId, evidenciaHash, secret,
-  fiscalPk, autoriaHash }`. ⚠️ Limitación declarada: el fiscal aprende
-  `secret` — aceptable para el MVP, roadmap: prueba ZK al fiscal.
+  `ExportLlaveAutoria = { version: 2, denunciaId, evidenciaHash,
+  secretDenuncia, fiscalPk, autoriaHash }`. ⚠️ **Limitación real, decláresela
+  en el deck:** quien tiene el export puede verificar la autoría *y actuar
+  como el autor*. El secret por denuncia acota el daño a esa sola denuncia
+  (antes comprometía todas). Roadmap: prueba ZK al fiscal en vez del paquete.
 - **Dirección del contrato** → `app/src/config/deployment.json` commiteado:
   `{ network: "preview", contractAddress, deployTxId, deployedAt,
   compilerVersion: "0.31.1" }`. `ui/` y `tests/` importan de acá. Nunca de
@@ -194,6 +213,48 @@ Vitest contra el **contrato compilado real** vía
 `@midnight-ntwrk/compact-runtime` (simulador local, sin red y sin proof
 server) — no mocks puros. Los tests de circuito prueban el `.compact` de
 verdad y sobreviven a la integración.
+
+### 3.4 Review de seguridad — hallazgos reproducidos (vie 7/8 14:30)
+
+Un review adversarial corrió repros en el simulador contra el contrato
+compilado. **Los 5 hallazgos se reprodujeron corriendo el script**, no son
+teóricos. Lo que cambia:
+
+| # | Hallazgo | Estado |
+|---|---|---|
+| H-1 | `periodo` es parámetro libre → 4 denuncias aceptadas con una credencial variando el período. El anti-spam es evadible | Fix de contrato en curso (pre-deploy = gratis) |
+| H-2 | El export contiene el witness set completo → **quien lo recibe puede actuar como el autor**: republicó autoría a la pk del empleador y quemó el slot de otro fiscal, bloqueando al autor real para siempre | Mitigado con secret por denuncia + reframe honesto |
+| H-3 | `secretPersonal` global reusado en todas las denuncias → un solo reveal desanonimiza retroactivamente todas | **Arreglado en §3.2** (secret por denuncia) |
+| H-4 | El emisor generaba `credencialSecret` → podía recomputar el nullifier de cualquier empleado y desanonimizarlo | **Arreglado en §3.1** (el cliente genera, manda solo la hoja) |
+| H-5 | La raíz de Merkle revelada es un contador de sincronización → acota el conjunto de anonimato | Regla de witness, abajo |
+| M-1 | `emitirCredencial` no liga `orgId` a la hoja: se forjó una credencial para una org no registrada | Fix de contrato en curso |
+
+**Reglas que B2 (witnesses) DEBE cumplir por H-5:**
+1. **Nunca cachear un Merkle path.** `findPathForLeaf` se llama contra el
+   estado fresco del ledger, dentro del witness, en proof time. Es una
+   propiedad de seguridad, no una comodidad — comentarlo así en el código.
+2. Nunca derivar el path del estado al momento de la emisión (esa raíz es el
+   índice propio del denunciante y puede identificarlo unívocamente).
+3. **Congelar `emitirCredencial` durante la demo**: si el árbol no se mueve,
+   todos revelan la misma raíz y la fuga es cero.
+4. Fallar cerrado ante `undefined`, sin distinguir "no sos empleado" de otros
+   errores en mensaje ni en timing.
+
+**Sobre el impacto en el video:** el clímax FISCAL ✅ / EMPLEADOR ❌ sigue
+siendo cierto *sobre el registro on-chain* (la autoría está ligada a `fiscalPk`
+y mostrada a otro no prueba nada). Lo que NO se puede afirmar es que el
+paquete off-chain sea no-transferible. Framing honesto para el guión: *"el
+registro on-chain está ligado a la clave de ESTE fiscal; el paquete de
+evidencia es una suposición de confianza declarada, y la prueba ZK al fiscal
+es roadmap"*. Un juez técnico que pincha esto encuentra la respuesta ya en la
+slide de limitaciones.
+
+**No verificado — no usar:** el review sugirió reclamar que `orgId`/`periodo`
+nunca aparecen en el transcript público. Su test buscaba los valores como
+string hex, pero el transcript los codifica como arrays de bytes — el mismo
+test dice que `denunciaId` tampoco aparece, y `denunciaId` sí se inserta en el
+ledger. La sugerencia puede ser cierta, pero **hay que verificarla decodificando
+el transcript antes de afirmarla en el deck.**
 
 ---
 
