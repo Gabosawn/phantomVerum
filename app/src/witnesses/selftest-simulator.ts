@@ -35,6 +35,8 @@ import {
   CredentialNotIssuedError,
   credentialCommitment,
   withCredential,
+  withIssuerSecret,
+  issuerAnchor,
   createWitnesses,
   reportIdOfRecord,
   privateStateToJson,
@@ -43,6 +45,7 @@ import {
   credentialLeaf,
   clearActiveReport,
   pureCircuits,
+  stageNonce,
   stageStoredReport,
   stageNewReport,
   witnesses,
@@ -67,9 +70,10 @@ const EPOCH = epochOfSeconds(NOW);
 
 const orgId = randomBytes32();
 const foreignOrg = randomBytes32();
-const anchor = randomBytes32();
-const prosecutorPk = randomBytes32();
-const employerPk = randomBytes32();
+const issuerSecret = randomBytes32();
+const anchor = issuerAnchor(issuerSecret);
+const prosecutorNonce = randomBytes32();
+const employerNonce = randomBytes32();
 
 // ── Simulator world ─────────────────────────────────────────────────────
 
@@ -146,6 +150,7 @@ checkRejects(
 );
 
 console.log('\n=== 2. The org registers; the client generates its credential ===');
+ps = withIssuerSecret(ps, issuerSecret);
 call('registerOrganization', orgId, anchor);
 check('organizations.size == 1', state().organizations.size() === 1n);
 
@@ -213,7 +218,7 @@ check(
 check('findPathForLeaf now finds it', state().credentials.findPathForLeaf(leaf) !== undefined);
 
 const [, path1] = witnesses.credentialPath(witnessCtx(ps));
-check('the witness returns 8 siblings', path1.length === 8, `len=${path1.length}`);
+check('the witness returns 16 siblings', path1.length === 16, `len=${path1.length}`);
 check(
   'and they are {sibling:{field}, goes_left} entries (goes_left is snake_case)',
   typeof path1[0]?.sibling.field === 'bigint' && typeof path1[0]?.goes_left === 'boolean',
@@ -222,7 +227,7 @@ check(
 console.log('\n=== 5. Real report (the 4 witnesses in a single circuit) ===');
 call('report', orgId, EPOCH);
 const reportId1 = stage1.report.reportId;
-const nullifier1 = pureCircuits.nullifierOf(credentialSecret, orgId, EPOCH);
+const nullifier1 = pureCircuits.nullifierOf(credentialSecret, EPOCH);
 check(
   'the precomputed reportId matches the one sealed on-chain',
   state().reports.member(reportId1),
@@ -251,7 +256,7 @@ check(
   'the witness returns a DIFFERENT path after the tree moved (no cache)',
   series(path1) !== series(path2),
 );
-check('and it still has 8 siblings', path2.length === 8);
+check('and it still has 16 siblings', path2.length === 16);
 check(
   'the leaf did not change: what changes are the siblings',
   toHex(credentialLeaf(ps)) === toHex(leaf),
@@ -275,7 +280,7 @@ check('report 2 got sealed', state().reports.member(reportId2));
 check('reports.size == 2', state().reports.size() === 2n);
 check(
   'the new epoch\'s nullifier also got burned',
-  state().nullifiers.member(pureCircuits.nullifierOf(credentialSecret, orgId, EPOCH2)),
+  state().nullifiers.member(pureCircuits.nullifierOf(credentialSecret, EPOCH2)),
 );
 check(
   'the two reportIds are distinct and not linkable through the secret',
@@ -292,18 +297,21 @@ check(
   'reportIdOfRecord reconstructs the id from the store',
   toHex(reportIdOfRecord(record1)) === toHex(reportId1),
 );
-ps = stageStoredReport(ps, record1, reportId1);
-call('revealAuthorship', reportId1, prosecutorPk);
-const authorshipHash = pureCircuits.authorshipOf(stage1.report.reportSecret, reportId1, prosecutorPk);
-check('the authorship got registered', state().authorships.member(authorshipHash));
+ps = stageNonce(stageStoredReport(ps, record1, reportId1), prosecutorNonce);
+call('revealAuthorship', reportId1);
+const receipt = pureCircuits.receiptOf(reportId1, prosecutorNonce);
+check('the authorship got registered', state().authorships.member(receipt));
+check(
+  'the receipt carries no secret: the prosecutor recomputes it from public data',
+  toHex(receipt) === toHex(pureCircuits.receiptOf(reportId1, prosecutorNonce)),
+);
 
 console.log('\n--- The video moment: same report, two verifiers ---');
-check('PROSECUTOR -> the authorship verifies', state().authorships.member(authorshipHash));
+check('PROSECUTOR -> the receipt recomputed from their nonce IS on the ledger',
+  state().authorships.member(receipt));
 check(
-  'EMPLOYER   -> the hash is different and NOT on the ledger',
-  !state().authorships.member(
-    pureCircuits.authorshipOf(stage1.report.reportSecret, reportId1, employerPk),
-  ),
+  'EMPLOYER   -> their nonce yields another receipt, NOT on the ledger',
+  !state().authorships.member(pureCircuits.receiptOf(reportId1, employerNonce)),
 );
 
 console.log('\n=== 9. The per-report secret bounds the damage (H-3) ===');
@@ -312,20 +320,27 @@ console.log('\n=== 9. The per-report secret bounds the damage (H-3) ===');
 // other route, it is NO GOOD for report 2.
 checkRejects(
   'report 1\'s secret does not claim report 2\'s authorship',
-  () => callAs(stageStoredReport(ps, record1), 'revealAuthorship', reportId2, prosecutorPk),
+  () =>
+    callAs(
+      stageNonce(stageStoredReport(ps, record1), prosecutorNonce),
+      'revealAuthorship',
+      reportId2,
+    ),
   'not the author',
 );
 checkRejects(
   'neither does an invented secret',
   () =>
     callAs(
-      stageStoredReport(ps, {
-        reportSecret: randomBytes32(),
-        evidenceHash: evidence1,
-      }),
+      stageNonce(
+        stageStoredReport(ps, {
+          reportSecret: randomBytes32(),
+          evidenceHash: evidence1,
+        }),
+        prosecutorNonce,
+      ),
       'revealAuthorship',
       reportId1,
-      prosecutorPk,
     ),
   'not the author',
 );
@@ -336,11 +351,11 @@ checkRejects(
 );
 
 console.log('\n=== 10. Without a staged report, witnesses fail readably ===');
-ps = clearActiveReport(ps);
+ps = stageNonce(clearActiveReport(ps), employerNonce);
 check('activeReport is now null', ps.activeReport === null);
 checkRejects(
   'revealAuthorship without staging',
-  () => call('revealAuthorship', reportId1, employerPk),
+  () => call('revealAuthorship', reportId1),
   'no active report in the private state',
 );
 check('no authorship was added', state().authorships.size() === 1n);
@@ -363,7 +378,7 @@ check(
   'and the deserialized state serves to reveal to another prosecutor',
   (() => {
     try {
-      callAs(psBack, 'revealAuthorship', reportId1, employerPk);
+      callAs(stageNonce(psBack, employerNonce), 'revealAuthorship', reportId1);
       return true;
     } catch {
       return false;

@@ -1,5 +1,5 @@
 /**
- * THE single mirror of the contract's five pure circuits lives in
+ * THE single mirror of the contract's seven pure circuits lives in
  * `@phantomtrace/shared/crypto` — verified digest-for-digest against the compiled contract by
  * `contract-agreement.test.ts`. This file exists so every test, the model backend, the
  * witnesses and the e2e keep their existing import site.
@@ -14,7 +14,7 @@ export {
   MERKLE_PATH_TYPE,
   DOMAIN_TAGS,
   EPOCH_DURATION,
-  authorshipOf,
+  anchorOf,
   bytesToHex,
   credCommitmentOf,
   hexToBytes,
@@ -25,5 +25,6 @@ export {
   padHex32,
   periodBytes32,
   periodHex32,
+  receiptOf,
   reportIdOf,
 } from "@phantomtrace/shared/crypto";

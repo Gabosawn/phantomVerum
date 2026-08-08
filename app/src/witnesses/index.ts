@@ -1,4 +1,4 @@
-// B2.3 — The contract's 4 witnesses + the private state feeding them.
+// B2.3 — The contract's 6 witnesses + the private state feeding them.
 //
 // Typed against `contracts/output/contract/index.d.ts`, the .d.ts generated
 // by `compact compile`. Nothing about this shape is invented: if the contract
@@ -10,6 +10,8 @@
 
 import type { Ledger, Witnesses } from '../../../contracts/output/contract/index.js';
 import { pureCircuits } from '../../../contracts/output/contract/index.js';
+
+import { MERKLE_DEPTH } from '@phantomtrace/shared/crypto';
 
 import { type Hex32, toHex, randomBytes32, asBytes32 } from './hex.js';
 import type { ReportRecord, WhistleblowerSecrets } from './secrets.js';
@@ -105,10 +107,32 @@ export interface TestigoPrivateState {
   readonly orgId: Uint8Array | null;
   /** Report staged for the next `report` / `revealAuthorship`. */
   readonly activeReport: StagedReport | null;
+  /**
+   * The issuing organization's secret, whose `anchorOf` is the anchor
+   * published by `registerOrganization`. Only the ISSUER holds this; a
+   * whistleblower's state has it null. `issueCredential` asserts against it.
+   */
+  readonly issuerSecret: Uint8Array | null;
+  /**
+   * The nonce the prosecutor chose for the pending `revealAuthorship`.
+   *
+   * Same reason as `activeReport`: witnesses take no arguments, so the only
+   * channel to tell `prosecutorNonce()` which nonce to use is staging it here
+   * first. It arrives from the prosecutor off-chain and is not a secret of
+   * ours — but it must not reach the transcript, so it travels as a witness.
+   */
+  readonly activeNonce: Uint8Array | null;
 }
 
 export function emptyPrivateState(): TestigoPrivateState {
-  return { version: 2, credentialSecret: null, orgId: null, activeReport: null };
+  return {
+    version: 2,
+    credentialSecret: null,
+    orgId: null,
+    activeReport: null,
+    issuerSecret: null,
+    activeNonce: null,
+  };
 }
 
 /** Loads the credential from the local store (`secrets/denunciante.json`). */
@@ -120,6 +144,8 @@ export function privateStateFromSecrets(
     credentialSecret: asBytes32(secrets.credentialSecret, 'credentialSecret'),
     orgId: asBytes32(secrets.orgId, 'orgId'),
     activeReport: null,
+    issuerSecret: null,
+    activeNonce: null,
   };
 }
 
@@ -135,6 +161,33 @@ export function withCredential(
   };
 }
 
+/**
+ * Loads the ISSUER's secret. Only an organization running `issueCredential`
+ * needs this; a whistleblower's state leaves it null.
+ */
+export function withIssuerSecret(
+  ps: TestigoPrivateState,
+  issuerSecret: Uint8Array | Hex32,
+): TestigoPrivateState {
+  return { ...ps, issuerSecret: asBytes32(issuerSecret, 'issuerSecret') };
+}
+
+/**
+ * Stages the nonce the prosecutor sent, for the next `revealAuthorship` /
+ * `proveAuthorship`. See `TestigoPrivateState.activeNonce`.
+ */
+export function stageNonce(
+  ps: TestigoPrivateState,
+  prosecutorNonce: Uint8Array | Hex32,
+): TestigoPrivateState {
+  return { ...ps, activeNonce: asBytes32(prosecutorNonce, 'prosecutorNonce') };
+}
+
+/** The org's published anchor for a given issuer secret. */
+export function issuerAnchor(issuerSecret: Uint8Array | Hex32): Uint8Array {
+  return pureCircuits.anchorOf(asBytes32(issuerSecret, 'issuerSecret'));
+}
+
 export function hasCredential(ps: TestigoPrivateState): boolean {
   return ps.credentialSecret !== null && ps.orgId !== null;
 }
@@ -144,7 +197,7 @@ export function hasCredential(ps: TestigoPrivateState): boolean {
  *
  * SECURITY (H-4): this — and not `credentialSecret` — is the only thing the
  * organization receives. With the secret it could recompute
- * `nullifierOf(credSecret, orgId, period)` for any employee and learn who
+ * `nullifierOf(credSecret, period)` for any employee and learn who
  * reported in each period.
  */
 export function credentialCommitment(ps: TestigoPrivateState): Uint8Array {
@@ -242,8 +295,15 @@ export function clearActiveReport(ps: TestigoPrivateState): TestigoPrivateState 
 // The witnesses
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Path length required by `HistoricMerkleTree<8, Bytes<32>>`. */
-const TREE_DEPTH = 8;
+/**
+ * Path length required by `HistoricMerkleTree<16, Bytes<32>>`.
+ *
+ * Imported, not repeated: this used to be a second literal `8` sitting a
+ * workspace away from `MERKLE_DEPTH`, and a witness that hands the circuit a
+ * path of the wrong length is rejected with an error that points nowhere near
+ * the mismatch.
+ */
+const TREE_DEPTH = MERKLE_DEPTH;
 
 /**
  * Bytes used to build the leaf to look up.
@@ -272,7 +332,7 @@ function credentialBytes(ps: TestigoPrivateState): {
 /**
  * Builds the witnesses object required by `new Contract(witnesses)`.
  *
- * The 4 are pure functions of the `WitnessContext`: they read the private
+ * The 6 are pure functions of the `WitnessContext`: they read the private
  * state and, in the path's case, the FRESH ledger. They keep no state of
  * their own between calls — any cache here would be a security bug (see
  * `credentialPath`).
@@ -281,7 +341,7 @@ export function createWitnesses(): Witnesses<TestigoPrivateState> {
   return {
     /**
      * Credential secret (Option A). Feeds the anti-spam nullifier:
-     * `nullifierOf(credSecret, orgId, period)`.
+     * `nullifierOf(credSecret, period)`.
      */
     credentialSecret({ privateState }) {
       return [privateState, credentialBytes(privateState).credentialSecret];
@@ -352,6 +412,36 @@ export function createWitnesses(): Witnesses<TestigoPrivateState> {
       }
       return [privateState, privateState.activeReport.evidenceHash];
     },
+
+    /**
+     * The organization's issuer secret. `issueCredential` asserts that its
+     * `anchorOf` equals the anchor the org published, which is what keeps the
+     * credential tree — a finite, unrecoverable resource — from being filled
+     * by anyone who feels like it.
+     *
+     * Decoy on absence, same reasoning as `credentialBytes`: a caller with no
+     * issuer secret must fail inside the circuit like any wrong secret does,
+     * not short-circuit here into a distinguishable error.
+     */
+    issuerSecret({ privateState }) {
+      return [privateState, privateState.issuerSecret ?? randomBytes32()];
+    },
+
+    /**
+     * The nonce this reveal is addressed to. Staged with `stageNonce()` from
+     * whatever the prosecutor sent over.
+     *
+     * It is a witness rather than a public circuit argument on purpose: a
+     * public nonce would land in the transaction transcript, and anyone who
+     * scraped the pair (reportId, nonce) could recompute the receipt and pass
+     * themselves off as its addressee.
+     */
+    prosecutorNonce({ privateState }) {
+      if (privateState.activeNonce === null) {
+        throw new ReportNotStagedError('prosecutorNonce');
+      }
+      return [privateState, privateState.activeNonce];
+    },
   };
 }
 
@@ -377,6 +467,10 @@ export interface SerializedPrivateState {
     readonly evidenceHash: Hex32;
     readonly reportId: Hex32;
   } | null;
+  /** Optional so a state written before contract v2 still loads. */
+  readonly issuerSecret?: Hex32 | null;
+  /** Optional for the same reason; transient anyway. */
+  readonly activeNonce?: Hex32 | null;
 }
 
 export function privateStateToJson(ps: TestigoPrivateState): SerializedPrivateState {
@@ -392,6 +486,8 @@ export function privateStateToJson(ps: TestigoPrivateState): SerializedPrivateSt
             evidenceHash: toHex(ps.activeReport.evidenceHash),
             reportId: toHex(ps.activeReport.reportId),
           },
+    issuerSecret: ps.issuerSecret === null ? null : toHex(ps.issuerSecret),
+    activeNonce: ps.activeNonce === null ? null : toHex(ps.activeNonce),
   };
 }
 
@@ -416,5 +512,13 @@ export function privateStateFromJson(
             evidenceHash: asBytes32(raw.activeReport.evidenceHash, 'evidenceHash'),
             reportId: asBytes32(raw.activeReport.reportId, 'reportId'),
           },
+    issuerSecret:
+      raw.issuerSecret === null || raw.issuerSecret === undefined
+        ? null
+        : asBytes32(raw.issuerSecret, 'issuerSecret'),
+    activeNonce:
+      raw.activeNonce === null || raw.activeNonce === undefined
+        ? null
+        : asBytes32(raw.activeNonce, 'prosecutorNonce'),
   };
 }

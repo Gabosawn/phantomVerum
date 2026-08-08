@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "TypeScript wiring — witnesses, deploy, CLI scripts (Midnight Hack BA 2026)",
+  "description": "TypeScript wiring \u2014 witnesses, deploy, CLI scripts (Midnight Hack BA 2026)",
   "scripts": {
-    "build": "node ../node_modules/typescript/lib/tsc.js -p .",
+    "build": "npm run build --workspace=@phantomtrace/shared && node ../node_modules/typescript/lib/tsc.js -p .",
     "test": "npm run build && node dist/witnesses/selftest.js && node dist/witnesses/selftest-simulator.js && node dist/api/selftest-simulator.js",
     "deploy": "node dist/scripts/deploy.js",
     "register-org": "node dist/scripts/register-org.js",
@@ -26,7 +26,8 @@
     "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
     "@midnight-ntwrk/midnight-js-protocol": "4.1.1",
     "@midnight-ntwrk/midnight-js-types": "4.1.1",
-    "@midnight-ntwrk/wallet-sdk": "1.1.0"
+    "@midnight-ntwrk/wallet-sdk": "1.1.0",
+    "@phantomtrace/shared": "0.1.0"
   },
   "devDependencies": {
     "@midnight-ntwrk/testkit-js": "4.1.1",

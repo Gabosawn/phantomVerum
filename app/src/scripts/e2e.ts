@@ -34,18 +34,19 @@ printMode(backend);
 const { api } = backend;
 
 const orgId = hexArgOrRandom(undefined, 'orgId');
-const anchor = hexArgOrRandom(undefined, 'anchor');
-const prosecutorPk = hexArgOrRandom(undefined, 'prosecutorPk');
-const employerPk = hexArgOrRandom(undefined, 'employerPk');
+const issuerSecret = hexArgOrRandom(undefined, 'issuerSecret');
+// Nonces, not keys: each verifier generates its own and sends it over.
+const prosecutorNonce = hexArgOrRandom(undefined, 'prosecutorNonce');
+const employerNonce = hexArgOrRandom(undefined, 'employerNonce');
 
 console.log('\n=== ACT 1 — organization and credential ===');
-const orgTx = await api.registerOrganization({ orgId, anchor });
+const orgTx = await api.registerOrganization({ orgId, issuerSecret });
 console.log(`organization ${orgId.slice(0, 16)}… registered`);
 printTx(orgTx);
 
 const credential = await api.prepareLocalCredential(orgId);
 console.log(`client generated its secret locally; issuer sees only ${credential.credCommitment.slice(0, 16)}…`);
-const issued = await api.issueCredential({ orgId, credCommitment: credential.credCommitment });
+const issued = await api.issueCredential({ orgId, credCommitment: credential.credCommitment, issuerSecret });
 console.log(`credential issued at leafIndex ${issued.leafIndex}`);
 printTx(issued.tx);
 
@@ -72,18 +73,18 @@ try {
   console.log('(rejected at proof time — no transaction was submitted)');
 }
 
-console.log('\n=== ACT 4 — deferred authorship, designated verifier ===');
-const reveal = await api.revealAuthorship({ reportId: sealed.reportId, prosecutorPk });
-console.log(`authorship revealed to prosecutor ${prosecutorPk.slice(0, 16)}…`);
-console.log(`authorshipHash : ${reveal.authorshipHash}`);
+console.log('\n=== ACT 4 — deferred authorship, one receipt per nonce ===');
+const reveal = await api.revealAuthorship({ reportId: sealed.reportId, prosecutorNonce });
+console.log(`authorship revealed for nonce ${prosecutorNonce.slice(0, 16)}…`);
+console.log(`receipt        : ${reveal.receipt}`);
 printTx(reveal.tx);
 
 // ONE package, addressed to the prosecutor. The employer intercepts it and
 // reads it with their own key — the bytes are identical, the verdict is not.
-const pkg = api.exportKey(sealed.reportId, prosecutorPk);
+const pkg = api.exportKey(sealed.reportId, prosecutorNonce);
 console.log(`package fields : ${Object.keys(pkg).join(', ')} — no secret leaves the machine`);
-const vProsecutor = await api.verifyAuthorship(pkg, prosecutorPk);
-const vEmployer = await api.verifyAuthorship(pkg, employerPk);
+const vProsecutor = await api.verifyAuthorship(pkg, prosecutorNonce);
+const vEmployer = await api.verifyAuthorship(pkg, employerNonce);
 
 console.log('\n--- one package, two verifiers ---');
 console.log(

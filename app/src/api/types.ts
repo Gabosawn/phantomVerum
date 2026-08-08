@@ -83,20 +83,10 @@ export interface LedgerState {
  * secret-free format is the part that is real today; the ZK binding is not.
  */
 export interface AuthorshipKeyExport {
-  readonly version: 2;
-  /** Report whose authorship is being claimed. */
+  readonly version: 3;
   readonly reportId: Hex32;
-  /** sha-256 of the evidence. The file itself never leaves the machine. */
-  readonly evidenceHash: Hex32;
-  /** Public key of the target prosecutor — who this package is FOR. */
-  readonly prosecutorPk: Hex32;
-  /** `authorshipOf(reportSecret, reportId, prosecutorPk)`, precomputed. */
-  readonly authorshipHash: Hex32;
-  /**
-   * `proveAuthorship` output. Demo build: the `authorshipHash`. Production:
-   * proof bytes from the proof server, checked against the verifier key.
-   */
-  readonly proof: Hex32;
+  /** `receiptOf(reportId, prosecutorNonce)` — public, it is on the ledger. */
+  readonly receipt: Hex32;
 }
 
 /**
@@ -121,14 +111,12 @@ export interface VerificationResult {
   readonly detail: string;
   /** Individual checks, for the UI panel. */
   readonly checks: {
-    /** The `proof` matches the declared `authorshipHash`. */
-    readonly proofConsistent: boolean;
-    /** `prosecutorPk` is the key of whoever is running the verification. */
+    /** `receiptOf(reportId, myNonce)` reproduces the receipt in the package. */
     readonly designatedToVerifier: boolean;
+    /** That RECOMPUTED receipt is published on the ledger. */
+    readonly receiptOnLedger: boolean;
     /** The `reportId` is sealed on the ledger. */
     readonly reportOnLedger: boolean;
-    /** The `authorshipHash` is published on the ledger. */
-    readonly authorshipOnLedger: boolean;
   };
 }
 
@@ -136,17 +124,29 @@ export interface VerificationResult {
 
 export interface RegisterOrganizationParams {
   readonly orgId: Bytes32Input;
-  readonly anchor: Bytes32Input;
+  /**
+   * The org's issuer secret. The published `anchor` is `anchorOf(issuerSecret)`,
+   * derived here rather than accepted raw: registering an anchor whose secret
+   * you do not hold would produce an org that can never issue anything.
+   */
+  readonly issuerSecret: Bytes32Input;
 }
 
 export interface IssueCredentialParams {
   readonly orgId: Bytes32Input;
   /**
+   * The same issuer secret used to register the org. `issueCredential`
+   * asserts `organizations.lookup(orgId) == anchorOf(issuerSecret)`, which is
+   * what keeps the credential tree — finite and unrecoverable — from being
+   * filled by anyone who feels like it.
+   */
+  readonly issuerSecret: Bytes32Input;
+  /**
    * `credCommitmentOf(credSecret)` — the commitment, NEVER the secret.
    *
    * SECURITY (H-4, §3.1): the client generates the secret and it never
    * leaves their machine. If the issuer had it, it could recompute
-   * `nullifierOf(credSecret, orgId, period)` for any employee and learn who
+   * `nullifierOf(credSecret, period)` for any employee and learn who
    * reported in each period.
    */
   readonly credCommitment: Bytes32Input;
@@ -194,10 +194,20 @@ export interface ReportResult {
 
 export interface RevealAuthorshipParams {
   readonly reportId: Bytes32Input;
-  readonly prosecutorPk: Bytes32Input;
+  /**
+   * The nonce the prosecutor generated and sent over off-chain.
+   *
+   * It replaced `prosecutorPk` when the receipt stopped carrying the personal
+   * secret. It is not a secret of ours, but it must not reach the transcript:
+   * a public nonce would let anyone who scraped the pair (reportId, nonce)
+   * recompute the receipt and pass themselves off as its addressee. So it
+   * travels as a witness, staged with `stageNonce()`.
+   */
+  readonly prosecutorNonce: Bytes32Input;
 }
 
 export interface RevealAuthorshipResult {
-  readonly authorshipHash: Hex32;
+  /** `receiptOf(reportId, prosecutorNonce)` — what landed in `authorships`. */
+  readonly receipt: Hex32;
   readonly tx: TxResult;
 }

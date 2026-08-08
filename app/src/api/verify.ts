@@ -58,35 +58,27 @@ export class InvalidExportError extends TestigoError {
  * field in it that could carry the secret. Anyone reviewing this function
  * only has to check the returned literal.
  *
- * One export per prosecutor: `authorshipHash` depends on `prosecutorPk`, so
- * the package for prosecutor A does not verify against prosecutor B's record.
+ * One export per prosecutor: the receipt depends on the nonce THAT prosecutor
+ * chose, so the package for prosecutor A does not verify against B's nonce.
+ *
+ * Note what is NOT in the returned literal: the nonce. It is the prosecutor's
+ * own — they generated it and sent it over — so putting it in the file would
+ * hand an interceptor everything needed to designate themselves, which is the
+ * exact hole this format closes.
  */
 export const exportKey = (
   reportId: Bytes32Input,
-  prosecutorPk: Bytes32Input,
-  secretsPath?: string,
+  prosecutorNonce: Bytes32Input,
+  _secretsPath?: string,
 ): AuthorshipKeyExport => {
   const idHex = asHex32(reportId, 'reportId');
   const idBytes = asBytes32(idHex, 'reportId');
-  const pkBytes = asBytes32(prosecutorPk, 'prosecutorPk');
-
-  const record = getReport(idHex, secretsPath);
-  if (record === null) {
-    throw new MissingReportSecretsError(idHex);
-  }
-  const secretBytes = asBytes32(record.reportSecret, 'reportSecret');
-  const authorshipHash = toHex(pureCircuits.authorshipOf(secretBytes, idBytes, pkBytes));
+  const nonceBytes = asBytes32(prosecutorNonce, 'prosecutorNonce');
 
   return {
-    version: 2,
+    version: 3,
     reportId: idHex,
-    evidenceHash: record.evidenceHash,
-    prosecutorPk: toHex(pkBytes),
-    authorshipHash,
-    // Demo build: `proveAuthorship` returns exactly this hash, so the
-    // stand-in is the hash itself. Production replaces it with the proof
-    // bytes from the proof server — the shape of the package does not change.
-    proof: authorshipHash,
+    receipt: toHex(pureCircuits.receiptOf(idBytes, nonceBytes)),
   };
 };
 
@@ -103,62 +95,60 @@ export const parseKeyExport = (raw: unknown): AuthorshipKeyExport => {
     throw new InvalidExportError('expected a JSON object');
   }
   const o = raw as Record<string, unknown>;
-  if (o['version'] !== 2) {
+  if (o['version'] !== 3) {
     throw new InvalidExportError(
-      `version ${String(o['version'])}, expected 2. The v1 format carried the ` +
-        'reportSecret in the file (docs/03 §3.4) and is not migrated: a v1 ' +
-        'package should be treated as a leaked secret, not as an input.',
+      `version ${String(o['version'])}, expected 3. v1 carried the reportSecret in ` +
+        'the file; v2 dropped it but left a verdict that any holder could satisfy ' +
+        'by editing a field. Neither is migrated — treat a v1 package as a leaked ' +
+        'secret and a v2 package as unverifiable.',
     );
   }
-  const fields = ['reportId', 'evidenceHash', 'prosecutorPk', 'authorshipHash', 'proof'] as const;
+  const fields = ['reportId', 'receipt'] as const;
   for (const field of fields) {
     if (!isHex32(o[field])) {
       throw new InvalidExportError(`"${field}" is not a 64-char lowercase hex string`);
     }
   }
-  // A v2 file has no business carrying a secret. If one shows up, the sender
-  // is running an old build and has just leaked it — say so instead of
-  // silently dropping the field.
-  if (o['reportSecret'] !== undefined) {
-    throw new InvalidExportError(
-      'the package declares version 2 but still carries a "reportSecret" field. ' +
-        'That secret is now compromised: whoever produced this file must treat ' +
-        'the report as burned and stop using that build.',
-    );
+  // Nothing secret, and nothing that identifies the recipient, has any business
+  // being in this file. A stray field means an old build produced it.
+  for (const leaked of ['reportSecret', 'prosecutorNonce', 'evidenceHash'] as const) {
+    if (o[leaked] !== undefined) {
+      throw new InvalidExportError(
+        `the package declares version 3 but still carries "${leaked}". Whoever ` +
+          'produced it is running an old build; that field is what made the ' +
+          'previous formats forgeable or leaky.',
+      );
+    }
   }
   return {
-    version: 2,
+    version: 3,
     reportId: o['reportId'] as Hex32,
-    evidenceHash: o['evidenceHash'] as Hex32,
-    prosecutorPk: o['prosecutorPk'] as Hex32,
-    authorshipHash: o['authorshipHash'] as Hex32,
-    proof: o['proof'] as Hex32,
+    receipt: o['receipt'] as Hex32,
   };
 };
 
 /**
  * B3.6 — `verifyAuthorship`.
  *
- * `verifierPk` is the key of whoever is running the verification, and it is a
- * SEPARATE argument from the package on purpose. The package declares who it
- * was addressed to; the question to answer is whether that matches the person
- * asking. Reading the recipient out of the file — the shape this function had
- * while the secret travelled with it — lets anyone who intercepts the file
- * designate themselves, and the answer comes back ✅.
+ * `verifierNonce` is the nonce the caller generated and sent to the
+ * whistleblower, and it is a SEPARATE argument from the package on purpose:
+ * it never travels in the file.
  *
- * Two independent questions (see `VerificationResult`):
+ * That separation is what makes the verdict mean something. The check is a
+ * RECOMPUTATION — `receiptOf(reportId, myNonce)` — against a value that is on
+ * the ledger. Two attacks that both worked against the previous format die
+ * here:
  *
- *  1. `ok`       — the `proof` matches the declared `authorshipHash`, and the
- *                  package is addressed to `verifierPk`. 100% local.
- *  2. `onLedger` — are the declared `reportId` and `authorshipHash` on-chain?
+ *  - Deanonymization by scraping. The employer reads `reportId` and the
+ *    receipt off the public ledger and runs this with their own nonce. The
+ *    recomputation yields a different receipt, which is on no ledger.
+ *  - Incrimination by mixing. Splicing the `reportId` of one report onto the
+ *    receipt of an unrelated one no longer passes, because the value looked up
+ *    on-chain is the RECOMPUTED one, and recomputing binds the two together.
  *
- * The lookups use the DECLARED values, because without the secret there is
- * nothing to recompute them from. The ledger is what keeps that from being a
- * repeater: an invented `authorshipHash` is not published, and a real one is
- * only published for the recipient the author actually chose. What this does
- * NOT catch is a replay — someone copying a genuine on-chain pair that was
- * addressed to them. Only the real ZK proof closes that; see
- * `AuthorshipKeyExport`.
+ * The previous version compared `proof === authorshipHash` — two fields of the
+ * same file, supplied by whoever brought it — and computed the verdict before
+ * even reading the ledger. It was a tautology.
  *
  * Without a `reader`, it queries the active network's indexer against the
  * `deployment.json` address. The simulator passes its own and exercises the
@@ -166,58 +156,61 @@ export const parseKeyExport = (raw: unknown): AuthorshipKeyExport => {
  */
 export const verifyAuthorship = async (
   exported: AuthorshipKeyExport,
-  verifierPk: Bytes32Input,
+  verifierNonce: Bytes32Input,
   reader?: LedgerReader,
 ): Promise<VerificationResult> => {
   const pkg = parseKeyExport(exported);
 
   const declaredId = asBytes32(pkg.reportId, 'reportId');
-  const declaredAuthorship = asBytes32(pkg.authorshipHash, 'authorshipHash');
+  const nonceBytes = asBytes32(verifierNonce, 'verifierNonce');
 
-  // Demo build: `proveAuthorship` returns the authorship hash, so consistency
-  // is an equality. Production: verify the proof bytes against the verifier
-  // key of the circuit — same boolean, real cryptography behind it.
-  const proofConsistent = pkg.proof === pkg.authorshipHash;
+  // The whole verdict, recomputed locally from the public reportId and the
+  // caller's own nonce. Nothing secret is involved, and nothing in the file
+  // can influence it except the reportId.
+  const recomputed = toHex(pureCircuits.receiptOf(declaredId, nonceBytes));
 
-  // Addressed to me, or to somebody else? This is the EMPLOYER ❌ of the video.
-  const designatedToVerifier = toHex(asBytes32(verifierPk, 'verifierPk')) === pkg.prosecutorPk;
-
-  const ok = proofConsistent && designatedToVerifier;
+  // Addressed to me, or to somebody else? This is the EMPLOYER of the video —
+  // and now it is a hash preimage question, not a string comparison the holder
+  // controls.
+  const designatedToVerifier = recomputed === pkg.receipt;
 
   const source = reader ?? (await createReadOnlyReader());
   const ledger = await source.readLedger();
   const reportOnLedger = ledger.reports.member(declaredId);
-  const authorshipOnLedger = ledger.authorships.member(declaredAuthorship);
-  const onLedger = reportOnLedger && authorshipOnLedger;
+  // The RECOMPUTED receipt, never the declared one.
+  const receiptOnLedger = ledger.authorships.member(asBytes32(recomputed, 'receipt'));
+  const onLedger = reportOnLedger && receiptOnLedger;
 
-  const checks = { proofConsistent, designatedToVerifier, reportOnLedger, authorshipOnLedger };
+  const ok = designatedToVerifier && receiptOnLedger;
+
+  const checks = { designatedToVerifier, receiptOnLedger, reportOnLedger };
   return { ok, onLedger, detail: describe(checks), checks };
 };
 
 /** Human-readable message. It is what `verify-authorship.ts` (B4.5) prints. */
 const describe = (r: {
-  proofConsistent: boolean;
   designatedToVerifier: boolean;
+  receiptOnLedger: boolean;
   reportOnLedger: boolean;
-  authorshipOnLedger: boolean;
 }): string => {
-  if (!r.proofConsistent) {
-    return 'the authorship proof does not match the declared authorshipHash: tampered package';
+  if (!r.reportOnLedger) {
+    return 'that report is not sealed on the ledger: there is nothing to have authored';
   }
   if (!r.designatedToVerifier) {
     return (
-      'this package was addressed to ANOTHER key. The authorship may well be genuine — ' +
-      'it was simply not revealed to you, and nothing here proves anything to you'
+      'recomputing the receipt with your nonce does not reproduce the one in this ' +
+      'package. The authorship may well be genuine — it was simply not revealed ' +
+      'to you, and nothing here proves anything to you'
     );
   }
-  if (!r.reportOnLedger) {
-    return 'the package is consistent and addressed to you, but that report is not sealed on the ledger';
-  }
-  if (!r.authorshipOnLedger) {
+  if (!r.receiptOnLedger) {
     return (
-      'the package is consistent and addressed to you and the report exists, but the ' +
-      'authorship was never published on-chain for your key'
+      'the receipt matches your nonce but was never published on-chain: nobody ' +
+      'has revealed authorship of this report to you'
     );
   }
-  return 'authorship verified: the package is addressed to you and the hash is published on-chain';
+  return (
+    'authorship verified: the receipt recomputed from your own nonce is published ' +
+    'on-chain, and only someone who knew the report secret could have put it there'
+  );
 };
