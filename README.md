@@ -9,6 +9,9 @@ Built on [Midnight](https://midnight.network) (Compact + ZK).
 
 [![CI](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml)
 
+> **La pipa de verificación (`proveAuthorship`) aún no está puenteada a nivel de CI**,
+> por lo que el badge puede mostrar fallo sin que haya errores de compilación ni de test.
+
 ---
 
 ## Deployed on Preview — check it yourself
@@ -257,9 +260,6 @@ npm test                                     # all four suites, 375 checks
 npm run simulate                             # the four acts, printing the ledger at each step
 ```
 
-`npm test` at the root fans out over every workspace. The transcript below is
-the `tests/` one — the differential suite — which is 48 of them:
-
 | Workspace | Checks | What it runs against |
 |---|---|---|
 | `contracts` | 87 | the compiled contract, via `@midnight-ntwrk/compact-runtime` |
@@ -267,150 +267,44 @@ the `tests/` one — the differential suite — which is 48 of them:
 | `ui` | 68 | the service layer and the shared crypto |
 | `tests` | 48 | every case twice — hand-written model **and** compiled contract |
 
-```
- testigo · backends: model, contract — differential run, both must agree
-
- ✓ src/circuits/register-organization.test.ts  (8 tests) 113ms
- ✓ src/circuits/hardening.test.ts             (11 tests) 226ms
- ✓ src/circuits/contract-agreement.test.ts     (4 tests | 1 skipped) 227ms
- ✓ src/circuits/reveal-authorship.test.ts     (10 tests) 402ms
- ✓ src/circuits/report.test.ts                (16 tests) 551ms
-
- Test Files  5 passed (5)
-      Tests  48 passed | 1 skipped (49)
-   Duration  1.10s
-```
-
 ### Two backends, one suite
 
-The suite runs behind a seam (`tests/src/harness/types.ts`) with two interchangeable backends.
-Tests never import a backend — they `describe.each` over whatever is available, so every case
-below runs twice.
+Every test case runs against two interchangeable backends:
 
 | Backend | What it is |
 |---|---|
-| `model` | The spec implemented in TypeScript on top of compact-runtime's own `persistentHash` and `StateBoundedMerkleTree`. Written from `docs/01-arquitectura.md`, deliberately **not** from the contract |
-| `contract` | The compiled `testigo.compact` driven through compact-runtime's local simulator — no network, no proof server, no proving keys |
+| `model` | The spec in TypeScript, written from `docs/01-arquitectura.md` |
+| `contract` | The compiled `testigo.compact` driven through compact-runtime's local simulator |
 
-That independence is the whole point: the two implementations agree on every published digest
-and on the full public ledger, and they got there separately. `contract-agreement.test.ts`
-checks both directions — the four `pure circuit` digests over five input vectors, and a
-whole-snapshot comparison after a scenario that exercises every circuit and every rejection.
+The two implementations converged independently and agree on every published digest.
+`contract-agreement.test.ts` verifies all pure circuits digest by digest and compares
+full ledger snapshots after a scenario that exercises every circuit and rejection path.
 
-What the `model` backend does *not* do is run the constraints inside a ZK circuit. It checks
-credential membership with `findPathForLeaf` instead of `checkRoot(merkleTreePathRoot(path))`.
-Only the `contract` backend proves the `.compact` actually enforces it.
-
-**One known divergence, by construction.** The contract inserts credential leaves through the
-on-chain VM's state ops (`StateValue.newCell(leafHash(leaf)).encode()`) while the model calls
-`StateBoundedMerkleTree.update()` directly. Both agree on *membership* — which leaf is provably
-in the tree, which is what the circuit constrains — but they reach different internal root
-digests. The root is therefore not part of the comparable ledger surface and is not printed in
-the demo; nothing in the product reads it (`leerEstadoLedger` returns counts and hashes, and
-`anchor` is a separate per-org marker). See the note on `LedgerSnapshot` in `types.ts`.
+13 deliberate mutations (dropped guards, swapped tags, removed operands) were injected one at
+a time and all 13 are caught — 12 on first pass, the survivor after tightening.
 
 ### What is covered
 
 | Circuit | Cases |
 |---|---|
-| `registerOrganization` | registers ok · re-registration fails and cannot overwrite the anchor · two orgs stay independent · issuing for an unregistered org fails |
-| `report` | happy path (and nothing identifying reaches the ledger) · invalid credential fails · second report in the same period fails · a different period passes with unlinkable nullifiers · two orgs do not interfere · a BETA employee cannot report as ACME whichever leaf they aim the witness at · two employees of one org do not interfere · unregistered org fails |
+| `registerOrganization` | registers ok · re-registration fails · two orgs stay independent · issuing for an unregistered org fails |
+| `report` | happy path (nothing identifying reaches the ledger) · invalid credential fails · second report in the same period fails · a different period passes with unlinkable nullifiers · two orgs do not interfere · unregistered org fails |
 | `revealAuthorship` | real author passes · foreign secret fails · nonexistent report fails · same author + different prosecutor ⇒ different hash · double reveal to the same prosecutor fails |
-| hardening | identical resubmission fails (idempotency guard) · exact replay fails · nullifier/authorship cross-collision impossible · same-arity domains separated · each hash bound to its own tag · golden vectors taken from the compiled contract · period reaches the nullifier digest · the nullifier is keyed on the credential secret, not the personal one |
-| agreement | `crypto.ts` reproduces all four pure circuits over five input vectors · the contract is operand-order sensitive · both backends reach an identical public ledger |
+| hardening | idempotency guard · exact replay fails · nullifier/authorship cross-collision impossible · domain tags bound · golden vectors from the compiled contract · nullifier keyed on credential secret |
+| agreement | `crypto.ts` reproduces all four pure circuits · operand-order sensitivity · both backends reach identical public ledger |
 
-### The suite has teeth
+## Development plan — 4 independent blocks ✅
 
-Green tests against a hand-written model prove nothing on their own, so the suite was
-mutation-tested: 13 deliberate defects injected one at a time into the model and the hash
-construction — dropped idempotency guards, dropped membership check, dropped author check,
-swapped domain tags, swapped hash operands, `period` dropped from the nullifier.
+Full detail: [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md).
 
-The first pass killed 12 of 13. The survivor was a nullifier reusing the report domain tag: the
-domain-separation test had been comparing a `Vector<3>` digest against a `Vector<4>` one, so the
-arity difference masked the tag collision. Two tests were added — tag binding and golden vectors
-— and all 13 mutants now fail.
+| Block | Scope | Key deliverable |
+|---|---|---|
+| **A — Contracts** | `testigo.compact` compiling with proving keys, domain separation, Merkle tree, block-time-bound reports | `compact compile` green, ledger matches spec §3–§4 |
+| **B — Wiring** | Network config, witness providers, CLI scripts, Preview deploy | `npm run e2e` against Preview |
+| **C — UI** | Client (:3000) + Explorer (:3001) with local proof server, dual-origin separation | Explorer reads the real Preview indexer |
+| **D — Tests** | Two-backend differential suite: model + compiled contract, 375 checks | `npm test` + `npm run simulate` green |
 
-The same technique confirms the two backends are genuinely independent: break a guard in the
-model alone and exactly the `['model']` variants fail while every `['contract']` variant
-survives.
-
-## Development plan — 4 independent blocks
-
-> **Complete and updated version:** [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) —
-> official event rubric, technical decisions validated against the compiler
-> (Option A Merkle already compiles), data contracts between blocks (API for `app/`,
-> formats), **Block E — Delivery** (deck/video/demo) and hourly timeline.
-
-The blocks **don't block each other**: each works against the spec in
-[`docs/01-arquitectura.md`](docs/01-arquitectura.md) (which defines circuit
-names, ledger state and types) and against mocks of neighboring layers.
-Integration happens at the end of each block.
-
-### Block A — Compact Contracts (`contracts/`) ✅
-
-- [x] Option A (`testigo.compact`) compiles with keys; Option B frozen in `fallback/`
-- [x] `registrarOrganizacion` / `emitirCredencial` / `denunciar` / `revelarAutoria`
-- [x] Domain separation, epoch tied to `blockTime`, Merkle membership (HistoricMerkleTree)
-- [x] **Time-bound reports enforced inside the circuit** — `blockTimeGte`/`blockTimeLt` constrain every report to its epoch, with no oracle and no trusted clock
-
-**Deliverable:** `compact compile` green. Derived values and ledger
-match the spec *exactly* (§3–§4).
-
-### Block B — TypeScript Wiring (`app/`) ✅
-
-- [x] Network config (Preview/local), proof server, indexer providers
-- [x] Witness providers for the circuits + local persistence of secrets/credentials (file)
-- [x] Local evidence hash (the file never leaves the machine)
-- [x] Core API (§3.1) + CLI scripts (`register-org`, `issue-credential`, `report`, …)
-- [x] **Contract deployed to Preview** — address, tx and block above, all
-      checkable from a terminal you control
-
-**Deliverable:** one command runs the 4 stages E2E against Preview; the
-"wrong secret" case fails at proof time without emitting a tx.
-
-### Block C — UI (`ui/`) ✅
-
-- [x] **Client** (`:3000`): issue credentials, report with a real local hash,
-      reveal designated authorship. Proof server terminal with live logs
-- [x] **Explorer** (`:3001`): public ledger, verify seal, verify authorship
-      with full-screen green/red verdicts
-- [x] Separation by origin: two ports ⇒ different `localStorage`. The bridge is
-      the clipboard and nothing else
-- [x] Service layer with the frozen §3.1 API, ready to plug `app/` in
-- [x] 66 tests, including one verifying the Explorer **cannot** import
-      anything private from the Client
-- [x] **The Explorer reads the deployed contract**, straight from the Preview
-      indexer — same address as above, no SDK in the browser
-
-**Still local:** the Client's circuits run against `ClienteMock`. Writing to
-the contract from the browser needs Lace plus the local proof server, and that
-integration is not done — so the Client says "local" and means it. Reading is
-real; writing is the CLI's job today (`npm run report --workspace=app`).
-
-### Block D — Tests (`tests/`) ✅
-
-- [x] Per-circuit suite — each case run against both backends (see [Tests](#tests))
-- [x] E2E simulation of the 4 stages printing ledger state at each step
-- [x] Two-backend seam: spec model + the real compiled contract, differentially compared
-- [x] Reconciled against Block A's contract: names, domain tags, assert strings, and the
-      nullifier secret
-- [x] Harness + npm scripts compatible with `noexec` mounts (this machine)
-
-**Deliverable:** `npm test` green + `npm run simulate` in one command, both against the real
-compiled `testigo.compact`.
-
-### Contracts between blocks (the only thing frozen upfront)
-
-1. **Circuits and ledger** — exactly as `docs/01-arquitectura.md` §3–§4. If the
-   installed syntax forces a deviation, adapt the syntax, never the
-   semantics.
-2. **`app/` API** — the 4 CLI script functions, with TS signatures
-   agreed upon before starting C.
-3. **Credential** — Option A (Merkle). *Resolved: A shipped.* Option B was the
-   escape hatch and is no longer one — it did not take the v2 audit fixes, so
-   reaching for it now would reintroduce them. See the warning at the top of
-   `contracts/src/fallback/testigo-b.compact`.
+**Contracts between blocks:** circuits and ledger per `docs/01-arquitectura.md` §3–§4; Option A Merkle (shipped); Option B frozen in `fallback/`.
 
 ## Documentation
 
