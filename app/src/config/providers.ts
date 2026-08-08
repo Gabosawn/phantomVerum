@@ -23,7 +23,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import type { ContractState } from '@midnight-ntwrk/compact-runtime';
+import { ContractState } from '@midnight-ntwrk/compact-runtime';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
@@ -288,7 +288,17 @@ export const buildPublicDataProvider = (network: NetworkConfig): PublicDataProvi
       if (payload.errors?.length) {
         throw new Error(payload.errors.map((e) => e.message).join('; '));
       }
-      return (payload.data?.contractAction?.state as ContractState | undefined) ?? null;
+      // The indexer answers with the state HEX-ENCODED. It must be
+      // deserialized here, exactly as the SDK provider does: every consumer
+      // expects a real `ContractState` — `findDeployedContract` calls
+      // `.operation(circuitId)` on it and `ledgerFromState` reads `.data`.
+      // Returning the raw string with an `as ContractState` cast type-checks
+      // and then fails at runtime with "contractState.operation is not a
+      // function", which is why the whole network path never worked.
+      const raw = payload.data?.contractAction?.state;
+      return raw === undefined || raw === null
+        ? null
+        : ContractState.deserialize(Buffer.from(raw, 'hex'));
     },
   };
 };

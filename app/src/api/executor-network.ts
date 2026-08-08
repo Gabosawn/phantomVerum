@@ -201,6 +201,15 @@ export class NetworkExecutor implements TestigoExecutor {
         compiledContract: compiled,
         contractAddress: address,
         privateStateId: TESTIGO_PRIVATE_STATE_ID,
+        // Required: `setOrGetInitialPrivateState` THROWS ("No private state
+        // found at private state ID 'testigo'") when nothing is stored yet.
+        // Without this, connecting only ever worked on the very machine that
+        // performed the deploy — anyone else cloning the repo and pointing at
+        // a deployed contract hit a hard failure. The contract's private state
+        // carries no secret (the whistleblower's live in `denunciante.json`),
+        // so starting from empty is correct: the provider keeps whatever is
+        // already stored and only uses this when there is nothing.
+        initialPrivateState: emptyPrivateState(),
       });
       return new NetworkExecutor(address, providers, found, walletProvider, network);
     } catch (error) {
