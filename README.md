@@ -34,6 +34,27 @@ curl -s https://indexer.preview.midnight.network/api/v4/graphql \
 It answers with the address, the serialized contract state, the transaction
 and its block.
 
+### The four acts, run against that contract
+
+`NETWORK=preview npm run e2e --workspace=app -- --network`, 2026-08-08 06:14Z.
+Every block below is on Preview and can be looked up:
+
+```
+ACT 1  registerOrganization                            block 325613
+       issueCredential (issuer sees only the commitment) block 325618
+ACT 2  report sealed, epoch 20673                      block 325623
+ACT 3  second report, same epoch → rejected at PROOF TIME, no tx submitted
+ACT 4  revealAuthorship for the prosecutor's nonce     block 325627
+
+       package fields : version, reportId, receipt — no secret leaves the machine
+       PROSECUTOR : ✅ AUTHORSHIP VERIFIED
+       EMPLOYER   : ❌ DOES NOT VERIFY
+```
+
+The last two lines are the product. Same bytes, two verifiers, opposite
+verdicts — and the ✅ is a recomputation the prosecutor performs from public
+data plus a nonce they generated, not a field anyone handed them.
+
 > Use `preview.midnightexplorer.com`, not `explorer.preview.midnight.network`.
 > Measured, both on 2026-08-08: given a made-up address, the official-looking
 > host returns **HTTP 200** and renders an empty page, while
