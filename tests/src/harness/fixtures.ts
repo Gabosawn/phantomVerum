@@ -4,7 +4,7 @@
  */
 
 import { EPOCH_DURATION } from "./contract-surface.js";
-import { anchorOf, credCommitmentOf, periodHex32 } from "./crypto.js";
+import { anchorOf, credCommitmentOf, orgIdOf, periodHex32 } from "./crypto.js";
 import { GENESIS_BLOCK_TIME } from "./types.js";
 import type { Actor, Hex32, TestigoHarness } from "./types.js";
 
@@ -12,16 +12,24 @@ const byte = (n: number): Hex32 => n.toString(16).padStart(2, "0").repeat(32);
 
 // ── organizations ───────────────────────────────────────────────────────────────────────
 
-export const ACME: Hex32 = byte(0xa1);
-export const BETA: Hex32 = byte(0xb1);
-
 /**
  * The secret behind each org's published anchor. `issueCredential` asserts against it, which
  * is what keeps the credential tree — finite, and unrecoverable once full — from being filled
  * by anyone at all.
+ *
+ * Since the H-2 fix this is also the ROOT of the org's identity: the secret comes first and
+ * everything public about the org is derived from it.
  */
 export const ACME_ISSUER: Hex32 = byte(0xa1);
 export const BETA_ISSUER: Hex32 = byte(0xb1);
+
+/**
+ * H-2 — an orgId is derived, not chosen. `registerOrganization` asserts
+ * `orgIdOf(issuerSecret()) == orgId`, so these can no longer be arbitrary labels: an id that
+ * is a function of a secret is an id nobody can squat ahead of its owner.
+ */
+export const ACME: Hex32 = orgIdOf(ACME_ISSUER);
+export const BETA: Hex32 = orgIdOf(BETA_ISSUER);
 
 /**
  * The `anchor` argument: the commitment to the org's issuer secret. It used to be an inert

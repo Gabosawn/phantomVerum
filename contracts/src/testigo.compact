@@ -27,13 +27,23 @@ import CompactStandardLibrary;
 //   hand-rolled Merkle tree in TypeScript.
 //
 // DECLARED LIMITATIONS (deck + README, spec §5 and §7):
-//   · The credential issuer is a MOCK: `registerOrganization` has NO
-//     access control — anyone can register an unused orgId. Since v2,
-//     `issueCredential` IS authenticated: only the holder of the issuer
-//     secret behind the org's published anchor can add a leaf. What
-//     remains mock is the registration step and the off-chain identity
-//     of the issuer: the real issuer (a signing corporate directory)
-//     is roadmap.
+//   · The credential issuer is a MOCK in one specific sense: nothing
+//     ties an on-chain organization to a real-world legal entity. The
+//     real issuer (a signing corporate directory) is roadmap.
+//     What IS enforced on-chain, since the 2026-08-09 audit fixes:
+//       - `issueCredential` is authenticated — only the holder of the
+//         issuer secret behind the org's anchor can add a leaf;
+//       - `registerOrganization` is no longer squattable — the orgId
+//         and the anchor are both derived from that same secret (H-2);
+//       - issuance is idempotent and bounded per org, so the tree
+//         cannot be filled cheaply into a permanent brick (H-3).
+//     Registration remains PERMISSIONLESS: anyone can create their own
+//     organization. That is by design — what it can no longer do is
+//     take somebody else's, or exhaust the shared tree.
+//   · The anonymity floor (H-1) bounds the crowd a report hides in, but
+//     does not defeat TIMING correlation by the issuer. That is
+//     mitigated operationally (batch issuance, onboarding/report
+//     delay), not in-circuit.
 //   · The TRUTH of the reported content is not proven (spec §6).
 //   · There is no credential revocation (spec §7).
 // =====================================================================
@@ -57,6 +67,26 @@ export ledger organizations: Map<Bytes<32>, Bytes<32>>;
 // Depth 16 raises the cost of that attack and enlarges the anonymity set;
 // `issueCredential`'s issuer check (see below) is what actually closes it.
 export ledger credentials: HistoricMerkleTree<16, Bytes<32>>;
+
+// H-3 — leaves already issued, so the same (orgId, credCommitment) cannot
+// consume a second leaf. `credentials` is a Merkle tree: it has no membership
+// query, so a re-issuance was silently burning capacity out of a tree that can
+// never be compacted. This Set is what makes issuance idempotent.
+//
+// It is a Set of LEAVES, not of commitments: the leaf already binds the org, so
+// two different organizations issuing to the same employee commitment remain
+// two distinct legitimate credentials.
+export ledger issuedLeaves: Set<Bytes<32>>;
+
+// H-3 — credentials issued per organization, for the quota below. A Map and
+// not a Counter because the bound is per-org.
+export ledger issuedPerOrg: Map<Bytes<32>, Uint<64>>;
+
+// H-1 — how many credentials exist in the global tree. `MerkleTree` exposes no
+// size in Compact (only `insert*`, `checkRoot`, `isFull`, `resetToDefault`), so
+// the count has to be kept alongside it. `report` uses it to refuse to run
+// while the anonymity set is too small to hide anyone.
+export ledger credentialCount: Counter;
 
 // Sealed reportIds: H(dom || evidenceHash || personalSecret)
 export ledger reports: Set<Bytes<32>>;
@@ -128,12 +158,62 @@ circuit domIssuer(): Bytes<32> {
   return pad(32, "phantomtrace:issuer:v1");
 }
 
+// H-2 — the tag that derives an orgId from its issuer secret. Distinct from
+// `domIssuer` on purpose: `orgIdOf` and `anchorOf` take the SAME preimage
+// (the issuer secret) and have the same arity, so sharing a tag would make the
+// orgId and the anchor the same 32 bytes.
+circuit domOrg(): Bytes<32> {
+  return pad(32, "phantomtrace:org:v1");
+}
+
 // ---- Reporting epochs ----
 // Midnight's blockTime is `secondsSinceEpoch` (Unix seconds), so the
 // duration is IN SECONDS. 86400 = 1 day. Deliberately coarse: fine
 // periods allow timing correlation (spec §6).
 circuit epochDuration(): Uint<64> {
   return 86400;
+}
+
+// ---- Policy parameters (audit 2026-08-09) ----
+
+// H-1 — the anonymity floor. `report` refuses to run until the credential tree
+// holds at least this many leaves.
+//
+// WHAT THIS BUYS. The root that `report` discloses is a fingerprint of the tree
+// state. The issuer watches every `issueCredential`, so it knows which root
+// followed which insertion. Against a tree with 3 credentials, proving
+// membership narrows the author to one of 3 people; the ZK proof is doing its
+// job and the SET is the leak. The app builds the path against the CURRENT
+// root, so this floor is exactly the size of the crowd the proof hides in.
+//
+// WHAT THIS DOES NOT BUY, stated plainly: it does not defeat timing. An issuer
+// who onboards Lena at 09:00 and sees a report at 09:04 has a correlation no
+// in-circuit constraint can remove. That one is closed operationally — issue in
+// batches, and put distance between onboarding and reporting. Nor does it
+// constrain WHICH historic root a witness proves against; a witness that
+// deliberately picks an old, sparse root can still shrink its own crowd.
+//
+// 8 is a demo-scale floor: large enough that the property is real and testable,
+// small enough that a live demo can reach it. A deployment should raise it.
+//
+// Exported so the app and the tests read the ENFORCED value instead of keeping
+// their own copy. A hardcoded 8 on the TypeScript side is exactly the kind of
+// drift the audit was called in to find.
+export pure circuit minAnonymitySet(): Uint<64> {
+  return 8;
+}
+
+// H-3 — the per-organization issuance quota.
+//
+// The tree holds 65 536 leaves and the contract is immutable, so a filled tree
+// is a permanent kill switch. Registration is open, so an attacker can mint
+// organizations at will; this bound does not make filling the tree impossible,
+// it makes it cost 65 536 / 512 = 128 separate registrations plus 65 536 issuance
+// transactions, each paying fees. That is the honest claim: the attack goes
+// from free to expensive, not from possible to impossible. Closing it fully
+// needs a real issuer (a signing corporate directory), which is roadmap.
+export pure circuit maxCredentialsPerOrg(): Uint<64> {
+  return 512;
 }
 
 // ---- Exported pure circuits ----
@@ -147,6 +227,23 @@ circuit epochDuration(): Uint<64> {
 // into the credential channel's access control.
 export pure circuit anchorOf(issuerSec: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([domIssuer(), issuerSec]);
+}
+
+// H-2 — an organization's id IS the fingerprint of its issuer secret.
+//
+// `registerOrganization` used to take an arbitrary orgId, first-come and
+// irreversible. Since the contract is immutable and there is no update path,
+// an attacker could register the label a real organization was about to use,
+// with their own anchor, and deny it permanently — a two-line grief with no
+// recovery. Deriving the id from the secret removes the race entirely: an
+// orgId nobody can derive is an orgId nobody can squat, and squatting your own
+// is a no-op.
+//
+// The cost is that an orgId stops being a human-chosen name. It never was one
+// on-chain — it was already an opaque 32 bytes — but the tooling used to let
+// you pick it, and now it does not.
+export pure circuit orgIdOf(issuerSec: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([domOrg(), issuerSec]);
 }
 
 // The credential commitment. It is the only thing the employee hands to
@@ -201,8 +298,21 @@ export pure circuit receiptOf(reportId: Bytes<32>, prosecutorNonce: Bytes<32>): 
 }
 
 // ---- 4.1 registerOrganization (spec §4.1) ----
-// No witnesses. Idempotence: fails if the orgId already exists.
+//
+// H-2 FIX. Both public arguments are now DERIVED from the issuer secret and
+// checked against it, so the caller cannot register an id or an anchor it does
+// not hold the key for. They stay arguments rather than return values so the
+// ledger shape and `report(orgId, …)` are untouched; the caller computes them
+// off-chain with the exported `orgIdOf` / `anchorOf`.
+//
+// Both comparisons are pure comparisons against witness-derived values, so
+// they need no `disclose()` — the same pattern `revealAuthorship` uses.
 export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
+  const issuerSec = issuerSecret();
+
+  assert(orgIdOf(issuerSec) == orgId, "orgId is not derived from this issuer secret");
+  assert(anchorOf(issuerSec) == anchor, "anchor does not commit to this issuer secret");
+
   assert(!organizations.member(disclose(orgId)), "organization already registered");
   organizations.insert(disclose(orgId), disclose(anchor));
 }
@@ -224,11 +334,30 @@ export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
 // anyone could fill it, and a filled tree is permanent (see `credentials`).
 // This is also what makes registering somebody else's orgId pointless: the
 // squatter can only issue under their own anchor.
+// H-3 FIX. Two bounds, because the tree is immutable capacity and a full tree
+// is a permanent kill switch:
+//   · idempotence — re-issuing the same leaf is rejected instead of silently
+//     burning a slot the tree can never reclaim;
+//   · a per-org quota — no single organization can exhaust the tree.
 export circuit issueCredential(orgId: Bytes<32>, credCommitment: Bytes<32>): [] {
   assert(organizations.member(disclose(orgId)), "organization not registered");
   assert(organizations.lookup(disclose(orgId)) == anchorOf(issuerSecret()),
          "not the issuer of this organization");
-  credentials.insert(disclose(leafOf(orgId, credCommitment)));
+
+  const leaf = leafOf(orgId, credCommitment);
+  assert(!issuedLeaves.member(disclose(leaf)), "credential already issued");
+
+  // `lookup` on an absent key is a runtime error, so the first issuance of an
+  // org has to be handled explicitly rather than defaulted.
+  const used = issuedPerOrg.member(disclose(orgId))
+                 ? issuedPerOrg.lookup(disclose(orgId))
+                 : 0 as Uint<64>;
+  assert(used < maxCredentialsPerOrg(), "organization issuance quota exhausted");
+
+  issuedPerOrg.insert(disclose(orgId), (used + 1) as Uint<64>);
+  issuedLeaves.insert(disclose(leaf));
+  credentials.insert(disclose(leaf));
+  credentialCount.increment(1);
 }
 
 // ---- 4.2 report — the heart (spec §4.2) ----
@@ -250,6 +379,16 @@ export circuit report(orgId: Bytes<32>, period: Uint<64>): [] {
   const windowEnd = windowStart + (epochDuration() as Field);
   assert(blockTimeGte(disclose(windowStart as Uint<64>)), "period not started yet");
   assert(blockTimeLt(disclose(windowEnd as Uint<64>)), "period already over");
+
+  // C0b — H-1: the anonymity floor. A membership proof against a tree holding
+  // three credentials names one of three people; the proof is sound and the
+  // crowd is the leak. Refuse to run until the crowd exists.
+  //
+  // `lessThan` rather than `read() >= n`: Counter exposes the comparison
+  // directly, and `read()` would put the exact population into the circuit for
+  // no benefit.
+  assert(!credentialCount.lessThan(minAnonymitySet()),
+         "anonymity set too small — not enough credentials issued yet");
 
   // C1 — membership. The leaf is built in-circuit from the public
   // orgId: the witness cannot substitute another org's leaf.

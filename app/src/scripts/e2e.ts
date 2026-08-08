@@ -18,6 +18,8 @@
 import '../config/init.js';
 
 import { RepeatedNullifierError } from '../api/errors.js';
+import { toHex, randomBytes32 } from '../witnesses/hex.js';
+import { organizationId, pureCircuits } from '../witnesses/index.js';
 
 import {
   closeBackend,
@@ -33,8 +35,9 @@ const backend = await createBackend(args);
 printMode(backend);
 const { api } = backend;
 
-const orgId = hexArgOrRandom(undefined, 'orgId');
 const issuerSecret = hexArgOrRandom(undefined, 'issuerSecret');
+// H-2: derived, not drawn. `registerOrganization` asserts this equality.
+const orgId = toHex(organizationId(issuerSecret));
 // Nonces, not keys: each verifier generates its own and sends it over.
 const prosecutorNonce = hexArgOrRandom(undefined, 'prosecutorNonce');
 const employerNonce = hexArgOrRandom(undefined, 'employerNonce');
@@ -49,6 +52,21 @@ console.log(`client generated its secret locally; issuer sees only ${credential.
 const issued = await api.issueCredential({ orgId, credCommitment: credential.credCommitment, issuerSecret });
 console.log(`credential issued at leafIndex ${issued.leafIndex}`);
 printTx(issued.tx);
+
+// H-1: `report` refuses to run while the tree holds fewer than
+// `minAnonymitySet()` credentials — a membership proof against a tree of one
+// names exactly one person. These are the rest of the crowd. Issuing them in a
+// batch is also the operational half of the mitigation, since the floor alone
+// does nothing about timing.
+const floor = Number(pureCircuits.minAnonymitySet());
+for (let i = 1; i < floor; i += 1) {
+  await api.issueCredential({
+    orgId,
+    credCommitment: toHex(randomBytes32()),
+    issuerSecret,
+  });
+}
+console.log(`${floor - 1} more credentials issued — anonymity floor of ${floor} reached`);
 
 console.log('\n=== ACT 2 — the report ===');
 const period = api.currentPeriod();
