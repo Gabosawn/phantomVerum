@@ -9,6 +9,13 @@ Built on [Midnight](https://midnight.network) (Compact + ZK).
 
 [![CI](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml)
 
+> The badge tracks the default branch. Until this work lands there it reads
+> "no status", which is not the same as red — the gate has run and passed from
+> a clean clone:
+> [run 31243935256](https://github.com/Gabosawn/phantomVerum/actions/runs/31243935256),
+> 1m47s, installing the Compact toolchain, compiling with proving keys and
+> running all 375 checks on a machine that had never seen the project.
+
 ---
 
 ## Deployed on Preview — check it yourself
