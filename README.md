@@ -7,17 +7,7 @@
 
 Built on [Midnight](https://midnight.network) (Compact + ZK).
 
-📊 **[Pitch deck](https://claude.ai/code/artifact/e132aeac-d338-497b-8f41-8dbcf89e5dfc)** ·
-source in [`deck/`](deck/README.md)
-
 [![CI](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml)
-
-> The badge tracks the default branch. Until this work lands there it reads
-> "no status", which is not the same as red — the gate has run and passed from
-> a clean clone:
-> [run 31243935256](https://github.com/Gabosawn/phantomVerum/actions/runs/31243935256),
-> 1m47s, installing the Compact toolchain, compiling with proving keys and
-> running all 375 checks on a machine that had never seen the project.
 
 ---
 
@@ -344,83 +334,6 @@ arity difference masked the tag collision. Two tests were added — tag binding 
 The same technique confirms the two backends are genuinely independent: break a guard in the
 model alone and exactly the `['model']` variants fail while every `['contract']` variant
 survives.
-
-## Known limitations
-
-Found by adversarial passes over our own contract (2026-08-08, extended
-2026-08-09), each one reproduced rather than theorised. Four of the original six
-were fixed the same night and are listed under [Fixed in v2](#fixed-in-v2)
-below; the ones that remain are here, with the fix we would apply — including
-#3, which the 2026-08-09 pass added: the v2 issuer authentication is real in the
-contract but the demo tooling undercuts it. "We did not notice" and "we found
-it, reproduced it, and know the patch" are different positions, and only the
-second one is true here.
-
-**1. The same author produces the same `reportId` on two deployments** *(medium)*
-
-Neither `reportIdOf` nor `nullifierOf` mixes in the contract address, and the
-domain tags are constants (`phantomtrace:*`) across every deployment. The same
-author with the same evidence produces byte-identical values on two separate
-ledgers, which makes them correlatable. A proof generated against a throwaway
-devnet — where the attacker controls all state — also verifies against the
-production verifier key.
-**Fix:** mix the contract address into the derivation. It has to be an explicit
-argument rather than `kernel.self()`, or the circuits stop being `pure` and the
-100% off-chain verification goes with them. Changes the export format. ~2 h.
-
-**2. The receipt is transferable once the nonce is shared** *(declared)*
-
-Per-recipient binding is real: the employer recomputes with their own nonce,
-gets a different receipt, and that one is on no ledger. But this is not a
-designated-verifier scheme — a real one lets the recipient simulate an
-indistinguishable proof, so a forwarded one convinces nobody. Here the receipt
-verifies against public data, so a prosecutor who shares the nonce transfers
-the ability to verify. See the threat model in `docs/01-arquitectura.md`.
-
-**3. The demo issuer secret is derivable from the public `orgId`** *(medium)*
-
-v2 made `issueCredential` authenticate against the org's on-chain anchor —
-correct in the contract. But the demo tooling derives the issuer secret as
-`sha256("phantomtrace:demo-issuer:v1:" + orgId)` so the stateless CLI scripts
-can reproduce it, and it uses that in `--network` mode too. Since `orgId` is
-public (`registerOrganization`/`issueCredential` disclose it), anyone can
-recompute the secret, pass `anchorOf(issuerSecret()) == lookup(orgId)`, and mint
-credentials under any org registered by the shipped tooling — including on
-Preview. The contract's check is real; the *demo's* secret is public-grade.
-**Fix:** a production issuer generates the secret with `randomBytes32()` and
-keeps it in a vault; the CLI should take it as an explicit arg / stored secret
-in network mode instead of deriving it. Reproduced by
-`contracts/test/security-claims.mjs` (a *random* wrong secret is rejected — the
-gap is that the demo's secret is not random). ~1 h.
-
-**4. Network-level anonymity is not addressed** *(declared, and the largest)*
-
-Measured against Preview: 87% of blocks are empty and the whole network carries
-~1.4 transactions per minute, so a report is very likely the only transaction
-in its block. The anonymity set *at the network layer* is close to 1, which
-matters more than any of the above. The contract's privacy holds; correlating
-by timing does not need to break it. Mitigations (submission delay, decoy
-traffic, Tor) are documented in `docs/05-mejoras_ES.md` §7-bis and not
-implemented.
-
-### Fixed in v2
-
-Same audit, fixed the same night. Kept here because the fixes are the
-interesting part, and because the tests that prove them are the artefact:
-`contracts/test/sec-audit.mjs` and `receipt-authorship.mjs` execute each attack
-and watch it fail.
-
-| Was | Now |
-|---|---|
-| **The prosecutor had to be handed the report secret.** `authorshipOf` mixed it into the hash, so recomputing required it — and whoever held it could republish the authorship, or burn the slot. | `receiptOf(reportId, prosecutorNonce)` drops the secret from the preimage. The prosecutor picks a nonce, sends it off-chain, and recomputes from public data. **Nothing secret is handed over, ever.** The ZK proof is what establishes authorship; the hash only has to be recomputable. |
-| **The verdict was forgeable from public data.** `ok` compared two fields both supplied by whoever brought the file, and was computed before reading the ledger. An employer could scrape a `reportId` and a hash off the chain and mint their own ✅. | Verification RECOMPUTES `receiptOf(reportId, myNonce)` and looks **that** value up. The scraping attack and the splice attack (one report's id with another's receipt) are both executed as tests and both fail. |
-| **`nullifierOf` mixed in `orgId`**, a caller-chosen operand nothing constrained — so a free phantom org bought the same credential another report per epoch. Anti-spam was decorative. | `nullifierOf(sec, period)`. One report per credential per epoch, whatever it is enrolled in. |
-| **256 unauthenticated calls bricked the contract forever.** Depth-8 tree, `issueCredential` open to anyone, no revocation, immutable contract. | Depth 16, and issuance is authenticated against the org's anchor — which until now was written by `registerOrganization` and read by no circuit. Also kills `orgId` squatting: a squatter can only issue under their own anchor. |
-
-Measured, v1 → v2: `report.prover` **9 982 969 → 9 981 157 B** — the eight extra
-Merkle levels are paid for by the operand `nullifierOf` gave up, so a 256× bigger
-anonymity set came out free on the hot path. `issueCredential` went
-2 823 958 → 5 205 679 B, and the full ZK compile 17.0 → 17.8 s.
 
 ## Development plan — 4 independent blocks
 
