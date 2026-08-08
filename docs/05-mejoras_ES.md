@@ -5,8 +5,14 @@
 > compilando o ejecutando contra el compilador 0.31.1 y la red Preview real**, no
 > leyendo documentación. Lo no verificado está marcado como tal.
 >
-> Contexto: vie 7/8 ~16:00 ART. Entrega sáb 13:00. Deploy a Preview **todavía no
-> ocurrió** — es el 40 % del rubric y bloquea todo lo demás.
+> Contexto: vie 7/8 ~16:00 ART. Entrega sáb 13:00.
+>
+> ⚠️ **Estado al 8/8 03:00.** Dos cosas de este documento quedaron vencidas:
+> el **deploy a Preview YA ocurrió** (`app/src/config/deployment.json`), y el
+> **§1 estaba equivocado** — `orgId` sí es público en `denunciar`, ver la
+> corrección ahí mismo. Antes de tomar cualquier ítem de acá, leer la nota roja
+> de la sección correspondiente: parte del punch-list de §2 ya está hecho y el
+> ítem 2 está descartado por apoyarse en el §1 erróneo.
 
 ---
 
@@ -45,26 +51,59 @@ Esperar 2–10 s de lag del indexer: poll, no query único.
 
 ---
 
-## 1. La duda de §3.4, RESUELTA — y es mitad victoria, mitad corrección
+## 1. La duda de §3.4, RESUELTA — pero NO como decía la primera versión
 
-Se decodificó el transcript por **dos métodos independientes** (análisis de
-`declare_pub_input` en el ZKIR + volcado del `publicTranscript` del simulador).
-Coinciden.
+> 🔴 **CORRECCIÓN (8/8, verificada).** La versión original de este §1 afirmaba
+> que `orgId` **no** es público en `denunciar` y lo vendía como "punto fuerte no
+> reclamado" para el deck. **Es falso, y era el error más caro del documento:**
+> un jurado técnico lo falsea en vivo leyendo el ZKIR, o corriendo un test que
+> ya está commiteado en este mismo repo.
+
+### Qué se midió, y con qué
+
+`contracts/output/zkir/report.zkir`, leído directo:
+
+```json
+{ "num_inputs": 3,
+  "instructions": [
+    { "op": "constrain_bits", "var": 0, "bits": 8   },
+    { "op": "constrain_bits", "var": 1, "bits": 248 },
+    { "op": "constrain_bits", "var": 2, "bits": 64  },
+```
+
+Esas tres vars son la firma exacta de `report(orgId: Bytes<32>, period: Uint<64>)`:
+un `Bytes<32>` entra como dos field elements (un limbo de 8 bits + uno de 248) y
+`Uint<64>` como uno de 64. Los **22** `private_input` del circuito cuadran uno a
+uno con los cuatro witnesses (`credentialSecret` 2 + `credentialPath` 8×2 +
+`personalSecret` 2 + `evidenceHash` 2 = 22), y los 8 `constrain_to_boolean` son
+los 8 `goes_left` del path. No sobra ni falta nada.
+
+**Dónde estuvo el error de método:** se buscó `declare_pub_input` para los field
+elements de `orgId` y no se encontró. Pero `declare_pub_input` es el opcode que
+empuja valores del **transcript** al vector de public inputs; los **argumentos
+del circuito** no pasan por ahí — entran por `num_inputs`, arriba de todo. Buscar
+el argumento en el lugar donde viven los valores del transcript da un falso
+negativo garantizado.
+
+`contracts/test/transcript-privacy.mjs` (verde, commiteado, sección 4) ya
+afirmaba lo correcto: reconstruye `orgId` byte a byte desde `proofData.input` y
+verifica que coincide con el valor pasado.
 
 | Circuito | Publica | NO publica |
 |---|---|---|
 | `registrarOrganizacion` | `orgId`, `ancla` | — |
 | `emitirCredencial` | `orgId`, repr. *hiding* de la hoja | `credCommitment`, la hoja cruda |
-| **`denunciar`** | raíz de Merkle, `nullifier`, `denunciaId`, `inicio`/`fin` de época | **`orgId`**, `credencialSecret`, `secretPersonal`, `evidenciaHash` |
+| **`denunciar`** | **`orgId`**, época, raíz de Merkle, `nullifier`, `denunciaId` | `credencialSecret`, `secretPersonal`, `evidenciaHash` |
 | `revelarAutoria` | `denunciaId`, `autoriaHash` | **`fiscalPk`**, `secretPersonal`, raíz de Merkle |
 
-### ✅ `orgId` NO aparece en `denunciar` — punto fuerte no reclamado
+### Lo que sí sobrevive de la medición original
 
-En el ZKIR, los dos field elements de `orgId` **nunca** son `declare_pub_input`.
-Como el árbol de Merkle es **global**, la raíz es la misma para todas las
-organizaciones ⇒ **el conjunto de anonimato es toda credencial de toda
-organización, no solo la org acusada.** Es más privacidad de la que el deck
-reclama hoy, y es gratis reclamarla.
+- **El árbol es global**, así que la raíz de Merkle es la misma para todas las
+  organizaciones y no distingue entre ellas. Eso sigue siendo cierto — pero el
+  conjunto de anonimato **no** es "toda credencial de toda organización": lo
+  acota `orgId`, que es público. Es el conjunto de credenciales de esa org.
+- **`fiscalPk` no sale en `revelarAutoria`.** Un observador ve *que* alguien
+  reveló autoría de la denuncia X, no ante quién.
 
 ### ❌ `periodo` SÍ aparece — pero con fuga de 0 bits
 
@@ -78,7 +117,13 @@ público ⇒ **publicar `periodo` no agrega información**.
 
 **Framing inatacable:** *"el transcript revela la época, que es una función
 determinista del timestamp del bloque — información que la cadena ya publica.
-La organización del denunciante, en cambio, no aparece."*
+Cero bits de fuga sobre el denunciante."*
+
+⚠️ La versión original de esta frase cerraba con *"la organización del
+denunciante, en cambio, no aparece"*. **Sacado: es falso** (§1). Lo que sí se
+puede decir sobre la org es que el denunciante se esconde dentro del conjunto
+de credenciales emitidas por la suya — hoy, con `HistoricMerkleTree<8>`, como
+mucho 256, y en la práctica las que esa org haya emitido.
 
 ### ✅ Bonus: `fiscalPk` tampoco sale
 
@@ -91,13 +136,16 @@ la pertenencia a la org. *Caveat honesto:* quien tenga el export (y por tanto
 
 ## 2. HOY — ~1,25 h, el mejor retorno del plan
 
+> **Estado al 8/8 03:00:** de los 6 ítems quedan abiertos **solo el 6 (CI)**.
+> El 1, el 4 y el 5 ya están hechos; el 2 está descartado y el 3 ya no aplica.
+
 | # | Ítem | h | Por qué |
 |---|---|---|---|
-| 1 | **Portar `transcript.mjs` a `contracts/test/`** (ya escrito y **19/19 verde**) | 0,5 | Convierte la afirmación de privacidad en un test ejecutable. Suite 47 → 66. Es el artefacto que un juez de privacidad busca y casi nadie muestra. Engineering + QA |
-| 2 | **Corregir `.agents/skills/midnight-security/SKILL.md`** | 0,25 | **Está commiteado en el repo público** y afirma en 5 lugares que *"circuit arguments … are part of the public transcript"*. **Es falso** — lo desmiente la doc oficial y nuestra medición. Un juez que lo lea concluye que `orgId` es público y que no entendemos nuestro propio contrato |
-| 3 | **Corregir §3.4 de `docs/03`** con el resultado real | 0,25 | Hoy dice "no verificado"; ya está verificado |
-| 4 | **Script `test` en `app/package.json`** | 0,25 | `app/` no tiene script `test`: sus ~99 checks nunca corren. `npm test` pasa de 47 a ~146 visibles. QA es 15 % y casi nadie lo muestra |
-| 5 | **Arreglar nombres de scripts del README** | 0,1 | El README promete `register-org`/`report`; `app/package.json` define `registrar-org`/`denunciar`. **Un juez que copia y pega recibe `Missing script`** |
+| 1 | ~~Portar `transcript.mjs` a `contracts/test/`~~ | — | ✅ **HECHO** — vive en `contracts/test/transcript-privacy.mjs`, 13 checks verdes dentro de los 65 de `contracts` |
+| 2 | ~~Corregir `.agents/skills/midnight-security/SKILL.md`~~ | — | 🔴 **DESCARTADO (8/8).** Este ítem se apoyaba en el §1 equivocado. El SKILL.md afirma que *"circuit arguments … are part of the public transcript"* y **tiene razón**: lo confirma el ZKIR (§1) y el propio `transcript-privacy.mjs`. "Corregirlo" habría metido una afirmación falsa en el repo. Además está fijado por hash en `skills-lock.json` (upstream `Kali-Decoder/Midnight-skills`), así que editarlo invalida el lock y se pisa en la próxima sincronización. **No tocar.** |
+| 3 | ~~Corregir §3.4 de `docs/03`~~ | — | ✅ **N/A** — §3.4 ya no dice "no verificado". Sí se le corrigió el ✅ del fiscal, que pasó a ⚠️ tras el fail-closed de la auditoría del 8/8 |
+| 4 | ~~Script `test` en `app/package.json`~~ | — | ✅ **HECHO** — corre 3 selftests, 173 checks |
+| 5 | ~~Arreglar nombres de scripts del README~~ | — | ✅ **HECHO** — todo se renombró a inglés; README y `app/package.json` coinciden (`register-org`, `report`, …) |
 | 6 | **CI con la action oficial** `midnightntwrk/setup-compact-action@v1` | 0,3 | Badge verde = prueba automática del gate anti-DQ desde clone limpio. Ojo: la action cachea `~/.local/share/compact`, que **no existe** — el toolchain real vive en `~/.compact` |
 
 ---
