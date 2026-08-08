@@ -34,18 +34,19 @@ printMode(backend);
 const { api } = backend;
 
 const orgId = hexArgOrRandom(undefined, 'orgId');
-const anchor = hexArgOrRandom(undefined, 'anchor');
-const prosecutorPk = hexArgOrRandom(undefined, 'prosecutorPk');
-const employerPk = hexArgOrRandom(undefined, 'employerPk');
+const issuerSecret = hexArgOrRandom(undefined, 'issuerSecret');
+// Nonces, not keys: each verifier generates its own and sends it over.
+const prosecutorNonce = hexArgOrRandom(undefined, 'prosecutorNonce');
+const employerNonce = hexArgOrRandom(undefined, 'employerNonce');
 
 console.log('\n=== ACT 1 — organization and credential ===');
-const orgTx = await api.registerOrganization({ orgId, anchor });
+const orgTx = await api.registerOrganization({ orgId, issuerSecret });
 console.log(`organization ${orgId.slice(0, 16)}… registered`);
 printTx(orgTx);
 
 const credential = await api.prepareLocalCredential(orgId);
 console.log(`client generated its secret locally; issuer sees only ${credential.credCommitment.slice(0, 16)}…`);
-const issued = await api.issueCredential({ orgId, credCommitment: credential.credCommitment });
+const issued = await api.issueCredential({ orgId, credCommitment: credential.credCommitment, issuerSecret });
 console.log(`credential issued at leafIndex ${issued.leafIndex}`);
 printTx(issued.tx);
 
@@ -72,25 +73,21 @@ try {
   console.log('(rejected at proof time — no transaction was submitted)');
 }
 
-console.log('\n=== ACT 4 — deferred authorship, designated verifier ===');
-const reveal = await api.revealAuthorship({ reportId: sealed.reportId, prosecutorPk });
-console.log(`authorship revealed to prosecutor ${prosecutorPk.slice(0, 16)}…`);
-console.log(`authorshipHash : ${reveal.authorshipHash}`);
+console.log('\n=== ACT 4 — deferred authorship, one receipt per nonce ===');
+const reveal = await api.revealAuthorship({ reportId: sealed.reportId, prosecutorNonce });
+console.log(`authorship revealed for nonce ${prosecutorNonce.slice(0, 16)}…`);
+console.log(`receipt        : ${reveal.receipt}`);
 printTx(reveal.tx);
 
 // ONE package, addressed to the prosecutor. The employer intercepts it and
 // reads it with their own key — the bytes are identical, the verdict is not.
-const pkg = api.exportKey(sealed.reportId, prosecutorPk);
+const pkg = api.exportKey(sealed.reportId, prosecutorNonce);
 console.log(`package fields : ${Object.keys(pkg).join(', ')} — no secret leaves the machine`);
-const vProsecutor = await api.verifyAuthorship(pkg, prosecutorPk);
-const vEmployer = await api.verifyAuthorship(pkg, employerPk);
+const vProsecutor = await api.verifyAuthorship(pkg, prosecutorNonce);
+const vEmployer = await api.verifyAuthorship(pkg, employerNonce);
 
-const label = (v: { verdict: string }): string =>
-  v.verdict === 'verified'
-    ? '✅ AUTHORSHIP VERIFIED'
-    : v.verdict === 'refuted'
-      ? '❌ DOES NOT VERIFY'
-      : '⚠️  NOT VERIFIABLE IN THIS BUILD';
+const label = (v: { ok: boolean; onLedger: boolean }): string =>
+  v.ok && v.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY';
 
 console.log('\n--- one package, two verifiers ---');
 console.log(`PROSECUTOR : ${label(vProsecutor)}`);
@@ -104,14 +101,12 @@ console.log(`reports sealed     : ${ledger.reports.length}`);
 console.log(`nullifiers burned  : ${ledger.nullifiers}`);
 console.log(`authorships        : ${ledger.authorships.length}`);
 
-// What ACT 4 actually demonstrates today: the employer is refuted from public
-// data, and the prosecutor is not handed a false positive. The prosecutor's
-// side stays `unavailable` until the proveAuthorship proof is verified — a ✅
-// there would be one the employer could mint for themselves.
-const ok =
-  vProsecutor.verdict === 'unavailable' &&
-  vProsecutor.onLedger &&
-  vEmployer.verdict === 'refuted';
+// The ✅ is earned rather than asserted: the prosecutor RECOMPUTES
+// `receiptOf(reportId, theirNonce)` from data they already hold and finds it
+// on the ledger, where only someone who knew the report secret could have put
+// it. The employer recomputes with their own nonce, gets a different value,
+// and finds nothing — which is why their ❌ is a refutation and not a shrug.
+const ok = vProsecutor.ok && vProsecutor.onLedger && !vEmployer.ok;
 console.log(ok ? '\nE2E: the 4 acts completed ✔' : '\nE2E: FAILED');
 await closeBackend(backend);
 process.exit(ok ? 0 : 1);

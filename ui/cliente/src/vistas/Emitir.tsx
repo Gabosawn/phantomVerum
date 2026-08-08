@@ -26,7 +26,7 @@ export function Emitir() {
       </Encabezado>
 
       <Tarjeta
-        titulo={`Directorio interno · ${e.hojasEmitidas} de 256 hojas`}
+        titulo={`Directorio interno · ${e.hojasEmitidas} de 65 536 hojas`}
         derecha="nunca sale de acá"
       >
         <div style={{ padding: "4px 20px 16px", display: "flex", flexDirection: "column" }}>

@@ -24,7 +24,7 @@
 import type { ConnectedAPI, WalletConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
 
 import {
-  authorshipOf,
+  receiptOf,
   credCommitmentOf,
   leafOf,
   nullifierOf,
@@ -187,7 +187,7 @@ export class ClientePreview implements TestigoClient {
 
     // Pure circuits work locally — same hashes as the contract
     const hoja = leafOf(p.orgId, credCommitmentOf(this.secrets.credencialSecret));
-    const nullifier = nullifierOf(this.secrets.credencialSecret, p.orgId, BigInt(periodo));
+    const nullifier = nullifierOf(this.secrets.credencialSecret, BigInt(periodo));
     const denunciaId = reportIdOf(evidenciaHash, this.secrets.secretPersonal);
 
     onPaso?.("pure circuits listos · denunciaId + nullifier computados");
@@ -199,43 +199,39 @@ export class ClientePreview implements TestigoClient {
   }
 
   async revelarAutoria(
-    p: { denunciaId: Hex32; fiscalPk: Hex32 },
+    p: { denunciaId: Hex32; fiscalNonce: Hex32 },
     onPaso?: Progreso,
-  ): Promise<{ autoriaHash: Hex32; tx: TxResult }> {
+  ): Promise<{ recibo: Hex32; tx: TxResult }> {
     if (!this.secrets.evidenciaHash) throw new NoSosElAutorError();
 
     const recomputado = reportIdOf(this.secrets.evidenciaHash, this.secrets.secretPersonal);
     if (recomputado !== p.denunciaId) throw new NoSosElAutorError();
 
-    const autoriaHash = authorshipOf(this.secrets.secretPersonal, p.denunciaId, p.fiscalPk);
-    onPaso?.("pure circuits listos · autoriaHash computado");
+    receiptOf(p.denunciaId, p.fiscalNonce);
+    onPaso?.("pure circuits listos · recibo computado");
 
     throw new Error(
-      "revelarAutoria via Lace: use the CLI. npm run revelar-autoria --workspace=app",
+      "revelarAutoria via Lace: use the CLI. npm run reveal-authorship --workspace=app",
     );
   }
 
   /**
-   * Lee el ledger vía indexer y compara contra la clave de quien pregunta.
+   * Lee el ledger vía indexer y RECOMPUTA el recibo con el nonce de quien
+   * pregunta.
    *
-   * FAIL-CLOSED: nunca devuelve `verificado`. La proof ZK de `proveAuthorship`
-   * no se verifica en este build, y sin eso nada ata el `autoriaHash` a su
-   * autor. Refutar sí puede, con datos públicos. Ver `VeredictoAutoria`.
+   * El valor que se busca en la cadena es el recomputado, nunca el declarado
+   * en el sobre: por eso el empleador que copia los dos valores del ledger
+   * público y usa su propio nonce obtiene un recibo que no está publicado.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
-    verificadorPk: Hex32,
+    verificadorNonce: Hex32,
   ): Promise<ResultadoVerificacion> {
-    if (p.version !== 2) return { veredicto: "refutado", enLedger: false };
+    if (p.version !== 3) return { ok: false, enLedger: false };
     const state = await leerEstadoHex(this.contractAddress);
-    const enLedger = hexInState(state, p.autoriaHash);
-    const proofMalformada = p.proof !== p.autoriaHash;
-    const designadaAEstaClave = p.fiscalPk === verificadorPk;
-
-    if (proofMalformada || !designadaAEstaClave || !enLedger) {
-      return { veredicto: "refutado", enLedger };
-    }
-    return { veredicto: "no-verificable", enLedger };
+    const recomputado = receiptOf(p.denunciaId, verificadorNonce);
+    const enLedger = hexInState(state, recomputado);
+    return { ok: recomputado === p.recibo && enLedger, enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

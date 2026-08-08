@@ -13,7 +13,7 @@
  * wired, a single dynamic import of `@contracts/contract/index.js`
  * replaces the hex checks below.
  */
-import type { Hex32 } from "../cripto";
+import { receiptOf, type Hex32 } from "../cripto";
 import type {
   EstadoLedger,
   ExportLlaveAutoria,
@@ -105,25 +105,21 @@ export class PreviewExplorerReader implements TestigoClient {
    * this parameter — as this reader used to — lets anyone who intercepts the
    * material self-designate, and the intruder verifies green.
    *
-   * FAIL-CLOSED: never returns `verificado`. This build does not verify the
-   * `proveAuthorship` ZK proof, and every other input to a positive verdict
-   * comes from whoever handed over the material. It can still refute, from
-   * public data alone. See `VeredictoAutoria`.
+   * The verdict is a RECOMPUTATION, which is what makes it evidence: the value
+   * looked up on-chain is `receiptOf(reportId, myNonce)`, never the one
+   * declared in the package. An employer who scraped both values off the
+   * public ledger and asks with their own nonce gets a different receipt, and
+   * that one is published nowhere.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
-    verificadorPk: Hex32,
+    verificadorNonce: Hex32,
   ): Promise<ResultadoVerificacion> {
-    if (p.version !== 2) return { veredicto: "refutado", enLedger: false };
+    if (p.version !== 3) return { ok: false, enLedger: false };
     await this.fetchStateHex();
-    const enLedger = this.hexInState(p.autoriaHash);
-    const proofMalformada = p.proof !== p.autoriaHash;
-    const designadaAEstaClave = p.fiscalPk === verificadorPk;
-
-    if (proofMalformada || !designadaAEstaClave || !enLedger) {
-      return { veredicto: "refutado", enLedger };
-    }
-    return { veredicto: "no-verificable", enLedger };
+    const recomputado = receiptOf(p.denunciaId, verificadorNonce);
+    const enLedger = this.hexInState(recomputado);
+    return { ok: recomputado === p.recibo && enLedger, enLedger };
   }
 
   // ── Read-only: these circuits require a wallet + proof server ──────────
@@ -140,7 +136,7 @@ export class PreviewExplorerReader implements TestigoClient {
     throw new Error("El Explorer es read-only: no puede denunciar.");
   }
 
-  revelarAutoria(): Promise<{ autoriaHash: Hex32; tx: TxResult }> {
+  revelarAutoria(): Promise<{ recibo: Hex32; tx: TxResult }> {
     throw new Error("El Explorer es read-only: no puede revelar autoría.");
   }
 }

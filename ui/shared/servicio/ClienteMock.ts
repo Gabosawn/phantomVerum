@@ -13,7 +13,7 @@
  */
 
 import {
-  authorshipOf,
+  receiptOf,
   credCommitmentOf,
   EPOCH_DURATION_SECONDS,
   hashDeArchivo,
@@ -74,8 +74,8 @@ export function ledgerVacio(altura = 1_284_917): LedgerLocal {
 const PASOS_DENUNCIAR = [
   "witness credentialSecret() + credentialPath() → recibidos, proceso local",
   "C0 · blockTime dentro de [inicio, fin) de la época · el período no lo elige el denunciante",
-  "merkleTreePathRoot(leafOf(orgId, credCommitmentOf(cred))) · checkRoot contra el ancla · depth 8",
-  "nullifier = H(dom:nullifier ‖ credSecret ‖ orgId ‖ época)",
+  "merkleTreePathRoot(leafOf(orgId, credCommitmentOf(cred))) · checkRoot contra el ancla · depth 16",
+  "nullifier = H(dom:nullifier ‖ credSecret ‖ época) · sin orgId: una org fantasma no compra otra denuncia",
   "reportId  = H(dom:report ‖ evidenciaHash ‖ secretPersonal)",
   "zk proof generada · 3.412 constraints",
   "tx submitted · fees shielded · sin msg.sender",
@@ -84,7 +84,7 @@ const PASOS_DENUNCIAR = [
 const PASOS_REVELAR = [
   "witness personalSecret() + evidenceHash() → recibidos, proceso local",
   "assert reportIdOf(evidenciaHash, secret) == denunciaId · ok",
-  "authorship = H(dom:authorship ‖ secret ‖ denunciaId ‖ fiscalPk)",
+  "recibo = H(dom:receipt ‖ denunciaId ‖ nonce del fiscal) · sin el secret adentro",
   "zk proof generada · 1.980 constraints",
 ];
 
@@ -223,8 +223,10 @@ export class ClienteMock implements TestigoClient {
       throw new CredencialInvalidaError();
     }
 
-    // C2 — el nullifier usa el secret de la CREDENCIAL, no el personal.
-    const nullifier = nullifierOf(w.credencialSecret, p.orgId, BigInt(p.periodo));
+    // C2 — el nullifier usa el secret de la CREDENCIAL, no el personal, y NO
+    // mezcla el orgId: si lo hiciera, registrar una org fantasma —que es
+    // gratis— le compraría a la misma credencial otra denuncia por época.
+    const nullifier = nullifierOf(w.credencialSecret, BigInt(p.periodo));
     if (this.ledger.nullifiers.includes(nullifier)) {
       throw new NullifierRepetidoError();
     }
@@ -245,9 +247,9 @@ export class ClienteMock implements TestigoClient {
   }
 
   async revelarAutoria(
-    p: { denunciaId: Hex32; fiscalPk: Hex32 },
+    p: { denunciaId: Hex32; fiscalNonce: Hex32 },
     onPaso?: Progreso,
-  ): Promise<{ autoriaHash: Hex32; tx: TxResult }> {
+  ): Promise<{ recibo: Hex32; tx: TxResult }> {
     const w = this.exigirWitnesses();
     if (!w.evidenciaHash) {
       throw new NoSosElAutorError();
@@ -264,52 +266,50 @@ export class ClienteMock implements TestigoClient {
       throw new ReportDoesNotExistError();
     }
 
-    const autoriaHash = authorshipOf(w.secretPersonal, p.denunciaId, p.fiscalPk);
-    // assert(!authorships.member(...), "authorship already revealed to this prosecutor")
-    if (this.ledger.autorias.includes(autoriaHash)) {
+    // El secret NO entra en el recibo. Lo que prueba la autoría es el assert
+    // C1 de arriba, dentro del circuito; el hash solo tiene que ser
+    // recomputable por el fiscal, que eligió el nonce.
+    const recibo = receiptOf(p.denunciaId, p.fiscalNonce);
+    // assert(!authorships.member(...), "authorship already revealed to this nonce")
+    if (this.ledger.autorias.includes(recibo)) {
       throw new AuthorshipAlreadyRevealedError();
     }
 
     await this.correrPasos(PASOS_REVELAR, onPaso);
 
-    this.ledger.autorias.push(autoriaHash);
+    this.ledger.autorias.push(recibo);
 
-    return { autoriaHash, tx: this.confirmar(4) };
+    return { recibo, tx: this.confirmar(4) };
   }
 
   /**
-   * 100 % off-chain: lee el ledger y compara contra la clave de quien pregunta.
+   * 100 % off-chain: RECOMPUTA el recibo con el nonce de quien pregunta y lo
+   * busca en el ledger.
    *
-   * `verificadorPk` es la clave DE QUIEN VERIFICA, y es un parámetro aparte a
-   * propósito: el material trae la clave a la que el denunciante designó la
-   * prueba, y la pregunta que hay que contestar es si esas dos coinciden. Si se
-   * dejara que quien verifica escriba `p.fiscalPk`, cualquiera que intercepte
-   * el material se auto-designaría y la prueba diría que sí.
+   * `verificadorNonce` es el nonce DE QUIEN VERIFICA, y es un parámetro aparte
+   * a propósito: lo generó él y se lo mandó al denunciante, así que nunca
+   * viaja en el archivo. Si viniera adentro, cualquiera que intercepte el
+   * material se auto-designaría.
    *
-   * FAIL-CLOSED, y por eso nunca devuelve `verificado`. Este build no verifica
-   * la proof ZK de `proveAuthorship`: `proof` es una copia de `autoriaHash`, y
-   * los dos campos los aporta quien trae el sobre. Refutar sí puede — que el
-   * sobre esté dirigido a otra clave, o que lo que declara no esté en la
-   * cadena, se decide con datos públicos. Ver `VeredictoAutoria`.
+   * Lo que hace que esto sea evidencia y no una tautología: el valor que se
+   * busca en la cadena es el RECOMPUTADO, no el declarado. El empleador que
+   * copia `denunciaId` y recibo del ledger público y recomputa con SU nonce
+   * obtiene otro hash, que no está publicado. Y solo alguien que conocía el
+   * secret de la denuncia pudo haber puesto el recibo ahí, porque
+   * `revelarAutoria` lo exige dentro del circuito.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
-    verificadorPk: Hex32,
+    verificadorNonce: Hex32,
   ): Promise<ResultadoVerificacion> {
-    if (p.version !== 2) {
-      return { veredicto: "refutado", enLedger: false };
+    if (p.version !== 3) {
+      return { ok: false, enLedger: false };
     }
-    const enLedger = this.ledger.autorias.includes(p.autoriaHash);
-    // Asimétrico a propósito: la igualdad no prueba nada (la escriben ambos
-    // lados quien trae el sobre), pero la desigualdad sí desmiente — el sobre
-    // no salió del formato que este build emite.
-    const proofMalformada = p.proof !== p.autoriaHash;
-    const designadaAEstaClave = p.fiscalPk === verificadorPk;
-
-    if (proofMalformada || !designadaAEstaClave || !enLedger) {
-      return { veredicto: "refutado", enLedger };
-    }
-    return { veredicto: "no-verificable", enLedger };
+    const recomputado = receiptOf(p.denunciaId, verificadorNonce);
+    const designadoAMi = recomputado === p.recibo;
+    // El RECOMPUTADO, nunca el declarado.
+    const enLedger = this.ledger.autorias.includes(recomputado);
+    return { ok: designadoAMi && enLedger, enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

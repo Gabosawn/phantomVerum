@@ -13,16 +13,9 @@
  *
  * Without a file, simulator mode runs the whole demo in-memory — register,
  * issue, report, reveal — and then hands ONE package to two different
- * verifiers: the prosecutor it was addressed to and the employer who
- * intercepted it. Same bytes, two verdicts.
- *
- * The employer gets a hard ❌: the authorship on-chain was computed for
- * another key, and that is decidable from public data. The prosecutor gets
- * ⚠️ NOT VERIFIABLE, not ✅ — this build ships no verifier for the
- * `proveAuthorship` proof, and every other input to the verdict comes from
- * whoever handed over the file. Saying ✅ there would mean the employer could
- * mint the same ✅ for themselves out of two values read off the public
- * ledger. See `api/verify.ts`.
+ * verifiers: the prosecutor it was addressed to (✅) and the employer who
+ * intercepted it (❌). Same bytes, two verdicts. That is the product's key
+ * moment, with zero infrastructure.
  */
 import '../config/init.js';
 
@@ -33,6 +26,7 @@ import type { VerificationResult } from '../api/types.js';
 
 import {
   bootstrapCredential,
+  bootstrapIssuerSecret,
   bootstrapOrg,
   closeBackend,
   createBackend,
@@ -46,20 +40,12 @@ const args = parseArgs();
 const backend = await createBackend(args);
 printMode(backend);
 
-/** One line per verdict. `unavailable` is NOT rendered as a pass. */
-const VERDICT_LABEL: Record<VerificationResult['verdict'], string> = {
-  verified: '✅ AUTHORSHIP VERIFIED',
-  refuted: '❌ DOES NOT VERIFY',
-  unavailable: '⚠️  NOT VERIFIABLE IN THIS BUILD',
-};
-
 const printVerdict = (label: string, v: VerificationResult): void => {
-  console.log(`${label}: ${VERDICT_LABEL[v.verdict]}`);
-  console.log(`  addressed to me : ${v.checks.designatedToVerifier}`);
-  console.log(
-    `  proof verified  : ${v.checks.proofVerified ?? 'n/a — this build ships no proof verifier'}`,
-  );
-  console.log(`  on ledger       : ${v.onLedger}`);
+  const verdict = v.ok && v.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY';
+  console.log(`${label}: ${verdict}`);
+  console.log(`  recomputes to me: ${v.checks.designatedToVerifier}`);
+  console.log(`  receipt on chain: ${v.checks.receiptOnLedger}`);
+  console.log(`  report on chain : ${v.checks.reportOnLedger}`);
   console.log(`  detail          : ${v.detail}`);
 };
 
@@ -70,31 +56,32 @@ if (typeof fileFlag === 'string') {
   const asFlag = args.flags.get('as');
   if (typeof asFlag !== 'string') {
     fatal(
-      'pass --as <your pk, 64 hex chars>. The package names the key it was ' +
-        'addressed to; verifying it against that same key answers nothing.',
+      'pass --as <your nonce, 64 hex chars>. The nonce is the one YOU generated ' +
+        'and sent to the whistleblower; it is not in the package, which is what ' +
+        'makes the verdict mean something.',
     );
   }
-  const verifierPk = hexArgOrRandom(asFlag as string, 'as');
+  const verifierNonce = hexArgOrRandom(asFlag as string, 'as');
   const raw: unknown = JSON.parse(await readFile(fileFlag, 'utf8'));
   const pkg = parseKeyExport(raw);
   console.log(`export   : ${fileFlag}`);
   console.log(`reportId : ${pkg.reportId}`);
-  console.log(`as       : ${verifierPk}`);
+  console.log(`as nonce : ${verifierNonce}`);
   if (backend.mode === 'simulator') {
     console.log('note     : simulator backend starts with an EMPTY ledger — the');
     console.log('           local checks are meaningful, "on ledger" is not.');
   }
-  printVerdict('verdict', await backend.api.verifyAuthorship(pkg, verifierPk));
+  printVerdict('verdict', await backend.api.verifyAuthorship(pkg, verifierNonce));
   await closeBackend(backend);
 } else if (backend.mode === 'network') {
   fatal('pass --file <export.json> to verify against the network ledger');
 } else {
   // Simulator self-demo: full flow, then prosecutor ✅ / employer ❌.
   const orgId = hexArgOrRandom(undefined, 'orgId');
-  const prosecutorPk = hexArgOrRandom(undefined, 'prosecutorPk');
-  const employerPk = hexArgOrRandom(undefined, 'employerPk');
+  const prosecutorNonce = hexArgOrRandom(undefined, 'prosecutorNonce');
+  const employerNonce = hexArgOrRandom(undefined, 'employerNonce');
 
-  await bootstrapOrg(backend, orgId, hexArgOrRandom(undefined, 'anchor'));
+  await bootstrapOrg(backend, orgId, bootstrapIssuerSecret(orgId));
   await bootstrapCredential(backend, orgId);
   const sealed = await backend.api.report({
     orgId,
@@ -102,16 +89,16 @@ if (typeof fileFlag === 'string') {
     evidence: Buffer.from('demo evidence for verify-authorship'),
   });
   console.log(`(setup)  : report ${sealed.reportId.slice(0, 16)}… sealed`);
-  await backend.api.revealAuthorship({ reportId: sealed.reportId, prosecutorPk });
-  console.log(`(setup)  : authorship revealed to prosecutor ${prosecutorPk.slice(0, 16)}…`);
+  await backend.api.revealAuthorship({ reportId: sealed.reportId, prosecutorNonce });
+  console.log(`(setup)  : authorship revealed for nonce ${prosecutorNonce.slice(0, 16)}…`);
 
   // ONE package, addressed to the prosecutor, read by two people. The
   // employer does not get a package of their own — they intercept this one.
   console.log('\n--- one package, two verifiers ---');
-  const pkg = backend.api.exportKey(sealed.reportId, prosecutorPk);
+  const pkg = backend.api.exportKey(sealed.reportId, prosecutorNonce);
   console.log(`package  : carries no secret (fields: ${Object.keys(pkg).join(', ')})`);
-  printVerdict('PROSECUTOR', await backend.api.verifyAuthorship(pkg, prosecutorPk));
-  printVerdict('EMPLOYER  ', await backend.api.verifyAuthorship(pkg, employerPk));
+  printVerdict('PROSECUTOR', await backend.api.verifyAuthorship(pkg, prosecutorNonce));
+  printVerdict('EMPLOYER  ', await backend.api.verifyAuthorship(pkg, employerNonce));
 
   await closeBackend(backend);
 }

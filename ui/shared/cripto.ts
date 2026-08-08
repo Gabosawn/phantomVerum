@@ -23,7 +23,7 @@ export {
   DOMAIN_TAGS,
   EPOCH_DURATION,
   MERKLE_DEPTH,
-  authorshipOf,
+  anchorOf,
   bytesToHex,
   credCommitmentOf,
   hexToBytes,
@@ -34,6 +34,7 @@ export {
   padHex32,
   periodBytes32,
   periodHex32,
+  receiptOf,
   reportIdOf,
   type Hex32,
 } from "@phantomtrace/shared/crypto";

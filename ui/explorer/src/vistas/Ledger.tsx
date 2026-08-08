@@ -127,7 +127,7 @@ export function Ledger() {
           </div>
           <div>
             <Rotulo color="var(--pv-dim)" tracking=".1em" style={{ display: "block", marginBottom: 6 }}>
-              ancla · merkle root, depth 8
+              ancla · merkle root, depth 16
             </Rotulo>
             <div className="pv-hex" style={{ font: `500 13px/1.4 ${MONO}` }}>
               {completo(ANCLA)}

@@ -11,6 +11,7 @@
  * store goes to a temp directory (unless `TESTIGO_SECRETS` overrides it):
  * a demo run must never overwrite the whistleblower's real secrets.
  */
+import { createHash } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -127,12 +128,23 @@ export const printTx = (tx: TxResult): void => {
  * script demonstrates, so each script is runnable with zero infrastructure.
  * On the network these steps already happened in previous invocations.
  */
+/**
+ * Demo issuer secret for an org, derived deterministically from the orgId.
+ *
+ * The scripts run one at a time and share no state, so `register-org` and
+ * `issue-credential` have to arrive at the SAME secret independently or the
+ * anchor check rejects the issuance. A real issuer keeps this in a vault; for
+ * the simulator and the demo, reproducible is exactly what is wanted.
+ */
+export const bootstrapIssuerSecret = (orgId: Hex32): Hex32 =>
+  createHash('sha256').update(`phantomtrace:demo-issuer:v1:${orgId}`).digest('hex') as Hex32;
+
 export const bootstrapOrg = async (
   backend: CliBackend,
   orgId: Hex32,
-  anchor: Hex32,
+  issuerSecret: Hex32,
 ): Promise<void> => {
-  await backend.api.registerOrganization({ orgId, anchor });
+  await backend.api.registerOrganization({ orgId, issuerSecret });
   console.log(`(setup)  : organization ${orgId.slice(0, 16)}… registered`);
 };
 
@@ -141,7 +153,11 @@ export const bootstrapCredential = async (
   orgId: Hex32,
 ): Promise<void> => {
   const credential = await backend.api.prepareLocalCredential(orgId);
-  await backend.api.issueCredential({ orgId, credCommitment: credential.credCommitment });
+  await backend.api.issueCredential({
+    orgId,
+    credCommitment: credential.credCommitment,
+    issuerSecret: bootstrapIssuerSecret(orgId),
+  });
   console.log(`(setup)  : credential issued (commitment ${credential.credCommitment.slice(0, 16)}…)`);
 };
 

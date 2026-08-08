@@ -26,10 +26,23 @@ const sec = b32(0x44);
 const evA = b32(0x33);
 const evB = b32(0x66);
 
+// Each org's issuer secret, and the anchor it publishes.
+const issuerA = b32(0xa5);
+const issuerB = b32(0xb5);
+const anchorA = pureCircuits.anchorOf(issuerA);
+const anchorB = pureCircuits.anchorOf(issuerB);
+
 const credCommA = pureCircuits.credCommitmentOf(credA);
 const credCommB = pureCircuits.credCommitmentOf(credB);
 const leafA = pureCircuits.leafOf(orgA, credCommA);
 const leafB = pureCircuits.leafOf(orgB, credCommB);
+
+// `issueCredential` and `revealAuthorship` need these; `report` does not,
+// but the Contract wants the full witness set.
+const extraWitnesses = (issuerSecret) => ({
+  issuerSecret: (c) => [c.privateState, issuerSecret],
+  prosecutorNonce: (c) => [c.privateState, b32(0x66)],
+});
 
 // Extract the opcode shape (sequence of zkir instruction types) from the
 // public transcript. Two reports with the same shape produce identical
@@ -64,6 +77,7 @@ const extractFieldElements = (r) => {
 
 // ---- World A ----
 const witnessesA = {
+  ...extraWitnesses(issuerA),
   credentialSecret: (c) => [c.privateState, credA],
   personalSecret: (c) => [c.privateState, sec],
   evidenceHash: (c) => [c.privateState, evA],
@@ -75,12 +89,13 @@ const witnessesA = {
 };
 
 const mA = newWorld(witnessesA);
-mA.call('registerOrganization', orgA, b32(0xaa));
+mA.call('registerOrganization', orgA, anchorA);
 mA.call('issueCredential', orgA, credCommA);
 const rA = mA.call('report', orgA, EPOCH);
 
 // ---- World B ----
 const witnessesB = {
+  ...extraWitnesses(issuerB),
   credentialSecret: (c) => [c.privateState, credB],
   personalSecret: (c) => [c.privateState, sec],
   evidenceHash: (c) => [c.privateState, evB],
@@ -92,7 +107,7 @@ const witnessesB = {
 };
 
 const mB = newWorld(witnessesB);
-mB.call('registerOrganization', orgB, b32(0xcc));
+mB.call('registerOrganization', orgB, anchorB);
 mB.call('issueCredential', orgB, credCommB);
 const rB = mB.call('report', orgB, EPOCH);
 
@@ -102,6 +117,7 @@ const witnessesA2 = {
   evidenceHash: (c) => [c.privateState, b32(0xe0)],
 };
 const witnessesB2 = {
+  ...extraWitnesses(issuerB),
   credentialSecret: (c) => [c.privateState, credB],
   personalSecret: (c) => [c.privateState, b32(0xfa)],
   evidenceHash: (c) => [c.privateState, evB],
@@ -113,10 +129,10 @@ const witnessesB2 = {
 };
 
 const mShared = newWorld(witnessesA2);
-mShared.call('registerOrganization', orgA, b32(0xaa));
-mShared.call('registerOrganization', orgB, b32(0xcc));
+mShared.call('registerOrganization', orgA, anchorA);
+mShared.call('registerOrganization', orgB, anchorB);
 mShared.call('issueCredential', orgA, credCommA);
-mShared.call('issueCredential', orgB, credCommB);
+mShared.callAs(witnessesB2, 'issueCredential', orgB, credCommB);
 const rA2 = mShared.call('report', orgA, EPOCH);
 const rB2 = mShared.callAs(witnessesB2, 'report', orgB, EPOCH);
 

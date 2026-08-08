@@ -281,14 +281,14 @@ describe("T4 · revelar y verificar autoría", () => {
   });
 
   it("el autor real revela y queda en ledger.autorias", async () => {
-    const { autoriaHash } = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
-    expect((await c.leerEstadoLedger()).autorias).toEqual([autoriaHash]);
+    const { recibo } = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA });
+    expect((await c.leerEstadoLedger()).autorias).toEqual([recibo]);
   });
 
   it("el mismo autor ante otro fiscal produce otro hash", async () => {
-    const pia = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
-    const acme = await c.revelarAutoria({ denunciaId, fiscalPk: PK_ACME });
-    expect(acme.autoriaHash).not.toBe(pia.autoriaHash);
+    const pia = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA });
+    const acme = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_ACME });
+    expect(acme.recibo).not.toBe(pia.recibo);
   });
 
   it("con un secret ajeno no se puede revelar", async () => {
@@ -296,84 +296,75 @@ describe("T4 · revelar y verificar autoría", () => {
       ...c.obtenerWitnesses()!,
       secretPersonal: secretNuevo(),
     });
-    await expect(c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA })).rejects.toBeInstanceOf(
+    await expect(c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA })).rejects.toBeInstanceOf(
       NoSosElAutorError,
     );
   });
 
   it("no se puede revelar autoría de una denuncia inexistente", async () => {
     await expect(
-      c.revelarAutoria({ denunciaId: `ff${"00".repeat(31)}`, fiscalPk: PK_PIA }),
+      c.revelarAutoria({ denunciaId: `ff${"00".repeat(31)}`, fiscalNonce: PK_PIA }),
     ).rejects.toBeInstanceOf(NoSosElAutorError);
   });
 
   /** El remate del video, como aserción. */
-  it("verifica con la clave designada y NO con la del empleador", async () => {
-    const w = c.obtenerWitnesses()!;
-    const { autoriaHash } = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
+  it("verifica con el nonce designado y NO con el del empleador", async () => {
+    const { recibo } = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA });
 
-    const material = {
-      version: 2 as const,
-      denunciaId,
-      evidenciaHash: w.evidenciaHash!,
-      fiscalPk: PK_PIA,
-      autoriaHash,
-      proof: autoriaHash, // mock: proof == autoriaHash
-    };
+    // Dos campos, los dos públicos. El nonce NO viaja acá: es del fiscal.
+    const material = { version: 3 as const, denunciaId, recibo };
 
-    // La Fiscalía NO recibe un ✅. Todo lo comprobable da bien —la autoría
-    // está publicada para su clave— pero nada en el sobre la ata al autor
-    // mientras la proof ZK no se verifique, y un ✅ acá sería uno que el
-    // empleador puede fabricarse solo (ver el test de abajo).
+    // La Fiscalía recompute `receiptOf(denunciaId, SU nonce)` y lo encuentra
+    // en la cadena. El ✅ es ganado, no declarado: solo alguien que conocía el
+    // secret de la denuncia pudo poner ese valor ahí.
     const comoFiscal = await c.verificarAutoria(material, PK_PIA);
-    expect(comoFiscal).toEqual({ veredicto: "no-verificable", enLedger: true });
+    expect(comoFiscal).toEqual({ ok: true, enLedger: true });
 
     // EL MISMO material, sin tocarle un byte, leído por el empleador. Esta es
-    // la escena real: interceptar el sobre y verificarlo con la propia clave.
-    // La versión anterior de este test cambiaba también la `proof`, así que
-    // probaba una prueba corrupta y dejaba pasar el caso que importa.
+    // la escena real: interceptar el sobre y verificarlo con el propio nonce.
     const comoEmpleador = await c.verificarAutoria(material, PK_ACME);
-    expect(comoEmpleador.veredicto).toBe("refutado");
+    expect(comoEmpleador.ok).toBe(false);
 
-    // Y la denuncia SÍ está en la cadena: lo que falla es la designación, no
-    // la existencia. Si se confundieran, el veredicto diría algo distinto.
-    expect(comoEmpleador.enLedger).toBe(true);
+    // Y no es que el sistema se niegue a mostrárselo: el recibo que le sale al
+    // recomputar con SU nonce nunca existió en la cadena.
+    expect(comoEmpleador.enLedger).toBe(false);
   });
 
   /**
-   * El ataque que motivó el veredicto de tres estados.
+   * El ataque que motivó el formato v3, muerto.
    *
-   * El empleador nunca ve el sobre. Copia `denunciaId` y `autoriaHash` del
-   * ledger PÚBLICO —los dos se publican en claro— y se escribe su propia clave
-   * en `fiscalPk`. Cada campo es suyo y cada valor es real.
+   * El empleador nunca ve el sobre. Copia `denunciaId` y el recibo del ledger
+   * PÚBLICO —los dos se publican en claro— y arma su propio material. Cada
+   * campo es suyo y cada valor es real.
    *
-   * Antes esto devolvía `ok: true` y `enLedger: true`: un screenshot que dice
-   * "el denunciante me eligió a mí", fabricado con datos que cualquiera puede
-   * leer. Hoy devuelve `no-verificable`, que es la respuesta honesta — este
-   * build no puede distinguirlo del sobre real, y por eso no afirma ninguno de
-   * los dos.
-   *
-   * Lo que lo cierra de verdad es verificar la proof ZK de `proveAuthorship`,
-   * que ata la clave del verificador adentro del circuito. Cuando eso exista,
-   * este caso pasa a `refutado` y el test se actualiza — no se borra.
+   * Con v2 esto devolvía verde: un screenshot que dice "el denunciante me
+   * eligió a mí", fabricado con datos que cualquiera puede leer. Con v3 el
+   * lookup usa el valor RECOMPUTADO con su propio nonce, que no es el que está
+   * publicado, así que el ataque muere sin necesidad de verificar ninguna
+   * proof.
    */
-  it("un sobre fabricado desde el ledger público NUNCA verifica", async () => {
-    const w = c.obtenerWitnesses()!;
-    const { autoriaHash } = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
+  it("un sobre fabricado desde el ledger público no verifica", async () => {
+    const { recibo } = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA });
 
     const falsificado = {
-      version: 2 as const,
-      denunciaId, //          copiado del ledger público
-      evidenciaHash: w.evidenciaHash!,
-      fiscalPk: PK_ACME, //   el empleador se auto-designa editando el JSON
-      autoriaHash, //         copiado del ledger público
-      proof: autoriaHash,
+      version: 3 as const,
+      denunciaId, // copiado del ledger público
+      recibo, //     copiado del ledger público
     };
 
     const r = await c.verificarAutoria(falsificado, PK_ACME);
-    expect(r.veredicto).not.toBe("verificado");
-    // Y los registros copiados SÍ están en la cadena: lo que falta no es el
-    // dato, es el vínculo entre el dato y su autor.
-    expect(r.enLedger).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(r.enLedger).toBe(false);
+  });
+
+  it("empalmar el denunciaId de una denuncia con el recibo de otra tampoco pasa", async () => {
+    const { recibo } = await c.revelarAutoria({ denunciaId, fiscalNonce: PK_PIA });
+    const otroId = "11".repeat(32) as Hex32;
+    const r = await c.verificarAutoria(
+      { version: 3 as const, denunciaId: otroId, recibo },
+      PK_PIA,
+    );
+    // Recomputar ata los dos campos: el recibo de `otroId` no es este.
+    expect(r.ok).toBe(false);
   });
 });

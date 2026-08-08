@@ -11,6 +11,7 @@
 import '../config/init.js';
 
 import {
+  bootstrapIssuerSecret,
   bootstrapOrg,
   closeBackend,
   createBackend,
@@ -27,7 +28,7 @@ const backend = await createBackend(args);
 printMode(backend);
 
 if (backend.mode === 'simulator') {
-  await bootstrapOrg(backend, orgId, hexArgOrRandom(undefined, 'anchor'));
+  await bootstrapOrg(backend, orgId, bootstrapIssuerSecret(orgId));
 }
 
 const credential = await backend.api.prepareLocalCredential(orgId);
@@ -38,6 +39,7 @@ console.log('secret     : (stored locally, never shown, never sent)');
 const issued = await backend.api.issueCredential({
   orgId,
   credCommitment: credential.credCommitment,
+  issuerSecret: bootstrapIssuerSecret(orgId),
 });
 printTx(issued.tx);
 console.log(`leafIndex  : ${issued.leafIndex}`);

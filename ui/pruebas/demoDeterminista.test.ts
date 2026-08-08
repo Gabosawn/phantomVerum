@@ -23,7 +23,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  authorshipOf,
+  receiptOf,
   bytesToHex,
   credCommitmentOf,
   hashDeArchivo,
@@ -31,6 +31,7 @@ import {
   leafOf,
   nullifierOf,
   reportIdOf,
+  MERKLE_DEPTH,
 } from "../shared/cripto";
 import { ANCLA, DEMO_EPOCH, ORG_ID, PK_ACME_LEGAL, VERIFICADORES } from "../shared/demo";
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "../cliente/src/demoPrivado";
@@ -41,7 +42,7 @@ const muestra = (nombre: string) =>
     readFileSync(fileURLToPath(new URL(`../shared/publico/muestras/${nombre}`, import.meta.url))),
   );
 
-const pkPia = VERIFICADORES[0].pk;
+const pkPia = VERIFICADORES[0].nonce;
 
 /** Se recomputan desde el PDF: el Explorer NO los tiene, y no debe tenerlos. */
 const evOriginal = () => hashDeArchivo(muestra("contrato-obra-4471.pdf"));
@@ -59,13 +60,14 @@ describe("el fixture del Explorer corresponde a las muestras reales", () => {
   it("NULLIFIER_DEMO usa el secret de la CREDENCIAL, como el circuito", () => {
     // The period is the demo's EPOCH INDEX — floor(unixSeconds / 86400) —
     // exactly what the contract's C0 pins to the block time.
-    expect(nullifierOf(EMPLEADO_DEMO.credencialSecret, ORG_ID, BigInt(DEMO_EPOCH))).toBe(
+    expect(nullifierOf(EMPLEADO_DEMO.credencialSecret, BigInt(DEMO_EPOCH))).toBe(
       NULLIFIER_DEMO,
     );
   });
 
-  it("AUTORIA_DEMO_PIA está designada a la clave de la Fiscalía", () => {
-    expect(authorshipOf(SECRET_PERSONAL_DEMO, DENUNCIA_DEMO, pkPia)).toBe(AUTORIA_DEMO_PIA);
+  it("AUTORIA_DEMO_PIA es el recibo del nonce de la Fiscalía", () => {
+    // Sin el secret adentro: el fiscal recomputa esto con datos que ya tiene.
+    expect(receiptOf(DENUNCIA_DEMO, pkPia)).toBe(AUTORIA_DEMO_PIA);
   });
 });
 
@@ -77,7 +79,7 @@ describe("el ancla de ACME es la raíz de su árbol de credenciales", () => {
     const leaves = DIRECTORIO.map((empleado) =>
       leafOf(ORG_ID, credCommitmentOf(empleado.credencialSecret)),
     );
-    let tree = new StateBoundedMerkleTree(8);
+    let tree = new StateBoundedMerkleTree(MERKLE_DEPTH);
     leaves.forEach((leaf, i) => {
       tree = tree.update(BigInt(i), leafHashOf(leaf)).rehash();
     });
@@ -92,8 +94,10 @@ describe("los dos veredictos del video", () => {
     expect(reportIdOf(await evAlterada(), SECRET_PERSONAL_DEMO)).not.toBe(DENUNCIA_DEMO);
   });
 
-  it("T4 — con la clave del empleador el hash no es el que está en la cadena", () => {
-    const conClaveDelEmpleador = authorshipOf(SECRET_PERSONAL_DEMO, DENUNCIA_DEMO, PK_ACME_LEGAL);
-    expect(conClaveDelEmpleador).not.toBe(AUTORIA_DEMO_PIA);
+  it("T4 — recomputando con el nonce del empleador sale otro recibo", () => {
+    // Y ese otro recibo no está en `AUTORIAS`, así que el lookup falla. El ❌
+    // del video es esta línea: no es que el sistema se niegue a mostrárselo,
+    // es que el valor que le sale nunca se publicó.
+    expect(receiptOf(DENUNCIA_DEMO, PK_ACME_LEGAL)).not.toBe(AUTORIA_DEMO_PIA);
   });
 });

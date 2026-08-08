@@ -57,10 +57,10 @@ T4. The whistleblower calls revealAuthorship(reportId, prosecutorPk):
 
 ```
 ledger organizations: Map<Bytes<32>, Bytes<32>>       // orgId → issuer anchor (metadata)
-ledger credentials:   HistoricMerkleTree<8, Bytes<32>> // global tree of credential leaves
+ledger credentials:   HistoricMerkleTree<16, Bytes<32>> // global tree of credential leaves
 ledger reports:       Set<Bytes<32>>                  // sealed reportIds
 ledger nullifiers:    Set<Bytes<32>>                  // anti-spam per epoch
-ledger authorships:   Set<Bytes<32>>                  // H(dom ‖ personalSecret ‖ reportId ‖ prosecutorPk)
+ledger authorships:   Set<Bytes<32>>                  // H(dom ‖ reportId ‖ prosecutorNonce) — no secret in the preimage
 ```
 
 Everything else — credential, secret, evidence — is witness: never leaves the
@@ -95,7 +95,7 @@ C2. assert(!nullifiers.member(nullifier))                // one report per epoch
 
 ```
 reportId   = H(dom ‖ evidenceHash ‖ personalSecret)        // the seal; only the author knows the preimage
-nullifier  = H(dom ‖ credentialSecret ‖ orgId ‖ period)    // one report per (credential, org, epoch)
+nullifier  = H(dom ‖ credentialSecret ‖ period)             // one report per (credential, epoch)
 ```
 
 The split of secrets is deliberate: the **nullifier** uses
@@ -164,7 +164,7 @@ validated, so a leaf cannot be smuggled in for an unregistered org.
 `report` rebuilds the leaf in-circuit from the public `orgId` and the
 `credentialSecret` witness, and verifies membership with the
 `credentialPath` witness (siblings only — the witness cannot choose which
-leaf gets proven). Shallow depth suffices (8 levels = 256 credentials). The
+leaf gets proven). Depth 16 = 65 536 credentials (depth 8 was a permanent kill switch: 256 junk insertions bricked issuance forever). The
 nullifier uses `credentialSecret` → one credential = one report per epoch.
 Correct and defensible.
 

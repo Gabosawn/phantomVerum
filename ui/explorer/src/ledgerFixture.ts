@@ -32,13 +32,23 @@ export const ALTURA_ACTUAL = 1_284_931;
 export const DENUNCIA_DEMO: Hex32 =
   "56e4da144e489f73cfc304cc58b10be3511fc93e936f5c6561f1700a6c57336b";
 
-/** nullifierOf(credSecret de la demo, ORG_ID, DEMO_EPOCH). */
+/**
+ * nullifierOf(credSecret de la demo, DEMO_EPOCH).
+ *
+ * Sin `orgId`: mezclarlo permitía que registrar una org fantasma —que es
+ * gratis— le comprara a la misma credencial otra denuncia en la misma época.
+ */
 export const NULLIFIER_DEMO: Hex32 =
-  "a1654dee6068682d6a652bf6baa4be8f3507705f97c4605e1c74eaa05c6f670d";
+  "43c7ebe3c1e080c1e69787e8926d51073d260731d0ba6ad2c9fff9b9eb416265";
 
-/** authorshipOf(secret, DENUNCIA_DEMO, pk de la Fiscalía). */
+/**
+ * receiptOf(DENUNCIA_DEMO, nonce de la Fiscalía).
+ *
+ * El secret NO entra acá: por eso el fiscal puede recomputarlo con datos que
+ * ya tiene y nadie tiene que entregarle nada secreto.
+ */
 export const AUTORIA_DEMO_PIA: Hex32 =
-  "0f3532bfa6120ef5bf1d1f5b2c36bc368ac84c0d618dd84b4847aeed2c143646";
+  "d6c9df5195affb2a4a4eb28d5dbd2a0ef6ef37456506fae4b8114b65a1bb6ca5";
 
 /**
  * Tres denuncias del mismo período. La primera es la de la demo; las otras dos

@@ -45,15 +45,15 @@ export function MaterialRecibido({ titulo }: { titulo: string }) {
         {e.material && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <Dato etiqueta="denunciaId reclamado" valor={completo(e.material.denunciaId)} />
-            <Dato etiqueta="hash de autoría" valor={completo(e.material.autoriaHash)} />
+            <Dato etiqueta="recibo declarado" valor={completo(e.material.recibo)} />
             <Dato
-              etiqueta="proof ZK"
-              valor={`${corto(e.material.proof, 6)} — verificable`}
+              etiqueta="tu nonce"
+              valor={`${corto(e.clave.nonce, 6)} — no viene en el sobre, es tuyo`}
               atenuado
             />
             <Dato
-              etiqueta="hash de la evidencia"
-              valor={`${corto(e.material.evidenciaHash, 6)}`}
+              etiqueta="campos del sobre"
+              valor="2 · ninguno secreto, los dos públicos"
               atenuado
             />
           </div>

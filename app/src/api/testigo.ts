@@ -12,8 +12,11 @@ import {
   type TestigoPrivateState,
   credentialCommitment,
   withCredential,
+  withIssuerSecret,
+  issuerAnchor,
   clearActiveReport,
   pureCircuits,
+  stageNonce,
   stageStoredReport,
   stageNewReport,
 } from '../witnesses/index.js';
@@ -100,15 +103,16 @@ export class TestigoApi {
   // ── B3.2 ──────────────────────────────────────────────────────────────
 
   /**
-   * Registers an organization with its anchor.
+   * Registers an organization, publishing the anchor of its issuer secret.
    *
-   * ⚠️ No access control, declared up-front in the deck and the README
-   * (docs/03 §2.6): anyone can register an org. Consistent with the "mock
-   * issuer" of the hackathon scope.
+   * ⚠️ Registration itself still has no access control, declared up-front in
+   * the deck and the README (docs/03 §2.6): anyone can claim an unused orgId.
+   * What that no longer buys is anything useful — `issueCredential` checks the
+   * anchor, so a squatter can only issue under their own.
    */
   async registerOrganization(p: RegisterOrganizationParams): Promise<TxResult> {
     const orgId = asBytes32(p.orgId, 'orgId');
-    const anchor = asBytes32(p.anchor, 'anchor');
+    const anchor = issuerAnchor(asBytes32(p.issuerSecret, 'issuerSecret'));
     try {
       return await this.executor.call('registerOrganization', orgId, anchor);
     } catch (error) {
@@ -125,7 +129,7 @@ export class TestigoApi {
    * SECURITY (H-4, docs/03 §3.4): the secret is generated here, on the
    * whistleblower's machine, and never leaves it. The issuer is given
    * `credCommitment`. If the issuer generated the secret it could recompute
-   * `nullifierOf(credSecret, orgId, period)` for any employee and learn who
+   * `nullifierOf(credSecret, period)` for any employee and learn who
    * reported in each period.
    *
    * It also leaves the credential loaded in the private state, which is
@@ -160,6 +164,12 @@ export class TestigoApi {
   async issueCredential(p: IssueCredentialParams): Promise<IssueCredentialResult> {
     const orgId = asBytes32(p.orgId, 'orgId');
     const credCommitment = asBytes32(p.credCommitment, 'credCommitment');
+    const issuer = asBytes32(p.issuerSecret, 'issuerSecret');
+
+    // The witness reads it from here; the circuit asserts it against the
+    // anchor the org published.
+    const ps = await this.executor.readPrivateState();
+    await this.executor.writePrivateState(withIssuerSecret(ps, issuer));
 
     const before = await this.executor.readLedger();
     const leafIndex = Number(before.credentials.firstFree());
@@ -267,7 +277,7 @@ export class TestigoApi {
     if (credentialSecret === null) {
       throw new InvalidCredentialError('no credential in the private state', 'report');
     }
-    const nullifier = pureCircuits.nullifierOf(credentialSecret, orgId, p.period);
+    const nullifier = pureCircuits.nullifierOf(credentialSecret, p.period);
 
     await this.executor.writePrivateState(clearActiveReport(state));
 
@@ -297,7 +307,7 @@ export class TestigoApi {
    */
   async revealAuthorship(p: RevealAuthorshipParams): Promise<RevealAuthorshipResult> {
     const reportId = asBytes32(p.reportId, 'reportId');
-    const prosecutorPk = asBytes32(p.prosecutorPk, 'prosecutorPk');
+    const prosecutorNonce = asBytes32(p.prosecutorNonce, 'prosecutorNonce');
     const idHex = asHex32(reportId, 'reportId');
 
     const record = getReport(idHex, this.config.secretsPath);
@@ -310,7 +320,7 @@ export class TestigoApi {
     try {
       // The 3rd arg is the cheap local check. An inconsistent store exits
       // here as NotTheAuthorError, without touching the proof server.
-      staged = stageStoredReport(ps, record, reportId);
+      staged = stageNonce(stageStoredReport(ps, record, reportId), prosecutorNonce);
     } catch (error) {
       throw mapCircuitError(error, 'revealAuthorship');
     }
@@ -318,22 +328,21 @@ export class TestigoApi {
 
     let tx: TxResult;
     try {
-      tx = await this.executor.call('revealAuthorship', reportId, prosecutorPk);
+      tx = await this.executor.call('revealAuthorship', reportId);
     } catch (error) {
       await this.executor.writePrivateState(clearActiveReport(staged));
       throw mapCircuitError(error, 'revealAuthorship');
     }
 
-    const authorshipHash = pureCircuits.authorshipOf(
-      asBytes32(record.reportSecret, 'reportSecret'),
-      reportId,
-      prosecutorPk,
-    );
+    // Recomputed with the same pure circuit the contract used. The
+    // prosecutor can derive this themselves from the public reportId and
+    // their own nonce — nothing secret is involved.
+    const receipt = pureCircuits.receiptOf(reportId, prosecutorNonce);
 
     // As soon as it confirms, out of focus: no secret left ready to use.
     await this.executor.writePrivateState(clearActiveReport(staged));
 
-    return { authorshipHash: toHex(authorshipHash), tx };
+    return { receipt: toHex(receipt), tx };
   }
 
   // ── B3.6 / B3.7 / B3.8 ────────────────────────────────────────────────

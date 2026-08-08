@@ -48,7 +48,7 @@ export function Autoria() {
                   c.nombre
                 )
               }
-              sub={`fiscalPk ${corto(c.pk, 6)} · ${c.nota}`}
+              sub={`nonce ${corto(c.nonce, 6)} · ${c.nota}`}
             />
           ))}
           <Boton
@@ -70,7 +70,7 @@ export function Autoria() {
           titulo="Probada ante usted, y solo ante usted"
           formula={
             <>
-              proof(<Tachado>secret</Tachado>, denunciaId, fiscalPk) = autoriaHash
+              receiptOf(denunciaId, <strong>su</strong> nonce) = recibo
               <br />∈ ledger.autorias ✓
             </>
           }
@@ -97,45 +97,6 @@ export function Autoria() {
         </PanelVeredicto>
       )}
 
-      {e.veredictoAutoria === "parcial" && e.material && (
-        <PanelVeredicto
-          tono="parcial"
-          rotulo="No verificable en este build"
-          titulo="Los registros están en la cadena. El vínculo con el autor, no."
-          formula={
-            <>
-              denunciaId ∈ ledger.denuncias ✓
-              <br />
-              autoriaHash ∈ ledger.autorias ✓ · designada a su clave ✓
-              <br />
-              proof verificada contra la verifier key — no disponible
-            </>
-          }
-          pie={
-            <>
-              <div>
-                lo que sí está probado
-                <br />
-                que estos dos registros existen y son públicos
-              </div>
-              <div>
-                lo que falta
-                <br />
-                la proof ZK de proveAuthorship
-              </div>
-            </>
-          }
-        >
-          La denuncia está sellada y hay una autoría publicada para su clave. Pero el sobre trae
-          la <code style={{ font: `500 14px ${MONO}` }}>proof</code> como copia del{" "}
-          <code style={{ font: `500 14px ${MONO}` }}>autoriaHash</code>, y los dos campos los
-          aporta quien se lo entregó: cualquiera que haya leído esos dos valores del ledger
-          público —el Departamento Legal de {e.orgNombre}, sin ir más lejos— pudo armar un sobre
-          idéntico a este. Por eso acá no dice “probada”. Establecer la autoría exige verificar
-          la prueba ZK contra la verifier key del circuito.
-        </PanelVeredicto>
-      )}
-
       {e.veredictoAutoria === "fail" && e.material && (
         <PanelVeredicto
           tono="rechazo"
@@ -143,15 +104,15 @@ export function Autoria() {
           titulo="Esta prueba no fue designada a su clave"
           formula={
             <>
-              proof(<Tachado>secret</Tachado>, denunciaId, fiscalPk) ≠ autoriaHash
+              receiptOf(denunciaId, <strong>su</strong> nonce) ≠ recibo
               <br />∉ ledger.autorias ✗
             </>
           }
           remate="Solo él, solo ante quien él elija."
         >
-          Mismo <code style={{ font: `500 14px ${MONO}` }}>denunciaId</code>, mismo material, otra
-          clave pública: el registro que busca no está en la cadena. La autoría se publicó una vez,
-          para la clave que el denunciante eligió, y ésta no es esa.
+          Mismo <code style={{ font: `500 14px ${MONO}` }}>denunciaId</code>, mismo material, otro
+          nonce: al recomputar sale un recibo distinto, y ese no está publicado en ninguna parte.
+          No es que el sistema se niegue a mostrárselo — es que ese valor nunca existió.
         </PanelVeredicto>
       )}
 

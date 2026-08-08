@@ -28,14 +28,24 @@ export type TxResult = {
  * En modo mock (demo), `proof` es el `autoriaHash` — suficiente para
  * verificar contra el ledger. En producción es la proof ZK real.
  */
+/**
+ * Lo que el denunciante le entrega al fiscal (formato v3).
+ *
+ * Dos campos, y ninguno es secreto: el `denunciaId` ya es público (está en el
+ * ledger) y el `recibo` también. Lo que NO está acá es el nonce — es del
+ * fiscal, lo generó él y se lo mandó al denunciante, así que meterlo en el
+ * archivo le daría a cualquiera que lo intercepte todo lo necesario para
+ * hacerse pasar por el destinatario. Esa omisión es la que hace que el
+ * veredicto signifique algo.
+ *
+ * v1 llevaba el `secretPersonal` adentro. v2 lo sacó, pero dejaba un veredicto
+ * que cualquier portador podía satisfacer editando un campo. Ninguno se migra.
+ */
 export type ExportLlaveAutoria = {
-  version: 2;
+  version: 3;
   denunciaId: Hex32;
-  evidenciaHash: Hex32;
-  fiscalPk: Hex32;
-  autoriaHash: Hex32;
-  /** ZK proof (mock: autoriaHash; producción: proof bytes del proof server). */
-  proof: Hex32;
+  /** `receiptOf(denunciaId, fiscalNonce)` — público, está en el ledger. */
+  recibo: Hex32;
 };
 
 /** §3.2 — estado privado del denunciante. Nunca sale de esta máquina. */
@@ -78,41 +88,38 @@ export type Empleado = {
   hoja: Hex32;
 };
 
+/**
+ * Alguien ante quien el denunciante puede revelar autoría.
+ *
+ * `nonce`, no `pk`: no es una clave pública de larga vida sino un valor que
+ * este verificador genera y le manda al denunciante fuera de la cadena. El
+ * recibo que queda publicado es `receiptOf(denunciaId, nonce)`, así que cada
+ * verificador ve un valor distinto y solo él puede recomputar el suyo.
+ */
 export type Verificador = {
   id: string;
   nombre: string;
-  pk: Hex32;
+  nonce: Hex32;
 };
 
 /**
- * Veredicto de `verificarAutoria`. Tres estados, no un booleano.
+ * Resultado de `verificarAutoria`.
  *
- * Un booleano obliga a que todo "no puedo saberlo" caiga en una de las dos
- * respuestas, y la que parece inofensiva es la equivocada.
+ * Vuelve a ser un booleano, y ahora sí se lo puede sostener. El veredicto es
+ * una RECOMPUTACIÓN: `receiptOf(denunciaId, miNonce)` contra un valor que está
+ * en el ledger. Nada de lo que trae el sobre puede inclinarlo salvo el
+ * `denunciaId`, que es público de todos modos.
  *
- * - `verificado`     — establecido positivamente.
- * - `refutado`       — desmentido positivamente: el sobre está dirigido a otra
- *                      clave, o lo que declara no está en el ledger. Ambas
- *                      cosas se deciden con datos públicos, así que este
- *                      veredicto sí es evidencia.
- * - `no-verificable` — nada acá contradice lo que el sobre afirma, y nada lo
- *                      establece tampoco.
- *
- * ⚠️ Por qué no es un booleano. La versión anterior devolvía
- * `ok = (proof === autoriaHash) && (fiscalPk === verificadorPk)`. Los dos
- * lados de la primera igualdad los aporta quien trae el sobre, y `fiscalPk`
- * también, así que el empleador que copiaba `denunciaId` y `autoriaHash` del
- * ledger PÚBLICO y se escribía su propia clave obtenía `ok: true` y
- * `enLedger: true` — un screenshot que dice "el denunciante me eligió a mí".
- * Lo que cierra esto es verificar la proof ZK de `proveAuthorship`, que ata la
- * clave del verificador adentro del circuito. Hasta entonces el techo honesto
- * es `no-verificable`.
+ * Con el formato v2 no se podía: `ok` salía de comparar dos campos que ambos
+ * los aportaba quien traía el archivo, así que el empleador copiaba
+ * `denunciaId` y `autoriaHash` del ledger público, se escribía su propia
+ * clave, y obtenía verde. Hoy recomputa con SU nonce, le da otro recibo, y ese
+ * recibo no está en ninguna cadena.
  */
-export type VeredictoAutoria = "verificado" | "refutado" | "no-verificable";
-
 export type ResultadoVerificacion = {
-  veredicto: VeredictoAutoria;
-  /** ¿El `autoriaHash` que declara el sobre está publicado en la cadena? */
+  /** El recibo recomputado con mi nonce coincide y está publicado. */
+  ok: boolean;
+  /** El recibo RECOMPUTADO —nunca el declarado— está en la cadena. */
   enLedger: boolean;
 };
 
@@ -223,20 +230,23 @@ export interface TestigoClient {
   ): Promise<{ denunciaId: Hex32; nullifier: Hex32; tx: TxResult }>;
 
   revelarAutoria(
-    p: { denunciaId: Hex32; fiscalPk: Hex32 },
+    p: { denunciaId: Hex32; fiscalNonce: Hex32 },
     onPaso?: Progreso,
-  ): Promise<{ autoriaHash: Hex32; tx: TxResult }>;
+  ): Promise<{ recibo: Hex32; tx: TxResult }>;
 
   /**
-   * 100 % off-chain: lee el ledger y compara contra la clave de quien pregunta.
+   * 100 % off-chain: RECOMPUTA el recibo con el nonce de quien pregunta y lo
+   * busca en el ledger.
    *
-   * `verificadorPk` va aparte del material a propósito: es la clave de quien
-   * verifica, no la que viene en el sobre. Si se leyera del sobre, cualquiera
-   * que lo intercepte se auto-designa y el veredicto sale verde.
+   * `verificadorNonce` va aparte del material a propósito: es el nonce que
+   * generó quien verifica y le mandó al denunciante, y nunca viaja en el
+   * archivo. Esa separación es lo que hace que el veredicto signifique algo —
+   * si el nonce viniera en el sobre, cualquiera que lo intercepte se
+   * auto-designaría.
    */
   verificarAutoria(
     p: ExportLlaveAutoria,
-    verificadorPk: Hex32,
+    verificadorNonce: Hex32,
   ): Promise<ResultadoVerificacion>;
 
   leerEstadoLedger(): Promise<EstadoLedger>;

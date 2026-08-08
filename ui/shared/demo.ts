@@ -24,24 +24,24 @@ export const DEMO_EPOCH = 20672;
 export const PERIODO = epochLabel(DEMO_EPOCH);
 
 export const ORG_ID: Hex32 = "9c41e2b7159e8c80e81a49b4ff962258c96e7b463443bb64a24057aebbcad80a";
-export const ANCLA: Hex32 = "e44a0aabc18f3c12731504c66f34d565a6745fd1e58cd6f500626e30a9b05716";
+export const ANCLA: Hex32 = "90fef7a77ef42480005fffd13b8ac0107f08f19383ee5e45edd0be233d5d3b34";
 
 /** A quién puede designar el denunciante. */
 export const VERIFICADORES: Verificador[] = [
   {
     id: "pia",
     nombre: "Fiscalía de Investigaciones Administrativas",
-    pk: "7d15c80d067698a0e5e7b1cbfcdb285d3ac658b703df68616c9544fd93209a2f",
+    nonce: "7d15c80d067698a0e5e7b1cbfcdb285d3ac658b703df68616c9544fd93209a2f",
   },
   {
     id: "prensa",
     nombre: "Consorcio de periodistas · verificación",
-    pk: "2ef430803521ed2b05a9d24bb546a7f4282fc5bdda2b5ef14d73f956b83c71bd",
+    nonce: "2ef430803521ed2b05a9d24bb546a7f4282fc5bdda2b5ef14d73f956b83c71bd",
   },
   {
     id: "sindicato",
     nombre: "Comisión interna del sindicato",
-    pk: "9a04ccf168e6279dd444ac3017e5dcdaef1ae9b4c6ac4606ed40c1778d955e63",
+    nonce: "9a04ccf168e6279dd444ac3017e5dcdaef1ae9b4c6ac4606ed40c1778d955e63",
   },
 ];
 

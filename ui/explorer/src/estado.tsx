@@ -45,7 +45,7 @@ export type Ruta = "ledger" | "sello" | "autoria";
  * `VeredictoAutoria` en `@shared/tipos` — pintarlo de verde sería exactamente
  * el falso positivo que un empleador puede fabricarse solo.
  */
-export type Veredicto = "ok" | "fail" | "parcial" | null;
+export type Veredicto = "ok" | "fail" | null;
 
 /** The instruction of the moment, same as in the Cliente. */
 export type Instruccion = {
@@ -72,31 +72,39 @@ export const CLAVES = [
   {
     id: "pia",
     nombre: VERIFICADORES[0].nombre,
-    pk: VERIFICADORES[0].pk,
-    nota: "la clave que eligió el denunciante",
+    nonce: VERIFICADORES[0].nonce,
+    nota: "el nonce que este verificador generó",
     intruso: false,
   },
   {
     id: "acme",
     nombre: `Departamento Legal de ${ORG_NOMBRE}`,
-    pk: PK_ACME_LEGAL,
-    nota: "no fue la clave designada",
+    nonce: PK_ACME_LEGAL,
+    nota: "su propio nonce — nadie reveló nada ante él",
     intruso: true,
   },
 ] as const;
 
 function analizarMaterial(texto: string): ExportLlaveAutoria {
   const datos = JSON.parse(texto) as ExportLlaveAutoria;
-  if (datos.version !== 2) {
-    throw new Error("versión de material no soportada —se esperaba v2");
+  if (datos.version !== 3) {
+    throw new Error("versión de material no soportada —se esperaba v3");
   }
-  const faltantes = (
-    ["denunciaId", "evidenciaHash", "autoriaHash", "proof"] as const
-  ).filter(
+  const faltantes = (["denunciaId", "recibo"] as const).filter(
     (k) => typeof datos[k] !== "string" || !/^[0-9a-f]{64}$/.test(datos[k]),
   );
   if (faltantes.length > 0) {
     throw new Error(`al material le faltan campos válidos: ${faltantes.join(", ")}`);
+  }
+  // Nada secreto, y nada que identifique al destinatario, tiene por qué estar
+  // acá. Un campo de más significa que lo produjo un build viejo.
+  for (const filtrado of ["secretPersonal", "evidenciaHash", "fiscalNonce", "proof"] as const) {
+    if ((datos as Record<string, unknown>)[filtrado] !== undefined) {
+      throw new Error(
+        `el material dice v3 pero todavía trae "${filtrado}": lo produjo un build ` +
+          "viejo, y ese campo es justamente lo que hacía forjable el formato anterior",
+      );
+    }
   }
   return datos;
 }
@@ -202,46 +210,56 @@ function useEstado() {
   );
 
   /**
-   * T3 — ¿es ESTE el documento que se selló?
+   * T3 — ¿está sellada esta denuncia?
    *
-   * El material v2 no incluye el secret. La verificación de integridad
-   * compara el hash del archivo presentado con el evidenciaHash del
-   * material (que la prueba ZK demostró correcto).
+   * Lo que se puede establecer acá, y lo que no.
+   *
+   * SE PUEDE: que el `denunciaId` está sellado en la cadena, y cuál es el
+   * SHA-256 del documento que te presentaron (se computa localmente, el
+   * archivo no sale del navegador).
+   *
+   * NO SE PUEDE: atar ese documento a esa denuncia. `denunciaId =
+   * H(dom ‖ evidenciaHash ‖ secretPersonal)` y el secret nunca sale de la
+   * máquina del denunciante, así que recomputarlo exige algo que el
+   * verificador no tiene. El formato v2 aparentaba resolverlo trayendo el
+   * `evidenciaHash` en el sobre — pero ese valor lo declaraba quien entregaba
+   * el archivo, así que comparar contra él no probaba nada que el portador no
+   * pudiera fabricar. v3 no lo lleva, y por eso acá no se afirma.
+   *
+   * Para atar el documento hace falta que el denunciante lo entregue: es el
+   * mismo acto de darte la evidencia, no una propiedad criptográfica que este
+   * circuito provea.
    */
   const verificarSello = useCallback(async () => {
     if (!documento || !material) return;
-    const fileHash = documento.hash;
-    setSelloRecomputado(fileHash);
-    const hashMatch = fileHash === material.evidenciaHash;
+    setSelloRecomputado(documento.hash);
     const enCadena = DENUNCIAS.some((d) => d.denunciaId === material.denunciaId);
-    setVeredictoSello(hashMatch && enCadena ? "ok" : "fail");
+    setVeredictoSello(enCadena ? "ok" : "fail");
   }, [documento, material]);
 
   const clave = CLAVES.find((c) => c.id === claveId) ?? CLAVES[0];
 
   /**
-   * T4 — el remate. Verifica la proof ZK contra el ledger.
+   * T4 — el remate, y ahora es una recomputación de verdad.
    *
-   * En modo mock: proof == autoriaHash, se verifica contra el ledger local.
-   * En producción: la proof se verifica contra la verifier key del circuito
-   * `proveAuthorship` via el proof server `/check`.
+   * Se recomputa `receiptOf(denunciaId, MI nonce)` y se busca ESE valor en
+   * `ledger.autorias`. El nonce no viaja en el material —lo generó quien
+   * verifica— así que nada de lo que traiga el sobre puede inclinar el
+   * resultado salvo el `denunciaId`, que es público igual.
    *
-   * El secret NUNCA está en el material — fue reemplazado por la proof ZK.
+   * Por eso el ❌ del Departamento Legal es una refutación y no un encogerse
+   * de hombros: recomputa con su propio nonce, le da otro recibo, y ese recibo
+   * no está publicado en ninguna parte. Y solo alguien que conocía el secret
+   * de la denuncia pudo poner el de la Fiscalía ahí, porque el circuito lo
+   * exige.
    */
   const verificarAutoria = useCallback(async () => {
     if (!material) return;
-    // El material va TAL CUAL llegó: la clave de quien verifica se pasa aparte.
-    // Pisar `material.fiscalPk` con la propia clave era el bug que hacía que el
-    // Departamento Legal verificara igual que la Fiscalía — se auto-designaba.
-    const r = await cliente.verificarAutoria(material, clave.pk);
+    // El material va TAL CUAL llegó: el nonce de quien verifica se pasa aparte.
+    const r = await cliente.verificarAutoria(material, clave.nonce);
     setAutoriaRecomputada(null);
-    // `no-verificable` NO es "ok". El sobre de la Fiscalía cae acá: la denuncia
-    // está sellada y la autoría publicada para su clave, pero nada en el
-    // material ata las dos cosas al autor mientras la proof ZK no se verifique.
-    setVeredictoAutoria(
-      r.veredicto === "verificado" ? "ok" : r.veredicto === "refutado" ? "fail" : "parcial",
-    );
-  }, [cliente, clave.pk, material]);
+    setVeredictoAutoria(r.ok ? "ok" : "fail");
+  }, [cliente, clave.nonce, material]);
 
   const elegirClave = useCallback((id: (typeof CLAVES)[number]["id"]) => {
     setClaveId(id);

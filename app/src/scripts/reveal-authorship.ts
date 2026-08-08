@@ -1,12 +1,11 @@
 /**
  * B4.4 — CLI: reveal a report's authorship to a designated prosecutor.
  *
- *   node dist/scripts/reveal-authorship.js [reportId] [prosecutorPk] [--network]
+ *   node dist/scripts/reveal-authorship.js [reportId] [prosecutorNonce] [--network]
  *
- * Publishes `authorshipOf(reportSecret, reportId, prosecutorPk)` — bound to
- * THAT prosecutor's key, so looking it up with another key finds nothing on
- * the ledger. Note this is per-recipient separation, not a designated-verifier
- * scheme: the proof verifies publicly, so it is transferable once delivered.
+ * Publishes `receiptOf(reportId, prosecutorNonce)` — bound to the nonce THAT
+ * prosecutor generated and sent over. The secret stays home: it is not in
+ * the hash preimage, so there is nothing to hand across.
  *
  * Simulator mode runs the previous acts first (register, issue, report) and
  * reveals the authorship of the just-sealed report, so the script runs with
@@ -19,6 +18,7 @@ import { listReports } from '../witnesses/secrets.js';
 
 import {
   bootstrapCredential,
+  bootstrapIssuerSecret,
   bootstrapOrg,
   closeBackend,
   createBackend,
@@ -33,12 +33,12 @@ const args = parseArgs();
 const backend = await createBackend(args);
 printMode(backend);
 
-const prosecutorPk = hexArgOrRandom(args.positional[1], 'prosecutorPk');
+const prosecutorNonce = hexArgOrRandom(args.positional[1], 'prosecutorNonce');
 let reportId = args.positional[0];
 
 if (backend.mode === 'simulator' && reportId === undefined) {
   const orgId = hexArgOrRandom(undefined, 'orgId');
-  await bootstrapOrg(backend, orgId, hexArgOrRandom(undefined, 'anchor'));
+  await bootstrapOrg(backend, orgId, bootstrapIssuerSecret(orgId));
   await bootstrapCredential(backend, orgId);
   const sealed = await backend.api.report({
     orgId,
@@ -59,11 +59,11 @@ if (reportId === undefined) {
 }
 
 console.log(`reportId     : ${reportId}`);
-console.log(`prosecutorPk : ${prosecutorPk}`);
+console.log(`nonce        : ${prosecutorNonce}  <- the prosecutor's, never ours`);
 
-const result = await backend.api.revealAuthorship({ reportId, prosecutorPk });
+const result = await backend.api.revealAuthorship({ reportId, prosecutorNonce });
 printTx(result.tx);
-console.log(`authorshipHash : ${result.authorshipHash}`);
-console.log('result         : authorship published for this prosecutor only');
+console.log(`receipt        : ${result.receipt}`);
+console.log('result         : authorship published for this nonce only');
 
 await closeBackend(backend);

@@ -37,7 +37,21 @@ import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
 import { type WalletSession, conectarWallet } from "@shared/servicio/ClientePreview";
-import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
+import type { ExportLlaveAutoria, Hex32 as _Hex32, TestigoClient } from "@shared/tipos";
+
+/**
+ * La llave que el denunciante guarda para sí. NO es lo que entrega.
+ *
+ * `evidenciaHash` va acá y NO en el sobre: es lo único irrecuperable del
+ * sistema —sin él no se puede volver a revelar autoría— y a la vez es lo que
+ * permitiría a un empleador enumerar documentos, porque los documentos son
+ * suyos. Se queda en la máquina.
+ */
+type LlaveLocal = {
+  version: 3;
+  denunciaId: _Hex32;
+  evidenciaHash: _Hex32;
+};
 
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "./demoPrivado";
 import { GUION, type AccionDemo } from "./guionDemo";
@@ -141,12 +155,20 @@ function useEstado() {
   } | null>(null);
 
   const [llaveGuardada, setLlaveGuardada] = useState(false);
-  const [llave, setLlave] = useState<ExportLlaveAutoria | null>(null);
+  /**
+   * La llave que el denunciante guarda para sí, que NO es lo que entrega.
+   *
+   * Lleva el `evidenciaHash` porque sin él no puede volver a revelar autoría
+   * más adelante — es lo único irrecuperable del sistema. El sobre que sale
+   * hacia el fiscal (`material`) es otra cosa: v3, `{denunciaId, recibo}`, sin
+   * el hash de la evidencia y sin el nonce.
+   */
+  const [llave, setLlave] = useState<LlaveLocal | null>(null);
 
   const [verificadorId, setVerificadorId] = useState(VERIFICADORES[0].id);
   const [faseRevelar, setFaseRevelar] = useState<Fase>("idle");
   const [pasosRevelar, setPasosRevelar] = useState<string[]>([]);
-  const [autoria, setAutoria] = useState<{ autoriaHash: Hex32; bloque: number } | null>(null);
+  const [autoria, setAutoria] = useState<{ recibo: Hex32; bloque: number } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
   // ── Demo mode ────────────────────────────────────────────────────────────
@@ -322,12 +344,9 @@ function useEstado() {
         bloque: r.tx.blockHeight,
       });
       setLlave({
-        version: 2,
+        version: 3,
         denunciaId: r.denunciaId,
         evidenciaHash: cliente.obtenerWitnesses()?.evidenciaHash ?? "",
-        fiscalPk: "",
-        autoriaHash: "",
-        proof: "", // filled at reveal time
       });
       setHayDenuncias(true);
       setFaseDenuncia("listo");
@@ -342,15 +361,9 @@ function useEstado() {
 
   const guardarLlave = useCallback(() => {
     if (!llave) return;
-    const exportable: ExportLlaveAutoria = {
-      version: 2,
-      denunciaId: llave.denunciaId,
-      evidenciaHash: llave.evidenciaHash,
-      fiscalPk: llave.fiscalPk,
-      autoriaHash: llave.autoriaHash,
-      proof: llave.proof,
-    };
-    const blob = new Blob([JSON.stringify(exportable, null, 2)], { type: "application/json" });
+    // Se guarda EN TU MÁQUINA. No es el sobre que sale: éste lleva el
+    // evidenciaHash, sin el cual no podés volver a revelar autoría nunca más.
+    const blob = new Blob([JSON.stringify(llave, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -358,7 +371,7 @@ function useEstado() {
     a.click();
     URL.revokeObjectURL(url);
     setLlaveGuardada(true);
-    log("phantom-trace-autoria.key escrita en disco · proof ZK (mock: autoriaHash)");
+    log("phantom-trace-autoria.key escrita en disco · denunciaId + evidenciaHash, sin secret");
   }, [llave, log]);
 
   /**
@@ -375,17 +388,14 @@ function useEstado() {
     async (f: File) => {
       setError(null);
       try {
-        const datos = JSON.parse(await f.text()) as ExportLlaveAutoria;
-        if (datos.version !== 2 || !datos.denunciaId || !datos.evidenciaHash || !datos.proof) {
-          throw new Error("el archivo no es una llave de autoría válida (v2)");
+        const datos = JSON.parse(await f.text()) as LlaveLocal;
+        if (datos.version !== 3 || !datos.denunciaId || !datos.evidenciaHash) {
+          throw new Error("el archivo no es una llave de autoría válida (v3)");
         }
         setLlave({
-          version: 2,
+          version: 3,
           denunciaId: datos.denunciaId,
           evidenciaHash: datos.evidenciaHash,
-          fiscalPk: "",
-          autoriaHash: "",
-          proof: datos.proof,
         });
         cliente.establecerWitnesses({
           secretPersonal: identidad.secretPersonal,
@@ -396,7 +406,7 @@ function useEstado() {
         });
         setFaseRevelar("idle");
         setAutoria(null);
-        log("phantom-trace-autoria.key leída · proof ZK cargada, sin secret");
+        log("phantom-trace-autoria.key leída · denunciaId + evidenciaHash, sin secret");
       } catch (e) {
         fallar(e);
       }
@@ -413,17 +423,17 @@ function useEstado() {
     setError(null);
     setFaseRevelar("probando");
     setPasosRevelar([]);
-    log(`POST /prove revealAuthorship · fiscalPk 0x${verificador.pk.slice(0, 6)}…`);
+    log(`POST /prove revealAuthorship · nonce 0x${verificador.nonce.slice(0, 6)}…`);
 
     try {
       const r = await cliente.revelarAutoria(
-        { denunciaId: llave.denunciaId, fiscalPk: verificador.pk },
+        { denunciaId: llave.denunciaId, fiscalNonce: verificador.nonce },
         (paso) => {
           setPasosRevelar((previos) => [...previos, paso]);
           log(paso);
         },
       );
-      setAutoria({ autoriaHash: r.autoriaHash, bloque: r.tx.blockHeight });
+      setAutoria({ recibo: r.recibo, bloque: r.tx.blockHeight });
       setFaseRevelar("listo");
       setCopiado(false);
     } catch (e) {
@@ -431,20 +441,24 @@ function useEstado() {
       setPasosRevelar([]);
       fallar(e);
     }
-  }, [cliente, faseRevelar, fallar, llave, log, verificador.pk]);
+  }, [cliente, faseRevelar, fallar, llave, log, verificador.nonce]);
 
-  /** El puente con el Explorer: proof ZK, sin secret. */
+  /**
+   * El puente con el Explorer. Dos campos, los dos públicos.
+   *
+   * Lo que NO va: el `evidenciaHash` (es tuyo, y con él se enumera evidencia)
+   * y el nonce (es del fiscal — si viajara acá, quien intercepte el sobre
+   * podría hacerse pasar por el destinatario, que es justo lo que este
+   * formato cierra).
+   */
   const material = useMemo<ExportLlaveAutoria | null>(() => {
     if (!llave || !autoria) return null;
     return {
-      version: 2,
+      version: 3,
       denunciaId: llave.denunciaId,
-      evidenciaHash: llave.evidenciaHash,
-      fiscalPk: verificador.pk,
-      autoriaHash: autoria.autoriaHash,
-      proof: autoria.autoriaHash, // mock: proof == autoriaHash; producción: proof ZK real
+      recibo: autoria.recibo,
     };
-  }, [autoria, llave, verificador.pk]);
+  }, [autoria, llave]);
 
   const copiarMaterial = useCallback(async () => {
     if (!material) return;

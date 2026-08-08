@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   aHex,
-  authorshipOf,
+  receiptOf,
   credCommitmentOf,
   deHex,
   EPOCH_DURATION_SECONDS,
@@ -77,8 +77,8 @@ describe("reporting epochs — mirror of the contract's C0 arithmetic", () => {
   });
 
   it("consecutive epochs yield different nullifiers for the same credential", () => {
-    const a = nullifierOf(CRED, ORG_ID, 20672n);
-    const b = nullifierOf(CRED, ORG_ID, 20673n);
+    const a = nullifierOf(CRED, 20672n);
+    const b = nullifierOf(CRED, 20673n);
     expect(a).not.toBe(b);
   });
 });
@@ -108,8 +108,8 @@ describe("derivaciones — espejo de los pure circuits", () => {
       credCommitmentOf(CRED),
       leafOf(ORG_ID, credCommitmentOf(CRED)),
       reportIdOf("00".repeat(32), SECRET),
-      nullifierOf(CRED, ORG_ID, 20672n),
-      authorshipOf(SECRET, "00".repeat(32), PK_PIA),
+      nullifierOf(CRED, 20672n),
+      receiptOf("00".repeat(32), PK_PIA),
     ]) {
       expect(h).toMatch(/^[0-9a-f]{64}$/);
     }
@@ -145,8 +145,8 @@ describe("domain separation", () => {
     // nullifier is reused verbatim as the authorship's prosecutorPk. Only the
     // domain tag differs, and that alone must keep the spaces disjoint.
     const epoch = 20672n;
-    const a = nullifierOf(SECRET, ORG_ID, epoch);
-    const b = authorshipOf(SECRET, ORG_ID, periodHex32(epoch));
+    const a = nullifierOf(SECRET, epoch);
+    const b = receiptOf(ORG_ID, periodHex32(epoch));
     expect(a).not.toBe(b);
   });
 
@@ -165,12 +165,20 @@ describe("domain separation", () => {
   });
 });
 
-describe("designated verifier", () => {
-  it("la misma autoría con otra clave da otro hash", async () => {
+describe("un recibo por destinatario", () => {
+  it("la misma autoría con otro nonce da otro recibo", async () => {
     const denunciaId = reportIdOf(await hashDeArchivo(muestra("contrato-obra-4471.pdf")), SECRET);
-    const paraFiscal = authorshipOf(SECRET, denunciaId, PK_PIA);
-    const paraEmpleador = authorshipOf(SECRET, denunciaId, PK_ACME);
+    const paraFiscal = receiptOf(denunciaId, PK_PIA);
+    const paraEmpleador = receiptOf(denunciaId, PK_ACME);
     expect(paraFiscal).not.toBe(paraEmpleador);
+  });
+
+  it("el recibo NO depende del secret: se recomputa con datos publicos", async () => {
+    // Esta es la propiedad que hace que el fiscal pueda verificar sin que
+    // nadie le entregue nada secreto. Si `receiptOf` volviera a mezclar el
+    // secret, este test es el que lo agarra.
+    const denunciaId = reportIdOf(await hashDeArchivo(muestra("contrato-obra-4471.pdf")), SECRET);
+    expect(receiptOf(denunciaId, PK_PIA)).toBe(receiptOf(denunciaId, PK_PIA));
   });
 
   it("un secret ajeno no reproduce el denunciaId del autor", async () => {

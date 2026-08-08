@@ -44,18 +44,26 @@ import CompactStandardLibrary;
 // published anchor, exactly as spec §3 describes.
 export ledger organizations: Map<Bytes<32>, Bytes<32>>;
 
-// Global tree of issued credentials. Depth 8 = 256 leaves, enough for
-// the demo (spec §5: "a small depth suffices").
-export ledger credentials: HistoricMerkleTree<8, Bytes<32>>;
+// Global tree of issued credentials. Depth 16 = 65 536 leaves.
+//
+// Depth 8 (256 leaves) was a demo-scale choice that turned out to be a
+// permanent kill switch: `issueCredential` takes any Bytes<32> from
+// anyone, the tree is a type parameter, and the contract is immutable —
+// so 256 junk insertions blocked every legitimate issuance forever, with
+// no recovery. Reproduced: `exceeded structure bounds` after 256.
+// Depth 16 raises the cost of that attack and enlarges the anonymity set;
+// `issueCredential`'s issuer check (see below) is what actually closes it.
+export ledger credentials: HistoricMerkleTree<16, Bytes<32>>;
 
 // Sealed reportIds: H(dom || evidenceHash || personalSecret)
 export ledger reports: Set<Bytes<32>>;
 
-// Per-epoch anti-spam: H(dom || credSecret || orgId || epoch).
+// Per-epoch anti-spam: H(dom || credSecret || epoch).
 // The epoch is fixed by the blockTime, not by the caller (see `report`).
 export ledger nullifiers: Set<Bytes<32>>;
 
-// Revealed authorships: H(dom || personalSecret || reportId || prosecutorPk)
+// Authorship receipts: H(dom || reportId || prosecutorNonce).
+// The personal secret is NOT in this preimage — see `receiptOf`.
 export ledger authorships: Set<Bytes<32>>;
 
 // ---- Witnesses: never leave the whistleblower's machine ----
@@ -66,14 +74,26 @@ witness credentialSecret(): Bytes<32>;
 
 // Merkle path siblings towards this credential's leaf.
 // Obtained off-chain with `credentials.findPathForLeaf(leaf)`.
-witness credentialPath(): Vector<8, MerkleTreePathEntry>;
+witness credentialPath(): Vector<16, MerkleTreePathEntry>;
 
 // The whistleblower's persistent personal secret (org-independent).
 witness personalSecret(): Bytes<32>;
 
+// The issuing organization's secret. Its commitment is the `anchor`
+// published by `registerOrganization`; only `issueCredential` uses it.
+witness issuerSecret(): Bytes<32>;
+
 // Hash of the evidence file, computed LOCALLY by the app.
 // The file is never uploaded anywhere.
 witness evidenceHash(): Bytes<32>;
+
+// The nonce the prosecutor chose for THIS reveal, handed to the
+// whistleblower off-chain. It is a witness and not a public argument on
+// purpose: a public nonce would land in the transaction transcript, and
+// anyone who scraped the pair (reportId, nonce) could recompute the
+// receipt and pass themselves off as its addressee — the same hole this
+// scheme closes, through another door.
+witness prosecutorNonce(): Bytes<32>;
 
 // ---- Domain separation (spec/plan §2.2) ----
 // `nullifier` and `authorship` share a shape and carry a secret in the
@@ -97,8 +117,12 @@ circuit domNullifier(): Bytes<32> {
   return pad(32, "phantomtrace:nullifier:v1");
 }
 
-circuit domAuthorship(): Bytes<32> {
-  return pad(32, "phantomtrace:authorship:v1");
+circuit domReceipt(): Bytes<32> {
+  return pad(32, "phantomtrace:receipt:v1");
+}
+
+circuit domIssuer(): Bytes<32> {
+  return pad(32, "phantomtrace:issuer:v1");
 }
 
 // ---- Reporting epochs ----
@@ -113,6 +137,14 @@ circuit epochDuration(): Uint<64> {
 // They appear in the generated TS under `pureCircuits`, so the app can
 // recompute reportId / nullifier / authorship / leaf locally WITHOUT a
 // proof server. This is what makes `verify-authorship` 100% off-chain.
+
+// The organization's anchor: the commitment to its issuer secret. This
+// is what `registerOrganization` publishes and what `issueCredential`
+// checks against, which is what turns `anchor` from decorative metadata
+// into the credential channel's access control.
+export pure circuit anchorOf(issuerSec: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([domIssuer(), issuerSec]);
+}
 
 // The credential commitment. It is the only thing the employee hands to
 // the issuer: the org never sees the `credentialSecret`.
@@ -132,20 +164,37 @@ export pure circuit reportIdOf(ev: Bytes<32>, sec: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<3, Bytes<32>>>([domReport(), ev, sec]);
 }
 
-// Anti-spam: one report per (credential, org, epoch).
+// Anti-spam: one report per (credential, epoch) — org-independent.
+//
+// `orgId` used to be in this preimage, and that made the whole guard
+// decorative: it is a public argument chosen by the caller, exactly the
+// property `period` is carefully denied by C0 in `report`. Since
+// `registerOrganization` and `issueCredential` have no access control,
+// minting phantom orgs is free, and each one bought the same credential
+// another report in the same epoch. Out it goes: one credential, one
+// report per epoch, no matter how many orgs it is enrolled in.
+//
 // `period` is the EPOCH INDEX (see `epochDuration`), not a free label:
 // the `report` circuit forces it to be the current epoch.
-export pure circuit nullifierOf(sec: Bytes<32>, orgId: Bytes<32>, period: Uint<64>): Bytes<32> {
-  return persistentHash<Vector<4, Bytes<32>>>(
-           [domNullifier(), sec, orgId, (period as Field) as Bytes<32>]
+export pure circuit nullifierOf(sec: Bytes<32>, period: Uint<64>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>(
+           [domNullifier(), sec, (period as Field) as Bytes<32>]
            );
 }
 
-// One value per prosecutor: authorship is bound to THAT prosecutor's key, so
-// the same author and report yield a different record for a different key.
-// See `revealAuthorship` for what this does and does not buy.
-export pure circuit authorshipOf(sec: Bytes<32>, reportId: Bytes<32>, prosecutorPk: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<4, Bytes<32>>>([domAuthorship(), sec, reportId, prosecutorPk]);
+// The authorship receipt, bound to the nonce THIS prosecutor chose.
+//
+// The personal secret is deliberately NOT in the preimage. The proof —
+// not the hash — is what establishes authorship: `revealAuthorship`
+// cannot write a receipt without satisfying `reportIdOf(ev, sec) ==
+// reportId`, so a receipt existing on the ledger can only have been
+// caused by someone who knew the secret. Keeping `sec` out of the
+// preimage means the prosecutor needs nothing secret to recompute the
+// receipt and look it up — and, crucially, cannot mint a receipt for a
+// different nonce, so they cannot republish the authorship to anyone
+// else. That is the attack this closes.
+export pure circuit receiptOf(reportId: Bytes<32>, prosecutorNonce: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([domReceipt(), reportId, prosecutorNonce]);
 }
 
 // ---- 4.1 registerOrganization (spec §4.1) ----
@@ -166,8 +215,16 @@ export circuit registerOrganization(orgId: Bytes<32>, anchor: Bytes<32>): [] {
 // orgId and smuggle in the leaf of an organization that never
 // registered, then report on behalf of that phantom org. Building it
 // here ties insertion and validation to the SAME orgId.
+//
+// Access control: the caller must know the issuer secret whose commitment
+// is the org's published anchor. Without it the tree was a free-for-all —
+// anyone could fill it, and a filled tree is permanent (see `credentials`).
+// This is also what makes registering somebody else's orgId pointless: the
+// squatter can only issue under their own anchor.
 export circuit issueCredential(orgId: Bytes<32>, credCommitment: Bytes<32>): [] {
   assert(organizations.member(disclose(orgId)), "organization not registered");
+  assert(organizations.lookup(disclose(orgId)) == anchorOf(issuerSecret()),
+         "not the issuer of this organization");
   credentials.insert(disclose(leafOf(orgId, credCommitment)));
 }
 
@@ -193,15 +250,16 @@ export circuit report(orgId: Bytes<32>, period: Uint<64>): [] {
 
   // C1 — membership. The leaf is built in-circuit from the public
   // orgId: the witness cannot substitute another org's leaf.
-  const merklePath = MerkleTreePath<8, Bytes<32>> { leaf: leafOf(orgId, credCommitmentOf(cred)),
-                                                    path: siblings };
-  const root = merkleTreePathRoot<8, Bytes<32>>(merklePath);
+  const merklePath = MerkleTreePath<16, Bytes<32>> { leaf: leafOf(orgId, credCommitmentOf(cred)),
+                                                     path: siblings };
+  const root = merkleTreePathRoot<16, Bytes<32>>(merklePath);
   assert(credentials.checkRoot(disclose(root)), "credential does not belong to the organization");
 
   // C2 — per-period anti-spam. Uses the CREDENTIAL's secret (spec §5,
-  // Option A): one credential = one report per period. Different
-  // periods produce nullifiers that are not linkable to each other.
-  const nullifier = nullifierOf(cred, orgId, period);
+  // Option A): one credential = one report per period, regardless of how
+  // many organizations that credential is enrolled in. Different periods
+  // produce nullifiers that are not linkable to each other.
+  const nullifier = nullifierOf(cred, period);
   assert(!nullifiers.member(disclose(nullifier)), "already reported this period");
 
   // The seal uses the PERSONAL secret: the one the whistleblower keeps
@@ -217,10 +275,21 @@ export circuit report(orgId: Bytes<32>, period: Uint<64>): [] {
 }
 
 // ---- 4.3 revealAuthorship — the differentiator (spec §4.3) ----
-// Public: reportId, prosecutorPk. Private: original evidence and secret.
-export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [] {
+// Public: reportId. Private: original evidence, personal secret, and the
+// nonce the prosecutor chose.
+//
+// The prosecutor is no longer handed anything secret. They send a fresh
+// nonce, the whistleblower writes the receipt, and the prosecutor
+// recomputes `receiptOf(reportId, theirNonce)` from data they already
+// have and finds it in `authorships`. The binding is one per nonce; the
+// receipt is publicly verifiable by anyone the prosecutor forwards the
+// nonce to, and therefore transferable once handed over. What the
+// prosecutor CANNOT do is mint a receipt for a nonce of their own
+// choosing: that needs the assert below, and the secret behind it.
+export circuit revealAuthorship(reportId: Bytes<32>): [] {
   const sec = personalSecret();
   const ev = evidenceHash();
+  const nonce = prosecutorNonce();
 
   // C1 — only the author knows the preimage of reportId.
   // Pure comparison over witness values: no disclose() required.
@@ -229,21 +298,9 @@ export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [
   // C2 — the report exists on the ledger.
   assert(reports.member(disclose(reportId)), "report does not exist");
 
-  // One record per prosecutor: the hash is bound to prosecutorPk, so the
-  // value published for THIS prosecutor is not the value another key would
-  // look up — verify with the employer's key and the record is not there.
-  //
-  // NOT a designated-verifier scheme, despite the name this once carried.
-  // That would require the recipient to be able to simulate an
-  // indistinguishable proof with their own key; here `prosecutorPk` is just
-  // another public input and the proof checks against the public verifier
-  // key. So the proof is publicly verifiable and therefore TRANSFERABLE once
-  // handed over — a prosecutor can forward it and the next holder verifies
-  // it too. What the binding buys is per-recipient separation, not
-  // unforgeability of the audience.
-  const authorship = authorshipOf(sec, reportId, prosecutorPk);
-  assert(!authorships.member(disclose(authorship)), "authorship already revealed to this prosecutor");
-  authorships.insert(disclose(authorship));
+  const receipt = receiptOf(reportId, nonce);
+  assert(!authorships.member(disclose(receipt)), "authorship already revealed to this prosecutor");
+  authorships.insert(disclose(receipt));
 }
 
 // ---- 4.4 proveAuthorship — exportable ZK proof (spec §4.4) ----
@@ -263,14 +320,14 @@ export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [
 // to be the right constraint anyway: a proof of authorship over a report
 // that was never sealed proves nothing worth having.
 //
-// Returns `authorshipHash` so the verifier can cross-check it against
+// Returns the receipt so the verifier can cross-check it against
 // `ledger.authorships` (which `revealAuthorship` wrote).
 export circuit proveAuthorship(
   reportId: Bytes<32>,
   evidenciaHash: Bytes<32>,
-  prosecutorPk: Bytes<32>,
 ): Bytes<32> {
   const sec = personalSecret();
+  const nonce = prosecutorNonce();
 
   // C1 — the secret must be the preimage of reportId.
   assert(reportIdOf(evidenciaHash, sec) == reportId, "not the author");
@@ -279,7 +336,7 @@ export circuit proveAuthorship(
   // `revealAuthorship`, and the read that makes this circuit provable.
   assert(reports.member(disclose(reportId)), "report does not exist");
 
-  // The authorship hash is disclosed so the verifier can confirm
-  // it matches the one on-chain.
-  return disclose(authorshipOf(sec, reportId, prosecutorPk));
+  // The receipt is disclosed so the verifier can confirm it matches the
+  // one on-chain.
+  return disclose(receiptOf(reportId, nonce));
 }

@@ -75,7 +75,7 @@ export function Revelar() {
               seleccionada={v.id === e.verificador.id}
               onClick={() => e.setVerificadorId(v.id)}
               titulo={v.nombre}
-              sub={`fiscalPk ${corto(v.pk, 6)}`}
+              sub={`nonce ${corto(v.nonce, 6)}`}
             />
           ))}
         </div>
@@ -134,9 +134,9 @@ export function Revelar() {
               paddingTop: 16,
             }}
           >
-            autoriaHash
+            recibo
             <br />
-            <span style={{ color: "var(--pv-pos)" }}>{completo(e.autoria.autoriaHash)}</span>
+            <span style={{ color: "var(--pv-pos)" }}>{completo(e.autoria.recibo)}</span>
             <br />
             publicado en ledger.authorships · block {altura(e.autoria.bloque)}
           </div>

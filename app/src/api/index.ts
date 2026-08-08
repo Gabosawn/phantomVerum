@@ -100,7 +100,6 @@ export type {
   ReportResult,
   IssueCredentialResult,
   RevealAuthorshipResult,
-  AuthorshipVerdict,
   VerificationResult,
   TxResult,
 } from './types.js';
