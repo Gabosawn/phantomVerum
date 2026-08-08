@@ -36,6 +36,12 @@ import {
 import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
+import {
+  type ClientePreview,
+  type WalletSession,
+  conectarWallet,
+  conectarClientePreview,
+} from "@shared/servicio/ClientePreview";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "./demoPrivado";
@@ -154,6 +160,27 @@ function useEstado() {
   const [demoActiva, setDemoActiva] = useState(false);
   const [demoPausada, setDemoPausada] = useState(false);
   const [demoEscena, setDemoEscena] = useState(0);
+
+  // ── Preview / Wallet detection ──────────────────────────────────────────
+  const [modo, setModo] = useState<"mock" | "preview">("mock");
+  const [walletSession, setWalletSession] = useState<WalletSession | null>(null);
+
+  // Try to connect to a Midnight wallet on mount. Mock is the fallback.
+  useEffect(() => {
+    let cancelado = false;
+    conectarClientePreview().then((cp) => {
+      if (cancelado || !cp) return;
+      setModo("preview");
+    }).catch(() => {
+      // No wallet or Preview not available — stay in mock mode.
+    });
+    // Also detect wallet for the header indicator.
+    conectarWallet().then((s) => {
+      if (cancelado || !s) return;
+      setWalletSession(s);
+    }).catch(() => {});
+    return () => { cancelado = true; };
+  }, []);
 
   const log = useCallback((m: string) => {
     setLogs((previos) => [...previos, { t: horaLog(new Date()), m }]);
@@ -798,6 +825,8 @@ function useEstado() {
 
     reiniciar,
     nuevaIdentidad,
+    modo,
+    walletSession,
   };
 }
 
