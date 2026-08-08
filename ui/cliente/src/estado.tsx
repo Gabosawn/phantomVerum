@@ -31,8 +31,8 @@ import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
 import {
   type ClientePreview,
-  type LaceSession,
-  conectarLace,
+  type WalletSession,
+  conectarWallet,
   conectarClientePreview,
 } from "@shared/servicio/ClientePreview";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
@@ -126,25 +126,23 @@ function useEstado() {
   const [autoria, setAutoria] = useState<{ autoriaHash: Hex32; bloque: number } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
-  // ── Preview / Lace detection ────────────────────────────────────────────
+  // ── Preview / Wallet detection ──────────────────────────────────────────
   const [modo, setModo] = useState<"mock" | "preview">("mock");
-  const [laceSession, setLaceSession] = useState<LaceSession | null>(null);
+  const [walletSession, setWalletSession] = useState<WalletSession | null>(null);
 
-  // Try to connect to Lace on mount. The mock is always the fallback.
+  // Try to connect to a Midnight wallet on mount. Mock is the fallback.
   useEffect(() => {
     let cancelado = false;
     conectarClientePreview().then((cp) => {
       if (cancelado || !cp) return;
       setModo("preview");
-      // The Lace session is stored for reference but ClientePreview
-      // is the TestigoClient that wraps it.
     }).catch(() => {
-      // Lace not available — stay in mock mode silently.
+      // No wallet or Preview not available — stay in mock mode.
     });
-    // Also check Lace presence for the header indicator.
-    conectarLace().then((s) => {
+    // Also detect wallet for the header indicator.
+    conectarWallet().then((s) => {
       if (cancelado || !s) return;
-      setLaceSession(s);
+      setWalletSession(s);
     }).catch(() => {});
     return () => { cancelado = true; };
   }, []);
@@ -522,7 +520,7 @@ function useEstado() {
     reiniciar,
     nuevaIdentidad,
     modo,
-    laceSession,
+    walletSession,
   };
 }
 

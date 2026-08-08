@@ -52,15 +52,15 @@ import {
 } from "../tipos";
 import { PREVIEW_ENDPOINTS, PREVIEW_NETWORK_ID } from "./previewConfig";
 
-export type LaceSession = {
+export type WalletSession = {
   wallet: WalletConnectedAPI;
   conectado: boolean;
   networkId: string;
 };
 
-// ── Lace detection ───────────────────────────────────────────────────────
+// ── Wallet detection (DApp Connector API — any compliant wallet) ─────────
 
-function detectarLace(): {
+function detectarWallet(): {
   connect: (networkId: string) => Promise<ConnectedAPI>;
   name: string;
 } | null {
@@ -75,11 +75,11 @@ function detectarLace(): {
   return null;
 }
 
-export async function conectarLace(): Promise<LaceSession | null> {
-  const lace = detectarLace();
-  if (!lace) return null;
+export async function conectarWallet(): Promise<WalletSession | null> {
+  const wallet = detectarWallet();
+  if (!wallet) return null;
   try {
-    const connected = await lace.connect(PREVIEW_NETWORK_ID);
+    const connected = await wallet.connect(PREVIEW_NETWORK_ID);
     const config = await connected.getConfiguration();
     return {
       wallet: connected,
@@ -252,7 +252,7 @@ export class ClientePreview implements TestigoClient {
 export async function conectarClientePreview(
   contractAddress?: string,
 ): Promise<ClientePreview | null> {
-  const session = await conectarLace();
+  const session = await conectarWallet();
   if (!session) return null;
 
   const address = contractAddress;

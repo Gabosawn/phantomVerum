@@ -65,7 +65,7 @@ export function App() {
         </div>
         <DatoHeader titulo="wallet">
           {e.modo === "preview" ? (
-            <span style={{ color: "var(--pv-pos)" }}>lace ✓</span>
+            <span style={{ color: "var(--pv-pos)" }}>conectado ✓</span>
           ) : (
             <span style={{ color: "var(--pv-muted)" }}>mock</span>
           )}
