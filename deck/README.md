@@ -26,7 +26,7 @@ bordes, swipe en mobile, o los puntitos de abajo.
 | 08 | **Caso · la escena** | Nordwind Logistics: por qué nadie usa el canal interno |
 | 09 | **Caso · el despliegue** | Se enchufa al Azure AD que ya tienen · tamper-proof |
 | 10 | **Caso · el flujo de la plata** | Lena cobra la SEC · Nordwind nunca se entera |
-| 11 | Honestidad | Real vs. mockeado, declarado de entrada |
+| 11 | Honestidad | Recibo on-chain real (4 tiempos en Preview) + límites declarados |
 | 12 | La ingeniería | 48 tests, 2 backends, 13/13 mutantes muertos |
 | 13 | BizDev + roadmap | SEC, Directiva UE, fiscalías · qué sigue |
 | 14 | Cierre | La frase + equipo + repo |

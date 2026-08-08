@@ -123,6 +123,19 @@
   .hcol.real .g { color: var(--probado); }
   .hcol.mock .g { color: var(--dim); }
 
+  /* ── On-chain receipt (honesty slide) ──────────────────────── */
+  .receipt { font-family: var(--mono); background: var(--sunken); border: 1px solid var(--probado); border-radius: 14px; padding: 1.2rem 1.4rem; display: grid; gap: 0.42rem; }
+  .receipt .addr { font-size: 0.74rem; color: var(--muted); word-break: break-all; padding-bottom: 0.55rem; border-bottom: 1px solid var(--line); margin-bottom: 0.35rem; }
+  .receipt .addr b { color: var(--probado); font-weight: 600; }
+  .receipt .row { display: grid; grid-template-columns: 1fr auto; gap: 1rem; font-size: 0.85rem; align-items: baseline; }
+  .receipt .row .act { color: var(--text2); }
+  .receipt .row .blk { color: var(--probado); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .receipt .row.rej .act { color: var(--text2); }
+  .receipt .row.rej .blk { color: var(--rechazo); }
+  .receipt .verdicts { display: flex; gap: 1.4rem; margin-top: 0.5rem; padding-top: 0.6rem; border-top: 1px solid var(--line); flex-wrap: wrap; font-size: 0.88rem; }
+  .receipt .vd.ok { color: var(--probado); font-weight: 600; }
+  .receipt .vd.no { color: var(--rechazo); font-weight: 600; }
+
   /* ── Stats + mutants ────────────────────────────────────────── */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.6rem; }
   .stat { border: 1px solid var(--line); border-radius: 14px; padding: 1.3rem; background: var(--surface); }
@@ -677,30 +690,29 @@
   <section class="slide">
     <div class="wrap">
       <div class="shead">
-        <p class="eyebrow">Honestidad</p>
-        <h2>Qué es real, qué está mockeado.</h2>
+        <p class="eyebrow">Honestidad · ya no está mockeado</p>
+        <h2>Los 4 tiempos corren en Preview. Verificalo vos.</h2>
       </div>
       <div class="hcols">
-        <div class="hcol real">
-          <h3>◆ Real, verificable</h3>
-          <ul>
-            <li><span class="g">sha256</span><span>El SHA-256 de la evidencia — comprobalo vos</span></li>
-            <li><span class="g">≡</span><span>4 derivaciones = espejo exacto del contrato</span></li>
-            <li><span class="g">assert</span><span>El circuito rechaza de verdad lo inválido</span></li>
-            <li><span class="g">✓/✕</span><span>Los veredictos son recomputación, no un <span class="mono">if</span></span></li>
-          </ul>
+        <div class="receipt">
+          <div class="addr">contract <b>aeb44bb…c12815</b> · compiler 0.31.1 · Preview</div>
+          <div class="row"><span class="act">ACT 1 · registerOrganization</span><span class="blk">block 325613</span></div>
+          <div class="row"><span class="act">ACT 1 · issueCredential <span style="color:var(--dim)">(solo el commitment)</span></span><span class="blk">block 325618</span></div>
+          <div class="row"><span class="act">ACT 2 · report sellado <span style="color:var(--dim)">· epoch 20673</span></span><span class="blk">block 325623</span></div>
+          <div class="row rej"><span class="act">ACT 3 · doble reporte → rechazado</span><span class="blk">PROOF TIME · sin tx</span></div>
+          <div class="row"><span class="act">ACT 4 · revealAuthorship</span><span class="blk">block 325627</span></div>
+          <div class="verdicts"><span class="vd ok">✅ PROSECUTOR verifica</span><span class="vd no">❌ EMPLOYER no verifica</span></div>
         </div>
         <div class="hcol mock">
-          <h3>◇ Fabricado (hasta integrar Bloque B)</h3>
+          <h3>◇ Límites que sí declaramos</h3>
           <ul>
-            <li><span class="g">txId</span><span>Los txId y las alturas de bloque</span></li>
-            <li><span class="g">sync</span><span>El "✓ synced" del indexer</span></li>
-            <li><span class="g">ms</span><span>Los tiempos de proving</span></li>
-            <li><span class="g">chain</span><span>La existencia de una cadena</span></li>
+            <li><span class="g">emisor</span><span>Las credenciales las emite un mock — en prod, el directorio corporativo (Azure AD)</span></li>
+            <li><span class="g">veracidad</span><span>No probamos que la denuncia sea cierta — sí que viene de adentro y nadie la alteró</span></li>
+            <li><span class="g">off-chain</span><span>On-chain no hay <span class="mono">msg.sender</span>; el indexer sí ve viewing key + IP (mitiga: proof server local, Tor)</span></li>
           </ul>
         </div>
       </div>
-      <p class="cap" style="text-align:center;margin-left:auto;margin-right:auto">No prometemos que la denuncia sea verdadera — probamos que viene de adentro y que nadie la alteró.</p>
+      <p class="cap" style="text-align:center;margin-left:auto;margin-right:auto">Mismos bytes, dos verificadores, veredictos opuestos — y el ✅ es una recomputación del fiscal desde datos públicos + su nonce, no un campo que alguien le pasó.</p>
     </div>
   </section>
 
