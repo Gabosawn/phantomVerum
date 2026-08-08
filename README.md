@@ -7,6 +7,47 @@
 
 Built on [Midnight](https://midnight.network) (Compact + ZK).
 
+[![CI](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml)
+
+---
+
+## Deployed on Preview — check it yourself
+
+```
+contract    00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978
+deploy tx   483250e7db915104551f6de5acd43edc750b559574279eb58f41f538039920b8
+block       324294
+compiler    0.31.1        deployed 2026-08-08T03:37:09Z
+```
+
+**[View the contract on the explorer →](https://preview.midnightexplorer.com/contracts/00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978)**
+
+Or ask the indexer directly. No key, no account, CORS is open — paste this
+anywhere:
+
+```bash
+curl -s https://indexer.preview.midnight.network/api/v4/graphql \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"{ contractAction(address:\"00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978\"){ address state transaction { hash block { height } } } }"}'
+```
+
+It answers with the address, the serialized contract state, the transaction
+and its block.
+
+> Use `preview.midnightexplorer.com`, not `explorer.preview.midnight.network`.
+> Measured, both on 2026-08-08: given a made-up address, the official-looking
+> host returns **HTTP 200** and renders an empty page, while
+> `midnightexplorer` returns **404**. A link that works on a host which
+> answers 200 for everything is not evidence of anything; a link that works on
+> one that 404s is.
+
+Two notes so nobody has to reconcile them later. `deployment.json` records
+`deployTxId` as `00bc487c…`, which is the identifier the deploy path returned;
+the hash above is what the indexer reports for the same action, and it is the
+one the explorer indexes. And the address lives in exactly one place —
+`app/src/config/deployment.json` — which is what both the CLI and the browser
+read.
+
 ---
 
 ## How it works (the 4 stages)
@@ -141,18 +182,30 @@ behind a censor bar: it exists, without being shown.
 
 ### What is real and what is mocked
 
-Until Block B is plugged in, the UI runs against a local service layer. This is
-declared upfront because the difference matters:
+The two apps sit on different sides of this line, so they get different rows.
+Declared upfront because the difference matters.
 
-| Real, verifiable | Fabricated |
+**Explorer (`:3001`) — reads the real chain.** It queries the Preview indexer
+for the deployed contract at the address above. The ledger it shows is the
+ledger. No SDK in the browser: plain `fetch` against a GraphQL endpoint with
+open CORS.
+
+**Client (`:3000`) — runs locally, and says so.** Its circuits execute against
+`ClienteMock`; writing to the contract from a browser needs Lace plus the local
+proof server and that integration is not done. The header reads "local".
+
+| Real, verifiable | Fabricated (Client only) |
 |---|---|
-| The evidence's SHA-256 — check it with `sha256sum` against what the screen shows | The `txId`s and block heights |
-| The four derivations, an exact mirror of `contracts/src/testigo.compact` (same domain tags, same arity) | The indexer's "✓ synced" |
+| The evidence's SHA-256 — check it with `sha256sum` against what the screen shows | The `txId`s and block heights the Client displays |
+| The four derivations, an exact mirror of `contracts/src/testigo.compact` (same domain tags, same arity) | The Client's "✓ synced" indicator |
 | The circuit asserts: someone else's credential, a double report in the same period and a secret that is not the author's genuinely fail, before emitting anything | Proving times |
-| The ✅/❌ verdicts: a genuine local recomputation, not an `if` branch | The existence of a chain |
+| The Explorer's ledger reads, and the contract they come from | — the chain itself is real, and you can `curl` it |
+| The ❌ verdict: a real lookup that finds no record. The ⚠️ is real too — see Known limitations #4 | — |
 
 The mocked part lives in exactly one file — `ui/shared/servicio/ClienteMock.ts`
-— behind the `TestigoClient` interface. No view knows about it.
+— behind the `TestigoClient` interface. No view knows about it, which is what
+lets the Explorer swap in `ExplorerPreview.ts` (a real indexer reader, same
+interface) without a single view changing.
 
 `ui/shared/cripto.ts` is **not** a mock: it re-exports the five pure circuits
 from `@phantomtrace/shared/crypto`, which uses the same `persistentHash` the
@@ -165,9 +218,19 @@ which hashes the evidence file — the same thing `app/`'s witnesses do.
 
 ```bash
 npm run compile:fast --workspace=contracts   # compiles the contract (no proving keys needed)
-npm test                                     # 48 cases, every one against both backends
+npm test                                     # all four suites, 352 checks
 npm run simulate                             # the four acts, printing the ledger at each step
 ```
+
+`npm test` at the root fans out over every workspace. The transcript below is
+the `tests/` one — the differential suite — which is 48 of them:
+
+| Workspace | Checks | What it runs against |
+|---|---|---|
+| `contracts` | 65 | the compiled contract, via `@midnight-ntwrk/compact-runtime` |
+| `app` | 173 | witnesses + the §3.1 API, against the simulator |
+| `ui` | 66 | the service layer and the shared crypto |
+| `tests` | 48 | every case twice — hand-written model **and** compiled contract |
 
 ```
  testigo · backends: model, contract — differential run, both must agree
@@ -237,6 +300,82 @@ The same technique confirms the two backends are genuinely independent: break a 
 model alone and exactly the `['model']` variants fail while every `['contract']` variant
 survives.
 
+## Known limitations
+
+Found by an adversarial pass over our own contract on 2026-08-08, each one
+reproduced rather than theorised. They are listed with the fix we would apply,
+because "we did not notice" and "we found it, reproduced it, and know the
+patch" are different positions and only one of them is true here.
+
+The first is enforced by the test suite: `contracts/test/sec-audit.mjs` prints
+a `GAP` line for it, and that check is written to **fail if the gap ever
+closes**, so nobody can quietly fix the contract and leave a stale excuse in
+this file.
+
+**1. The nullifier can be sidestepped through `orgId`** *(high)*
+
+`nullifierOf(sec, orgId, period)` mixes in `orgId`, and unlike `period` — which
+the circuit pins to `blockTime` — nothing constrains it. Since
+`registerOrganization` and `issueCredential` have no access control, the same
+credential secret can be enrolled into a phantom org and used to report again
+in the same epoch. Reproduced: nullifiers 1 → 2 within one epoch, no secrets
+required.
+**Fix:** drop `orgId` from `nullifierOf`. One report per credential per epoch,
+whatever it is enrolled in. ~1 h including the four suites that mirror the
+signature, plus a redeploy.
+
+**2. 256 unauthenticated calls brick the contract permanently** *(critical)*
+
+`credentials` is a `HistoricMerkleTree<8>` — 256 leaves — and `issueCredential`
+takes any `Bytes<32>` from anyone, with no quota and no revocation. At 256
+insertions every legitimate issuance fails forever with `exceeded structure
+bounds`. The contract is immutable, so there is no recovery; the depth is a
+type parameter, so the fix is a redeploy. Cost of the attack: 256 transactions.
+**Fix:** raise the depth, and tie issuance to the org's anchor —
+`assert(organizations.lookup(orgId) == anchorOf(issuerSecret()))`. Today the
+anchor is written and never read, so this also gives it a purpose, and closes
+`orgId` squatting at the same time. ~3 h.
+
+**3. The same author produces the same `reportId` on two deployments** *(medium)*
+
+Neither `reportIdOf` nor `nullifierOf` mixes in the contract address, and the
+domain tags are constants (`phantomtrace:*`) across every deployment. The same
+author with the same evidence produces byte-identical values on two separate
+ledgers, which makes them correlatable. A proof generated against a throwaway
+devnet — where the attacker controls all state — also verifies against the
+production verifier key.
+**Fix:** mix the contract address into the derivation. It has to be an explicit
+argument rather than `kernel.self()`, or the circuits stop being `pure` and the
+100% off-chain verification goes with them. Changes the export format. ~2 h.
+
+**4. Authorship cannot be positively verified in this build** *(declared)*
+
+`verifyAuthorship` is fail-closed and returns `verified` for nothing at all —
+see `app/src/api/verify.ts`. The export's `proof` field is a stand-in equal to
+`authorshipHash`, so a prosecutor holding a genuine package gets
+`unavailable`, not ✅. This is deliberate: the alternative had every input to
+the verdict supplied by whoever handed over the file, which let an employer
+mint their own ✅ from two values read off the public ledger.
+**Fix:** verify the real `proveAuthorship` proof against the circuit's verifier
+key. The circuit and its key already exist and ship in `contracts/output/keys/`.
+
+**5. The proof is transferable once handed over** *(declared)*
+
+Per-recipient binding is real — the employer's key finds no record on the
+ledger — but this is not a designated-verifier scheme, and a prosecutor who
+receives the package can forward it. See the threat model in
+`docs/01-arquitectura.md`.
+
+**6. Network-level anonymity is not addressed** *(declared, and the largest)*
+
+Measured against Preview: 87% of blocks are empty and the whole network carries
+~1.4 transactions per minute, so a report is very likely the only transaction
+in its block. The anonymity set *at the network layer* is close to 1, which
+matters more than any of the above. The contract's privacy holds; correlating
+by timing does not need to break it. Mitigations (submission delay, decoy
+traffic, Tor) are documented in `docs/05-mejoras_ES.md` §7-bis and not
+implemented.
+
 ## Development plan — 4 independent blocks
 
 > **Complete and updated version:** [`docs/03-plan-ejecucion.md`](docs/03-plan-ejecucion.md) —
@@ -259,13 +398,14 @@ Integration happens at the end of each block.
 **Deliverable:** `compact compile` green. Derived values and ledger
 match the spec *exactly* (§3–§4).
 
-### Block B — TypeScript Wiring (`app/`) 🟡
+### Block B — TypeScript Wiring (`app/`) ✅
 
 - [x] Network config (Preview/local), proof server, indexer providers
 - [x] Witness providers for the circuits + local persistence of secrets/credentials (file)
 - [x] Local evidence hash (the file never leaves the machine)
 - [x] Core API (§3.1) + CLI scripts (`register-org`, `issue-credential`, `report`, …)
-- [ ] Contract deploy to Preview (`deployment.json` still null)
+- [x] **Contract deployed to Preview** — address, tx and block above, all
+      checkable from a terminal you control
 
 **Deliverable:** one command runs the 4 stages E2E against Preview; the
 "wrong secret" case fails at proof time without emitting a tx.
@@ -279,10 +419,15 @@ match the spec *exactly* (§3–§4).
 - [x] Separation by origin: two ports ⇒ different `localStorage`. The bridge is
       the clipboard and nothing else
 - [x] Service layer with the frozen §3.1 API, ready to plug `app/` in
-- [x] 42 tests, including one verifying the Explorer **cannot** import
+- [x] 66 tests, including one verifying the Explorer **cannot** import
       anything private from the Client
+- [x] **The Explorer reads the deployed contract**, straight from the Preview
+      indexer — same address as above, no SDK in the browser
 
-**Integration pending:** connect the real client when Block B is deployed to Preview.
+**Still local:** the Client's circuits run against `ClienteMock`. Writing to
+the contract from the browser needs Lace plus the local proof server, and that
+integration is not done — so the Client says "local" and means it. Reading is
+real; writing is the CLI's job today (`npm run report --workspace=app`).
 
 ### Block D — Tests (`tests/`) ✅
 
