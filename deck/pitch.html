@@ -1,0 +1,845 @@
+<title>PhantomTrace — Pitch</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     PhantomTrace · pitch deck — versión visual.
+     Cada slide lidera con un diagrama SVG dibujado a mano; el texto
+     es mínimo. Hereda el sistema visual del proyecto: registro
+     Cliente oscuro como base; violeta = acción/sellado, verde =
+     autoría probada, rojo = destinatario equivocado. La barra de
+     censura (lo privado que existe sin mostrarse) es el motivo.
+     ───────────────────────────────────────────────────────────── */
+
+  :root {
+    --body: #07080c;
+    --surface: #14161f;
+    --sunken: #0d0e15;
+    --card: #1d2030;
+    --censor: #1b1b28;
+    --line: rgba(201, 179, 245, 0.14);
+    --line-strong: rgba(201, 179, 245, 0.30);
+    --text: #edeef5;
+    --text2: #b6bcd4;
+    --muted: #8a92b2;
+    --dim: #5a6080;
+
+    --violeta: #8b6df0;
+    --profundo: #5b44c9;
+    --lila: #c9b3f5;
+    --accent: #c9b3f5;
+
+    --probado: #5fd0b4;
+    --probado-bg: #101c1a;
+    --rechazo: #ee7a6a;
+    --rechazo-bg: #1c1110;
+
+    --h10: rgba(201, 179, 245, 0.10);
+
+    --display: "Space Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospace;
+    --edge: clamp(1.6rem, 5vw, 5.5rem);
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--body);
+    color: var(--text);
+    font-family: var(--display);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .deck { position: fixed; inset: 0; }
+  .slide {
+    position: absolute; inset: 0;
+    display: none; flex-direction: column; justify-content: center;
+    padding: clamp(1.8rem, 5vh, 4rem) var(--edge) clamp(3.4rem, 7vh, 4.5rem);
+    overflow-y: auto;
+  }
+  .slide.on { display: flex; animation: rise 0.5s cubic-bezier(0.2,0.7,0.2,1) both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+  .wrap { max-width: 1180px; width: 100%; margin: 0 auto; }
+
+  /* ── Type ───────────────────────────────────────────────────── */
+  .eyebrow {
+    font-family: var(--mono); font-size: clamp(0.6rem, 1vw, 0.76rem);
+    letter-spacing: 0.32em; text-transform: uppercase; color: var(--accent);
+    margin: 0 0 1rem; display: flex; align-items: center; gap: 0.9rem;
+  }
+  .eyebrow::before { content: ""; width: 2.2rem; height: 1px; background: var(--accent); opacity: 0.6; }
+
+  h1 { font-size: clamp(2.8rem, 8vw, 6.6rem); line-height: 0.96; letter-spacing: -0.03em; font-weight: 600; margin: 0; text-wrap: balance; }
+  h2 { font-size: clamp(1.7rem, 4vw, 3.1rem); line-height: 1.04; letter-spacing: -0.025em; font-weight: 600; margin: 0; text-wrap: balance; max-width: 24ch; }
+  h3 { font-size: 1.05rem; margin: 0; font-weight: 600; }
+  p { margin: 0; }
+
+  .lede { font-size: clamp(1.02rem, 1.9vw, 1.4rem); line-height: 1.5; color: var(--text2); max-width: 46ch; text-wrap: pretty; }
+  .cap { font-family: var(--mono); font-size: clamp(0.72rem, 1.1vw, 0.86rem); letter-spacing: 0.05em; color: var(--muted); margin-top: 1rem; max-width: 68ch; }
+  .mono { font-family: var(--mono); }
+  .vio { color: var(--accent); }
+  .grn { color: var(--probado); }
+  .red { color: var(--rechazo); }
+
+  /* ── Figure / diagram ───────────────────────────────────────── */
+  .figwrap { width: 100%; max-width: 1120px; margin: clamp(1rem, 3.2vh, 2.2rem) auto 0; }
+  figure.dg { margin: 0; width: 100%; }
+  figure.dg svg { width: 100%; height: auto; display: block; overflow: visible; }
+  figure.dg figcaption { font-family: var(--mono); font-size: clamp(0.68rem, 1vw, 0.8rem); letter-spacing: 0.06em; color: var(--muted); margin-top: 1.1rem; text-align: center; text-transform: uppercase; text-wrap: balance; }
+  .dg text { font-family: var(--mono); }
+
+  /* ── Cover ──────────────────────────────────────────────────── */
+  .cover-head { display: grid; gap: 1.2rem; max-width: 30ch; }
+  .cover-thesis { font-size: clamp(1.05rem, 2vw, 1.45rem); line-height: 1.45; color: var(--text2); font-weight: 400; }
+  .cover-thesis b { color: var(--text); font-weight: 600; }
+
+  /* ── Slide header (eyebrow + h2 side layout) ───────────────── */
+  .shead { max-width: 30ch; }
+
+  /* ── Matrix (prior art) ─────────────────────────────────────── */
+  .matrix { display: grid; grid-template-columns: 1fr auto auto; gap: 0.35rem 2.4rem; align-items: center; max-width: 860px; margin: 0 auto; }
+  .matrix .mh { font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); text-align: center; padding-bottom: 0.5rem; }
+  .matrix .proj { color: var(--text2); font-size: clamp(0.92rem, 1.5vw, 1.1rem); padding: 0.5rem 0; border-top: 1px solid var(--line); }
+  .matrix .cell { text-align: center; font-size: 1.35rem; font-weight: 700; border-top: 1px solid var(--line); font-family: var(--mono); }
+  .matrix .yes { color: var(--muted); }
+  .matrix .no { color: var(--rechazo); }
+  .matrix .row-ours .proj { color: var(--accent); font-weight: 600; }
+  .matrix .row-ours .cell { border-top-color: var(--line-strong); }
+  .matrix .win { color: var(--probado); }
+  .matrix .head-cell { border-top: none; }
+
+  /* ── Honesty ────────────────────────────────────────────────── */
+  .hcols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin-top: 0.4rem; }
+  .hcol { border-radius: 14px; border: 1px solid var(--line); padding: 1.4rem 1.5rem; }
+  .hcol.real { background: var(--probado-bg); border-color: rgba(95,208,180,0.3); }
+  .hcol h3 { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem; font-size: 1.05rem; }
+  .hcol.real h3 { color: var(--probado); }
+  .hcol.mock h3 { color: var(--muted); }
+  .hcol ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+  .hcol li { display: grid; grid-template-columns: auto 1fr; gap: 0.65rem; align-items: baseline; font-size: 0.98rem; color: var(--text2); }
+  .hcol.mock li { color: var(--muted); }
+  .hcol .g { font-family: var(--mono); }
+  .hcol.real .g { color: var(--probado); }
+  .hcol.mock .g { color: var(--dim); }
+
+  /* ── Stats + mutants ────────────────────────────────────────── */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.6rem; }
+  .stat { border: 1px solid var(--line); border-radius: 14px; padding: 1.3rem; background: var(--surface); }
+  .stat .big { font-family: var(--mono); font-size: clamp(1.9rem, 3.8vw, 3rem); font-weight: 600; letter-spacing: -0.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+  .stat .lab { color: var(--muted); font-size: 0.86rem; line-height: 1.35; margin-top: 0.3rem; }
+  .stat.hero .big { color: var(--probado); }
+  .mutrow { display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap; }
+  .muts { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+  .mut { width: 34px; height: 34px; border-radius: 7px; display: grid; place-items: center; background: var(--rechazo-bg); border: 1px solid var(--rechazo); color: var(--rechazo); font-family: var(--mono); font-weight: 700; }
+  .mut-lab { font-family: var(--mono); font-size: 0.82rem; color: var(--muted); letter-spacing: 0.05em; }
+  .mut-lab b { color: var(--probado); }
+
+  /* ── Buyers + roadmap ───────────────────────────────────────── */
+  .buyers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.8rem; }
+  .buyer { border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem; background: var(--surface); display: grid; gap: 0.7rem; }
+  .buyer h3 { font-size: 1rem; }
+  .buyer p { color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
+  .buyer svg { width: 30px; height: 30px; color: var(--accent); }
+  .road { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.4rem; }
+  .road .r { font-family: var(--mono); font-size: 0.82rem; color: var(--text2); border: 1px solid var(--line); border-radius: 999px; padding: 0.45rem 0.9rem; }
+  .road .sep { color: var(--dim); }
+  .road-lab { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.9rem; }
+
+  /* ── Devices (demo) ─────────────────────────────────────────── */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1.4rem; margin-top: clamp(1rem,3vh,2rem); }
+  .device figcaption { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.06em; color: var(--muted); margin-top: 0.9rem; text-align: center; }
+  .device figcaption b { color: var(--text2); }
+  .device svg { width: 100%; height: auto; display: block; }
+
+  /* ── Closing ────────────────────────────────────────────────── */
+  .quote { font-size: clamp(1.4rem, 3.2vw, 2.7rem); line-height: 1.22; letter-spacing: -0.02em; font-weight: 500; max-width: 22ch; text-wrap: balance; }
+  .quote b { color: var(--accent); font-weight: 600; }
+  .team { display: flex; flex-wrap: wrap; gap: 1.4rem 2.4rem; }
+  .team .n { font-weight: 600; }
+  .team .r { color: var(--muted); font-size: 0.82rem; font-family: var(--mono); letter-spacing: 0.05em; }
+  .repo { display: inline-flex; align-items: center; gap: 0.7rem; font-family: var(--mono); font-size: 0.86rem; border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.6rem 1.2rem; color: var(--accent); }
+  .close-grid { display: grid; gap: clamp(1.4rem, 4vh, 2.6rem); max-width: 40ch; }
+
+  /* ── Chrome ─────────────────────────────────────────────────── */
+  .chrome { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 0.85rem var(--edge); pointer-events: none; z-index: 20; }
+  .brandmark { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 0.6rem; }
+  .dotm { width: 7px; height: 7px; border-radius: 50%; background: var(--violeta); display: inline-block; }
+  .dots { display: flex; gap: 0.5rem; pointer-events: auto; }
+  .dots button { width: 8px; height: 8px; padding: 0; border-radius: 50%; border: none; background: var(--dim); cursor: pointer; transition: transform 0.2s, background 0.2s; }
+  .dots button.on { background: var(--violeta); transform: scale(1.35); }
+  .counter { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.16em; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .progress { position: fixed; top: 0; left: 0; height: 2px; background: linear-gradient(90deg, var(--profundo), var(--violeta), var(--lila)); z-index: 30; transition: width 0.4s cubic-bezier(0.2,0.7,0.2,1); }
+  .arrows { position: fixed; inset: 0; pointer-events: none; z-index: 15; }
+  .arrows button { position: absolute; top: 0; bottom: 3.5rem; width: 12%; background: none; border: none; cursor: pointer; pointer-events: auto; opacity: 0; }
+  .arrows .prev { left: 0; } .arrows .next { right: 0; }
+  .hint { position: fixed; bottom: 3.3rem; left: 50%; transform: translateX(-50%); font-family: var(--mono); font-size: 0.64rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); z-index: 20; transition: opacity 0.6s; }
+
+  @media (max-width: 880px) {
+    .hcols, .split { grid-template-columns: 1fr; }
+    .stats, .buyers { grid-template-columns: 1fr 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .slide.on { animation: none; } * { scroll-behavior: auto; } }
+</style>
+
+<!-- global arrowhead marker -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0 0L10 5L0 10z" fill="currentColor"/>
+  </marker>
+</defs></svg>
+
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- 0 · COVER ─────────────────────────────────────────────── -->
+  <section class="slide on">
+    <div class="wrap">
+      <div class="cover-head">
+        <p class="eyebrow">Midnight Hack BA 2026 · Compact + ZK</p>
+        <h1>El anonimato,<br><span class="vio">reversible</span>.</h1>
+        <p class="cover-thesis">Probás que sos de adentro sin decir quién. La evidencia queda sellada. Y podés revelar la autoría después — <b>solo vos, solo a quien elijas, solo cuando quieras.</b></p>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 900 210" role="img" aria-label="Una identidad censurada se convierte en un hash sellado en el ledger; meses después una clave prueba la autoría en verde" style="color:var(--text2)">
+            <!-- beat 1: identidad privada, censurada -->
+            <text x="24" y="26" style="fill:var(--muted)" font-size="11" letter-spacing="1.5">PRIVADO · TU MÁQUINA</text>
+            <rect x="20" y="42" width="220" height="128" rx="14" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.32"/>
+            <circle cx="130" cy="98" r="20" fill="none" stroke="currentColor" stroke-opacity="0.55" stroke-width="2"/>
+            <path d="M96 150 C96 122 164 122 164 150" fill="none" stroke="currentColor" stroke-opacity="0.55" stroke-width="2"/>
+            <rect x="96" y="88" width="68" height="18" rx="3" fill="var(--censor)"/>
+            <text x="130" y="167" text-anchor="middle" style="fill:var(--muted)" font-size="10">identidad · credencial · evidencia</text>
+            <!-- arrow -->
+            <line x1="242" y1="106" x2="312" y2="106" stroke="currentColor" stroke-opacity="0.6" stroke-width="1.6" marker-end="url(#ah)"/>
+            <text x="277" y="96" text-anchor="middle" style="fill:var(--accent)" font-size="11">report()</text>
+            <!-- beat 2: hash sellado público -->
+            <text x="324" y="26" style="fill:var(--muted)" font-size="11" letter-spacing="1.5">PÚBLICO · LEDGER</text>
+            <rect x="322" y="82" width="236" height="48" rx="11" fill="var(--h10)" stroke="var(--accent)" stroke-opacity="0.9"/>
+            <g style="color:var(--accent)">
+              <rect x="342" y="102" width="16" height="12" rx="2" fill="currentColor"/>
+              <path d="M345 102 v-3 a5 5 0 0 1 10 0 v3" fill="none" stroke="currentColor" stroke-width="2"/>
+            </g>
+            <text x="372" y="110" style="fill:var(--accent)" font-size="14">reportId 7f3a…c091</text>
+            <!-- dashed months -->
+            <line x1="560" y1="106" x2="628" y2="106" stroke="currentColor" stroke-opacity="0.4" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#ah)"/>
+            <text x="594" y="96" text-anchor="middle" style="fill:var(--muted)" font-size="10">meses…</text>
+            <!-- beat 3: reveal key -> green -->
+            <g style="color:var(--violeta)" stroke="currentColor" stroke-width="3" fill="none">
+              <circle cx="648" cy="106" r="9"/>
+              <line x1="657" y1="106" x2="678" y2="106"/>
+              <line x1="672" y1="106" x2="672" y2="114"/>
+            </g>
+            <rect x="694" y="82" width="196" height="48" rx="11" fill="var(--probado-bg)" stroke="var(--probado)"/>
+            <text x="714" y="111" style="fill:var(--probado)" font-size="13">✓ autoría probada</text>
+          </svg>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1 · PROBLEMA ──────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">El problema</p>
+        <h2>Hoy elegís: anonimato <span class="red">o</span> recompensa.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 900 200" role="img" aria-label="Cuatro requisitos: ser de adentro, evidencia inalterable y anonimato están resueltos; cobrar la recompensa obliga a revelarse" style="color:var(--text2)">
+            <!-- tile 1: de adentro -->
+            <g>
+              <rect x="14" y="26" width="200" height="150" rx="13" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.28"/>
+              <g style="color:var(--accent)" transform="translate(114,78)" stroke="currentColor" stroke-width="2" fill="none">
+                <circle cx="0" cy="-6" r="13"/><path d="M-20 28 C-20 4 20 4 20 28"/>
+              </g>
+              <text x="216" y="42" text-anchor="end" style="fill:var(--probado)" font-size="17">✓</text>
+              <text x="114" y="140" text-anchor="middle" style="fill:var(--text)" font-size="14">de adentro</text>
+              <text x="114" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">insider real</text>
+            </g>
+            <!-- tile 2: inalterable -->
+            <g>
+              <rect x="240" y="26" width="200" height="150" rx="13" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.28"/>
+              <g style="color:var(--accent)" transform="translate(340,74)" stroke="currentColor" stroke-width="2.2" fill="none">
+                <rect x="-16" y="0" width="32" height="24" rx="3" fill="currentColor" stroke="none"/>
+                <path d="M-10 0 v-7 a10 10 0 0 1 20 0 v7"/>
+              </g>
+              <text x="442" y="42" text-anchor="end" style="fill:var(--probado)" font-size="17">✓</text>
+              <text x="340" y="140" text-anchor="middle" style="fill:var(--text)" font-size="14">inalterable</text>
+              <text x="340" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">evidencia sellada</text>
+            </g>
+            <!-- tile 3: anónimo (censor motif) -->
+            <g>
+              <rect x="466" y="26" width="200" height="150" rx="13" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.28"/>
+              <g transform="translate(566,74)">
+                <circle cx="0" cy="0" r="20" fill="none" stroke="currentColor" stroke-opacity="0.55" stroke-width="2"/>
+                <rect x="-22" y="-6" width="44" height="13" rx="2.5" fill="var(--censor)"/>
+              </g>
+              <text x="668" y="42" text-anchor="end" style="fill:var(--probado)" font-size="17">✓</text>
+              <text x="566" y="140" text-anchor="middle" style="fill:var(--text)" font-size="14">anónimo</text>
+              <text x="566" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">sin msg.sender</text>
+            </g>
+            <!-- tile 4: recompensa (roto / rojo) -->
+            <g>
+              <rect x="692" y="26" width="200" height="150" rx="13" fill="var(--rechazo-bg)" stroke="var(--rechazo)" stroke-opacity="0.6"/>
+              <g style="color:var(--rechazo)" transform="translate(792,72)" stroke="currentColor" stroke-width="2.2" fill="none">
+                <path d="M-14 -10 h28 v6 a14 14 0 0 1 -28 0 z"/>
+                <path d="M-14 -8 h-6 a7 7 0 0 0 6 8"/><path d="M14 -8 h6 a7 7 0 0 1 -6 8"/>
+                <line x1="0" y1="10" x2="0" y2="18"/><line x1="-9" y1="20" x2="9" y2="20"/>
+              </g>
+              <text x="870" y="42" text-anchor="end" style="fill:var(--rechazo)" font-size="17">✕</text>
+              <text x="792" y="140" text-anchor="middle" style="fill:var(--rechazo)" font-size="14">recompensa</text>
+              <text x="792" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">exige revelarte</text>
+            </g>
+          </svg>
+          <figcaption>La SEC paga 10–30% de la multa solo a quien prueba que fue el primero. Eso hoy = quemar tu anonimato.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · SOLUCIÓN (boundary) ───────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">La solución · 3 circuitos</p>
+        <h2>Lo privado no sale de tu máquina. Lo público es un hash.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 320" role="img" aria-label="Los datos privados entran a un circuito ZK report(); solo cruzan la frontera al ledger público dos hashes: reportId y nullifier" style="color:var(--text2)">
+            <!-- private box -->
+            <text x="20" y="52" style="fill:var(--muted)" font-size="12" letter-spacing="1.5">NUNCA SALE DE TU MÁQUINA</text>
+            <rect x="20" y="64" width="310" height="212" rx="16" fill="var(--sunken)" stroke="currentColor" stroke-opacity="0.32"/>
+            <!-- 3 censored rows -->
+            <text x="46" y="112" style="fill:var(--text2)" font-size="13">identidad</text>
+            <rect x="176" y="96" width="132" height="24" rx="5" fill="var(--censor)"/>
+            <text x="46" y="168" style="fill:var(--text2)" font-size="13">credencial</text>
+            <rect x="176" y="152" width="132" height="24" rx="5" fill="var(--censor)"/>
+            <text x="46" y="224" style="fill:var(--text2)" font-size="13">evidencia</text>
+            <rect x="176" y="208" width="132" height="24" rx="5" fill="var(--censor)"/>
+            <!-- arrow to circuit -->
+            <line x1="330" y1="170" x2="388" y2="170" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.6" marker-end="url(#ah)"/>
+            <text x="359" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10">witnesses</text>
+            <!-- circuit -->
+            <rect x="390" y="132" width="150" height="76" rx="14" fill="var(--h10)" stroke="var(--accent)"/>
+            <text x="465" y="168" text-anchor="middle" style="fill:var(--accent)" font-size="16">report()</text>
+            <text x="465" y="190" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">circuito ZK</text>
+            <!-- boundary -->
+            <line x1="588" y1="56" x2="588" y2="284" stroke="currentColor" stroke-opacity="0.32" stroke-width="1.4" stroke-dasharray="4 6"/>
+            <text x="588" y="46" text-anchor="middle" style="fill:var(--muted)" font-size="10" letter-spacing="1">privado · público</text>
+            <!-- arrow crossing -->
+            <line x1="540" y1="170" x2="620" y2="170" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.6" marker-end="url(#ah)"/>
+            <text x="580" y="160" text-anchor="middle" style="fill:var(--accent)" font-size="10">prueba ZK</text>
+            <!-- public ledger box -->
+            <text x="622" y="90" style="fill:var(--muted)" font-size="12" letter-spacing="1.5">LO ÚNICO QUE SE PUBLICA</text>
+            <rect x="622" y="102" width="318" height="150" rx="16" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.32"/>
+            <rect x="646" y="126" width="270" height="46" rx="10" fill="var(--h10)" stroke="var(--accent)" stroke-opacity="0.9"/>
+            <g style="color:var(--accent)"><rect x="666" y="145" width="15" height="11" rx="2" fill="currentColor"/><path d="M669 145 v-3 a4.5 4.5 0 0 1 9 0 v3" fill="none" stroke="currentColor" stroke-width="2"/></g>
+            <text x="694" y="153" style="fill:var(--accent)" font-size="13.5">reportId · sellado</text>
+            <rect x="646" y="182" width="270" height="46" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+            <text x="666" y="209" style="fill:var(--text2)" font-size="13.5">nullifier · anti-spam</text>
+          </svg>
+          <figcaption>Identidad, credencial y evidencia nunca tocan la cadena. El ledger solo ve dos hashes.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · LOS 4 TIEMPOS ─────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Los 4 tiempos</p>
+        <h2>De la denuncia sellada a la autoría probada.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 220" role="img" aria-label="Cuatro etapas en línea: la organización se registra, el empleado denuncia, la evidencia se sella, y meses después se revela la autoría" style="color:var(--text2)">
+            <line x1="120" y1="112" x2="840" y2="112" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.4"/>
+            <!-- T1 building -->
+            <g transform="translate(120,60)"><g style="color:var(--accent)" stroke="currentColor" stroke-width="2" fill="none">
+              <rect x="-17" y="-14" width="34" height="34" rx="2"/><line x1="-8" y1="-6" x2="-8" y2="-6.5"/>
+              <rect x="-11" y="-8" width="6" height="6" fill="currentColor" stroke="none"/><rect x="5" y="-8" width="6" height="6" fill="currentColor" stroke="none"/>
+              <rect x="-4" y="8" width="8" height="12" fill="currentColor" stroke="none"/>
+            </g></g>
+            <circle cx="120" cy="112" r="6" fill="var(--accent)"/>
+            <text x="120" y="152" text-anchor="middle" style="fill:var(--accent)" font-size="11">T1</text>
+            <text x="120" y="172" text-anchor="middle" style="fill:var(--text)" font-size="14">Se registra</text>
+            <text x="120" y="192" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">ancla de credenciales</text>
+            <!-- T2 envelope-lock -->
+            <g transform="translate(360,60)"><g style="color:var(--accent)" stroke="currentColor" stroke-width="2" fill="none">
+              <rect x="-18" y="-10" width="36" height="26" rx="3"/><path d="M-18 -8 L0 6 L18 -8"/>
+            </g></g>
+            <circle cx="360" cy="112" r="6" fill="var(--accent)"/>
+            <text x="360" y="152" text-anchor="middle" style="fill:var(--accent)" font-size="11">T2</text>
+            <text x="360" y="172" text-anchor="middle" style="fill:var(--text)" font-size="14">Se denuncia</text>
+            <text x="360" y="192" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">hay denuncia, no de quién</text>
+            <!-- T3 shield-check -->
+            <g transform="translate(600,60)"><g style="color:var(--accent)" stroke="currentColor" stroke-width="2" fill="none">
+              <path d="M0 -16 L15 -10 V2 C15 13 0 19 0 19 C0 19 -15 13 -15 2 V-10 Z"/>
+              <path d="M-6 0 L-2 5 L7 -6"/>
+            </g></g>
+            <circle cx="600" cy="112" r="6" fill="var(--accent)"/>
+            <text x="600" y="152" text-anchor="middle" style="fill:var(--accent)" font-size="11">T3</text>
+            <text x="600" y="172" text-anchor="middle" style="fill:var(--text)" font-size="14">Se sella</text>
+            <text x="600" y="192" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">un byte distinto ⇒ falla</text>
+            <!-- T4 key green -->
+            <g transform="translate(840,60)"><g style="color:var(--probado)" stroke="currentColor" stroke-width="2.4" fill="none">
+              <circle cx="-8" cy="0" r="10"/><line x1="2" y1="0" x2="20" y2="0"/><line x1="14" y1="0" x2="14" y2="8"/><line x1="20" y1="0" x2="20" y2="9"/>
+            </g></g>
+            <circle cx="840" cy="112" r="6" fill="var(--probado)"/>
+            <text x="840" y="152" text-anchor="middle" style="fill:var(--probado)" font-size="11">T4</text>
+            <text x="840" y="172" text-anchor="middle" style="fill:var(--text)" font-size="14">Se revela</text>
+            <text x="840" y="192" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">autoría ante tu fiscal</text>
+          </svg>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 · MECANISMO ─────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">El mecanismo</p>
+        <h2>Un solo <span class="mono" style="font-size:0.82em">H()</span>. Todo depende de qué entra.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 400" role="img" aria-label="Tres máquinas de hash: reportId sella la evidencia, el nullifier evita spam, y la autoría se ata a la clave del fiscal — verde con la clave correcta, roja con cualquier otra" style="color:var(--text2)">
+            <!-- ROW 1: reportId -->
+            <g font-size="13">
+              <rect x="16" y="22" width="150" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="91" y="46" text-anchor="middle" style="fill:var(--text)">evidencia</text>
+              <rect x="180" y="22" width="110" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="235" y="46" text-anchor="middle" style="fill:var(--text)">secret</text>
+              <line x1="300" y1="41" x2="352" y2="41" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+              <rect x="356" y="16" width="52" height="50" rx="11" fill="var(--h10)" stroke="var(--accent)"/><text x="382" y="48" text-anchor="middle" style="fill:var(--accent)" font-size="21">H</text>
+              <line x1="410" y1="41" x2="462" y2="41" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+              <rect x="466" y="20" width="210" height="42" rx="10" fill="var(--h10)" stroke="var(--accent)" stroke-opacity="0.9"/>
+              <g style="color:var(--accent)"><rect x="486" y="37" width="14" height="10" rx="2" fill="currentColor"/><path d="M489 37 v-3 a4 4 0 0 1 8 0 v3" fill="none" stroke="currentColor" stroke-width="1.8"/></g>
+              <text x="510" y="46" style="fill:var(--accent)">reportId · evidencia sellada</text>
+            </g>
+            <!-- ROW 2: nullifier -->
+            <g font-size="13">
+              <rect x="16" y="150" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="174" text-anchor="middle" style="fill:var(--text)">secret</text>
+              <rect x="122" y="150" width="72" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="158" y="174" text-anchor="middle" style="fill:var(--text)">org</text>
+              <rect x="204" y="150" width="90" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="249" y="174" text-anchor="middle" style="fill:var(--text)">período</text>
+              <line x1="300" y1="169" x2="352" y2="169" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+              <rect x="356" y="144" width="52" height="50" rx="11" fill="var(--h10)" stroke="var(--accent)"/><text x="382" y="176" text-anchor="middle" style="fill:var(--accent)" font-size="21">H</text>
+              <line x1="410" y1="169" x2="462" y2="169" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+              <rect x="466" y="148" width="210" height="42" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
+              <text x="486" y="174" style="fill:var(--text2)">nullifier · anti-spam</text>
+            </g>
+            <!-- ROW 3: authorship + designated verifier -->
+            <g font-size="13">
+              <rect x="16" y="290" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="314" text-anchor="middle" style="fill:var(--text)">secret</text>
+              <rect x="122" y="290" width="120" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="182" y="314" text-anchor="middle" style="fill:var(--text)">denunciaId</text>
+              <rect x="252" y="290" width="112" height="38" rx="9" fill="var(--probado-bg)" stroke="var(--probado)"/>
+              <g style="color:var(--probado)" stroke="currentColor" stroke-width="2" fill="none" transform="translate(272,309)"><circle cx="0" cy="0" r="7"/><line x1="7" y1="0" x2="20" y2="0"/><line x1="15" y1="0" x2="15" y2="6"/></g>
+              <text x="300" y="314" style="fill:var(--probado)">fiscalPk</text>
+              <line x1="372" y1="309" x2="410" y2="309" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+              <rect x="414" y="284" width="52" height="50" rx="11" fill="var(--h10)" stroke="var(--accent)"/><text x="440" y="316" text-anchor="middle" style="fill:var(--accent)" font-size="21">H</text>
+              <!-- branch to two verdicts -->
+              <line x1="468" y1="300" x2="528" y2="278" stroke="var(--probado)" stroke-width="1.6" marker-end="url(#ah)"/>
+              <line x1="468" y1="318" x2="528" y2="340" stroke="var(--rechazo)" stroke-width="1.6" marker-end="url(#ah)"/>
+              <rect x="532" y="258" width="230" height="40" rx="10" fill="var(--probado-bg)" stroke="var(--probado)"/>
+              <text x="552" y="283" style="fill:var(--probado)">✓ el fiscal elegido — verifica</text>
+              <rect x="532" y="322" width="230" height="40" rx="10" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
+              <text x="552" y="347" style="fill:var(--rechazo)">✕ cualquier otro — no vale nada</text>
+            </g>
+          </svg>
+          <figcaption>La autoría se ata a la clave del fiscal (designated verifier). Si el empleador la intercepta, no verifica.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · DEMO (dual ledger) ────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">La demo · dual-ledger</p>
+        <h2>Dos apps. Dos orígenes. Sin estado compartido.</h2>
+      </div>
+      <div class="split">
+        <!-- CLIENTE (oscuro) -->
+        <figure class="device">
+          <svg viewBox="0 0 460 300" role="img" aria-label="App Cliente en :3000, oscura, con proof server en vivo y datos privados tras barra de censura">
+            <rect x="30" y="20" width="400" height="230" rx="12" fill="#0d0e15" stroke="#33324a"/>
+            <circle cx="52" cy="42" r="4" fill="#5a6080"/><circle cx="66" cy="42" r="4" fill="#5a6080"/><circle cx="80" cy="42" r="4" fill="#5a6080"/>
+            <text x="410" y="46" text-anchor="end" fill="#c9b3f5" font-family="var(--mono)" font-size="11">:3000 · cliente</text>
+            <line x1="30" y1="58" x2="430" y2="58" stroke="#22243250"/>
+            <!-- proof server live -->
+            <circle cx="58" cy="82" r="4" fill="#5fd0b4"/><text x="70" y="86" fill="#5fd0b4" font-family="var(--mono)" font-size="12">proof server · live</text>
+            <!-- private rows censored -->
+            <text x="52" y="122" fill="#8a92b2" font-family="var(--mono)" font-size="12">evidencia</text><rect x="150" y="110" width="256" height="18" rx="3" fill="#1b1b28"/>
+            <text x="52" y="152" fill="#8a92b2" font-family="var(--mono)" font-size="12">secret</text><rect x="150" y="140" width="256" height="18" rx="3" fill="#1b1b28"/>
+            <text x="52" y="182" fill="#8a92b2" font-family="var(--mono)" font-size="12">credencial</text><rect x="150" y="170" width="256" height="18" rx="3" fill="#1b1b28"/>
+            <!-- action button -->
+            <rect x="52" y="206" width="130" height="30" rx="7" fill="#8b6df0"/><text x="117" y="226" text-anchor="middle" fill="#151520" font-family="var(--mono)" font-size="12">denunciar</text>
+            <!-- laptop base -->
+            <rect x="150" y="256" width="160" height="8" rx="4" fill="#22243a"/>
+          </svg>
+          <figcaption><b>Cliente</b> — corre en tu máquina · guarda los witnesses</figcaption>
+        </figure>
+        <!-- EXPLORER (claro) -->
+        <figure class="device">
+          <svg viewBox="0 0 460 300" role="img" aria-label="App Explorer en :3001, clara, sin proof server: ledger público con columna autor vacía y verificación de sello">
+            <rect x="30" y="20" width="400" height="244" rx="12" fill="#f1f2f7" stroke="#c9cbdb"/>
+            <rect x="30" y="20" width="400" height="34" rx="12" fill="#e5e7f0"/>
+            <circle cx="52" cy="37" r="4" fill="#a7add0"/><circle cx="66" cy="37" r="4" fill="#a7add0"/>
+            <rect x="90" y="28" width="300" height="18" rx="9" fill="#fbfbfe"/><text x="104" y="41" fill="#6e7490" font-family="var(--mono)" font-size="11">:3001 · explorer</text>
+            <!-- ledger header -->
+            <text x="52" y="80" fill="#6e7490" font-family="var(--mono)" font-size="10.5" letter-spacing="1">DENUNCIA</text>
+            <text x="300" y="80" fill="#6e7490" font-family="var(--mono)" font-size="10.5" letter-spacing="1">AUTOR</text>
+            <!-- 3 rows, autor = — -->
+            <g font-family="var(--mono)" font-size="12">
+              <text x="52" y="106" fill="#171a28">7f3a…c091</text><text x="300" y="106" fill="#c4453a">—</text>
+              <text x="52" y="132" fill="#171a28">b2e8…41d7</text><text x="300" y="132" fill="#c4453a">—</text>
+              <text x="52" y="158" fill="#171a28">1a9c…88f0</text><text x="300" y="158" fill="#c4453a">—</text>
+            </g>
+            <line x1="52" y1="118" x2="408" y2="118" stroke="#d7d9e6"/><line x1="52" y1="144" x2="408" y2="144" stroke="#d7d9e6"/>
+            <!-- verdict bar -->
+            <rect x="52" y="186" width="356" height="52" rx="10" fill="#e4f0eb" stroke="#12876e"/>
+            <text x="70" y="209" fill="#12876e" font-family="var(--mono)" font-size="13">✓ sello verificado</text>
+            <text x="70" y="227" fill="#6e7490" font-family="var(--mono)" font-size="10.5">un byte distinto ⇒ rojo</text>
+          </svg>
+          <figcaption><b>Explorer</b> — lee la cadena · sin proof server, nada privado</figcaption>
+        </figure>
+      </div>
+      <p class="cap" style="text-align:center;margin-left:auto;margin-right:auto">Dos puertos ⇒ dos <span class="mono">localStorage</span> distintos. El único puente es el portapapeles.</p>
+    </div>
+  </section>
+
+  <!-- 6 · PRIOR ART ─────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Prior art · de frente</p>
+        <h2>El buzón ya existe. La autoría diferida, no.</h2>
+      </div>
+      <div class="figwrap">
+        <div class="matrix">
+          <div class="head-cell"></div>
+          <div class="mh head-cell">Buzón anónimo</div>
+          <div class="mh head-cell">Autoría diferida</div>
+
+          <div class="proj">midnight-whistleblower <span style="color:var(--dim);font-size:0.8em">· ganó DEV.to</span></div>
+          <div class="cell yes">✓</div><div class="cell no">✕</div>
+
+          <div class="proj">Dawn <span style="color:var(--dim);font-size:0.8em">· ganó "Protect That Data"</span></div>
+          <div class="cell yes">✓</div><div class="cell no">✕</div>
+
+          <div class="proj">SpillSafe <span style="color:var(--dim);font-size:0.8em">· Devpost 2025</span></div>
+          <div class="cell yes">✓</div><div class="cell no">✕</div>
+
+          <div class="proj">ZK Whistleblower <span style="color:var(--dim);font-size:0.8em">· Catalyst F15</span></div>
+          <div class="cell yes">✓</div><div class="cell no">✕</div>
+
+          <div class="proj">StealthNote · Semaphore <span style="color:var(--dim);font-size:0.8em">· Aztec / Ethereum</span></div>
+          <div class="cell yes">✓</div><div class="cell no">✕</div>
+
+          <div class="proj">Papers 2023–2025 <span style="color:var(--dim);font-size:0.8em">· solo en teoría</span></div>
+          <div class="cell yes">—</div><div class="cell no">✕</div>
+
+          <div class="proj row-ours" style="border:0">PhantomTrace</div>
+          <div class="cell win row-ours">✓</div><div class="cell win row-ours">✓</div>
+        </div>
+      </div>
+      <p class="cap" style="text-align:center;margin-left:auto;margin-right:auto">La autoría diferida está en papers desde 2023. <span class="vio">Nadie la había shippeado.</span> Nosotros sí.</p>
+    </div>
+  </section>
+
+  <!-- 6b · CASO · LA ESCENA ─────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Caso real · empresa</p>
+        <h2>Por qué hoy nadie usa el canal interno.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 235" role="img" aria-label="Lena denuncia por el canal interno, pero ese canal lo administra el CFO acusado; el resultado es evidencia enterrada y Lena despedida" style="color:var(--text2)">
+            <!-- Lena -->
+            <g style="color:var(--accent)" transform="translate(80,86)" stroke="currentColor" stroke-width="2" fill="none"><circle cx="0" cy="-8" r="12"/><path d="M-18 22 C-18 0 18 0 18 22"/></g>
+            <text x="80" y="140" text-anchor="middle" style="fill:var(--text)" font-size="13">Lena · Finanzas</text>
+            <line x1="110" y1="80" x2="214" y2="80" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.6" marker-end="url(#ah)"/>
+            <text x="161" y="70" text-anchor="middle" style="fill:var(--muted)" font-size="10">denuncia</text>
+            <rect x="216" y="54" width="196" height="52" rx="10" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/>
+            <text x="314" y="85" text-anchor="middle" style="fill:var(--text2)" font-size="13">canal interno</text>
+            <line x1="412" y1="80" x2="538" y2="80" stroke="currentColor" stroke-opacity="0.55" stroke-width="1.6" marker-end="url(#ah)"/>
+            <text x="475" y="70" text-anchor="middle" style="fill:var(--muted)" font-size="10">lo administra</text>
+            <rect x="542" y="46" width="286" height="70" rx="12" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
+            <g style="color:var(--rechazo)" transform="translate(578,82)" stroke="currentColor" stroke-width="1.8" fill="none"><circle cx="0" cy="-6" r="8"/><path d="M-12 16 C-12 2 12 2 12 16"/></g>
+            <text x="620" y="76" style="fill:var(--rechazo)" font-size="13">CFO + 2 directores</text>
+            <text x="620" y="96" style="fill:var(--muted)" font-size="11">€40M inflados</text>
+            <g style="color:var(--rechazo)" transform="translate(806,70)"><path d="M0 -11 L12 11 H-12 Z" fill="none" stroke="currentColor" stroke-width="1.8"/><line x1="0" y1="-3" x2="0" y2="4" stroke="currentColor" stroke-width="1.8"/><circle cx="0" cy="8" r="1.1" fill="currentColor"/></g>
+            <!-- red outcomes -->
+            <line x1="620" y1="116" x2="500" y2="164" stroke="var(--rechazo)" stroke-width="1.5" marker-end="url(#ah)"/>
+            <line x1="740" y1="116" x2="740" y2="164" stroke="var(--rechazo)" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="360" y="168" width="216" height="44" rx="10" fill="none" stroke="var(--rechazo)" stroke-opacity="0.7"/>
+            <text x="468" y="195" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">✕ evidencia enterrada</text>
+            <rect x="596" y="168" width="248" height="44" rx="10" fill="none" stroke="var(--rechazo)" stroke-opacity="0.7"/>
+            <text x="720" y="195" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">✕ Lena despedida en 60 días</text>
+          </svg>
+          <figcaption>Nordwind Logistics AG · 8.000 empleados · cotiza en EE.UU. y Frankfurt. El canal interno lo opera el área denunciada.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6c · CASO · EL DESPLIEGUE ──────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Caso real · el despliegue</p>
+        <h2>Se enchufa al directorio que ya tienen.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 300" role="img" aria-label="Azure AD emite credenciales, Compliance registra la organización sin nombres, Lena reporta en privado y solo dos hashes llegan al ledger; si el CFO edita la evidencia, el hash ya no coincide" style="color:var(--text2)">
+            <!-- top flow -->
+            <rect x="14" y="60" width="182" height="56" rx="10" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/>
+            <g style="color:var(--accent)" transform="translate(40,88)" stroke="currentColor" stroke-width="2.2" fill="none"><circle cx="0" cy="0" r="7"/><line x1="7" y1="0" x2="20" y2="0"/><line x1="15" y1="0" x2="15" y2="6"/></g>
+            <text x="70" y="84" style="fill:var(--text)" font-size="12.5">Azure AD · SSO</text>
+            <text x="70" y="102" style="fill:var(--muted)" font-size="10">ya existe</text>
+            <line x1="198" y1="88" x2="234" y2="88" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="236" y="60" width="214" height="56" rx="10" fill="var(--h10)" stroke="var(--accent)"/>
+            <text x="343" y="84" text-anchor="middle" style="fill:var(--accent)" font-size="12.5">registerOrganization</text>
+            <text x="343" y="102" text-anchor="middle" style="fill:var(--muted)" font-size="10">1 tx · sin nombres</text>
+            <line x1="450" y1="88" x2="486" y2="88" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="488" y="60" width="196" height="56" rx="10" fill="var(--h10)" stroke="var(--accent)"/>
+            <text x="586" y="82" text-anchor="middle" style="fill:var(--accent)" font-size="12.5">Lena · report()</text>
+            <rect x="512" y="92" width="148" height="14" rx="3" fill="var(--censor)"/>
+            <line x1="684" y1="88" x2="720" y2="88" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="722" y="52" width="224" height="72" rx="12" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/>
+            <text x="738" y="72" style="fill:var(--muted)" font-size="10" letter-spacing="1.5">LEDGER PÚBLICO</text>
+            <text x="738" y="93" style="fill:var(--accent)" font-size="12.5">▪ reportId · sellado</text>
+            <text x="738" y="112" style="fill:var(--text2)" font-size="12.5">▪ nullifier</text>
+            <!-- tamper proof -->
+            <text x="236" y="196" style="fill:var(--muted)" font-size="11">Y si intentan taparlo:</text>
+            <rect x="236" y="206" width="206" height="48" rx="10" fill="none" stroke="var(--rechazo)" stroke-opacity="0.7"/>
+            <text x="339" y="235" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">CFO edita la evidencia</text>
+            <line x1="442" y1="230" x2="504" y2="230" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
+            <text x="473" y="220" text-anchor="middle" style="fill:var(--muted)" font-size="9.5">comparar</text>
+            <rect x="506" y="206" width="300" height="48" rx="10" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
+            <text x="656" y="235" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">✕ hash ≠ · queda registrado</text>
+            <line x1="820" y1="124" x2="700" y2="206" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.4" stroke-dasharray="4 5"/>
+          </svg>
+          <figcaption>El emisor real es el directorio corporativo que ya existe. Ningún nombre de denunciante toca la cadena — y editar la prueba después la delata.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6d · CASO · EL FLUJO DE LA PLATA ───────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Caso real · quién firma el cheque</p>
+        <h2>Lena cobra. Nordwind nunca se entera.</h2>
+      </div>
+      <div class="figwrap">
+        <figure class="dg">
+          <svg viewBox="0 0 960 270" role="img" aria-label="El reportId sellado en el mes 0 prueba que Lena fue la primera; meses después revela autoría al fiscal de la SEC y cobra 10 a 30 por ciento de la multa; si Nordwind intercepta la prueba, no verifica" style="color:var(--text2)">
+            <!-- money flow -->
+            <rect x="14" y="62" width="182" height="58" rx="11" fill="var(--h10)" stroke="var(--accent)"/>
+            <text x="105" y="86" text-anchor="middle" style="fill:var(--accent)" font-size="12.5">reportId sellado</text>
+            <text x="105" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">mes 0 · "fui la primera"</text>
+            <line x1="196" y1="91" x2="246" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#ah)"/>
+            <text x="221" y="81" text-anchor="middle" style="fill:var(--muted)" font-size="9.5">meses…</text>
+            <rect x="248" y="62" width="212" height="58" rx="11" fill="var(--probado-bg)" stroke="var(--probado)"/>
+            <g style="color:var(--probado)" transform="translate(272,91)" stroke="currentColor" stroke-width="2.2" fill="none"><circle cx="0" cy="0" r="7"/><line x1="7" y1="0" x2="18" y2="0"/><line x1="13" y1="0" x2="13" y2="6"/></g>
+            <text x="356" y="86" text-anchor="middle" style="fill:var(--probado)" font-size="12.5">revealAuthorship</text>
+            <text x="356" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">→ fiscal SEC · su clave</text>
+            <line x1="460" y1="91" x2="496" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="498" y="62" width="176" height="58" rx="11" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/>
+            <text x="586" y="86" text-anchor="middle" style="fill:var(--text)" font-size="12.5">SEC prueba</text>
+            <text x="586" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">el fraude</text>
+            <line x1="674" y1="91" x2="710" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="712" y="54" width="234" height="74" rx="12" fill="var(--probado-bg)" stroke="var(--probado)"/>
+            <text x="829" y="88" text-anchor="middle" style="fill:var(--probado)" font-size="21">10–30%</text>
+            <text x="829" y="110" text-anchor="middle" style="fill:var(--muted)" font-size="11">de la multa → recompensa</text>
+            <!-- designated verifier failure -->
+            <line x1="356" y1="120" x2="356" y2="182" stroke="var(--rechazo)" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="150" y="188" width="470" height="50" rx="11" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
+            <text x="385" y="218" text-anchor="middle" style="fill:var(--rechazo)" font-size="12.5">✕ Nordwind intercepta la prueba → clave equivocada → en blanco</text>
+          </svg>
+          <figcaption>Lena cobra la recompensa sin quemar su anonimato. Y Nordwind cumple la Directiva UE sin crear una base de datos de denunciantes que filtrar.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 · HONESTIDAD ────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Honestidad</p>
+        <h2>Qué es real, qué está mockeado.</h2>
+      </div>
+      <div class="hcols">
+        <div class="hcol real">
+          <h3>◆ Real, verificable</h3>
+          <ul>
+            <li><span class="g">sha256</span><span>El SHA-256 de la evidencia — comprobalo vos</span></li>
+            <li><span class="g">≡</span><span>4 derivaciones = espejo exacto del contrato</span></li>
+            <li><span class="g">assert</span><span>El circuito rechaza de verdad lo inválido</span></li>
+            <li><span class="g">✓/✕</span><span>Los veredictos son recomputación, no un <span class="mono">if</span></span></li>
+          </ul>
+        </div>
+        <div class="hcol mock">
+          <h3>◇ Fabricado (hasta integrar Bloque B)</h3>
+          <ul>
+            <li><span class="g">txId</span><span>Los txId y las alturas de bloque</span></li>
+            <li><span class="g">sync</span><span>El "✓ synced" del indexer</span></li>
+            <li><span class="g">ms</span><span>Los tiempos de proving</span></li>
+            <li><span class="g">chain</span><span>La existencia de una cadena</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="cap" style="text-align:center;margin-left:auto;margin-right:auto">No prometemos que la denuncia sea verdadera — probamos que viene de adentro y que nadie la alteró.</p>
+    </div>
+  </section>
+
+  <!-- 8 · TESTS ─────────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">La ingeniería</p>
+        <h2>Tests con dientes.</h2>
+      </div>
+      <div class="figwrap" style="max-width:none">
+        <div class="stats">
+          <div class="stat"><div class="big">48</div><div class="lab">casos, cada uno contra <b>los dos backends</b></div></div>
+          <div class="stat"><div class="big">2</div><div class="lab">backends independientes: <span class="mono">model</span> vs contrato</div></div>
+          <div class="stat hero"><div class="big">13/13</div><div class="lab">mutantes inyectados, todos <b>muertos</b></div></div>
+          <div class="stat"><div class="big">1.1s</div><div class="lab">corrida completa, sin red ni proof server</div></div>
+        </div>
+        <div class="mutrow">
+          <div class="muts">
+            <div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div><div class="mut">✕</div>
+          </div>
+          <div class="mut-lab">13 defectos deliberados inyectados uno a uno.<br><b>Los 13 mueren.</b> El sobreviviente inicial destapó un bug real de aridad.</div>
+        </div>
+      </div>
+      <p class="cap" style="margin-left:auto;margin-right:auto;text-align:center">Dos implementaciones que llegaron por separado coinciden en cada digest publicado y en todo el ledger.</p>
+    </div>
+  </section>
+
+  <!-- 9 · BIZDEV + ROADMAP ──────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead">
+        <p class="eyebrow">Quién compra · qué sigue</p>
+        <h2>Denuncias creíbles, como producto.</h2>
+      </div>
+      <div class="figwrap" style="max-width:none">
+        <div class="buyers">
+          <div class="buyer">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="8" y="14" width="24" height="20"/><path d="M6 14 L20 6 L34 14"/><line x1="15" y1="20" x2="15" y2="28"/><line x1="25" y1="20" x2="25" y2="28"/></svg>
+            <h3>SEC-style</h3><p>Recompensa de 10–30% al primero en reportar.</p>
+          </div>
+          <div class="buyer">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><circle cx="20" cy="20" r="14"/><circle cx="20" cy="8" r="1.6" fill="currentColor"/><circle cx="30" cy="14" r="1.6" fill="currentColor"/><circle cx="30" cy="26" r="1.6" fill="currentColor"/><circle cx="20" cy="32" r="1.6" fill="currentColor"/><circle cx="10" cy="26" r="1.6" fill="currentColor"/><circle cx="10" cy="14" r="1.6" fill="currentColor"/></svg>
+            <h3>Directiva UE</h3><p>Obligatoria para empresas de +50 empleados.</p>
+          </div>
+          <div class="buyer">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><line x1="20" y1="6" x2="20" y2="34"/><line x1="10" y1="12" x2="30" y2="12"/><path d="M10 12 L6 22 h8 z"/><path d="M30 12 L26 22 h8 z"/><line x1="14" y1="34" x2="26" y2="34"/></svg>
+            <h3>Fiscalías</h3><p>Cadena de custodia verificable por terceros.</p>
+          </div>
+          <div class="buyer">
+            <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="9" width="26" height="22" rx="2"/><line x1="12" y1="15" x2="22" y2="15"/><line x1="12" y1="20" x2="28" y2="20"/><line x1="12" y1="25" x2="28" y2="25"/></svg>
+            <h3>Prensa · sindicatos</h3><p>Canales de filtración con prueba de origen.</p>
+          </div>
+        </div>
+        <p class="road-lab">Roadmap</p>
+        <div class="road">
+          <span class="r">emisor real (Azure AD / JWT)</span><span class="sep">→</span>
+          <span class="r">evidencia cifrada E2E</span><span class="sep">→</span>
+          <span class="r">DV no-transferible</span><span class="sep">→</span>
+          <span class="r">fee-sponsor · Transaction.merge</span><span class="sep">→</span>
+          <span class="r">auditoría del circuito</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 · CIERRE ───────────────────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="close-grid">
+        <p class="eyebrow">PhantomTrace · Midnight Hack BA 2026</p>
+        <p class="quote">El buzón anónimo es plomería. La <b>autoría diferida</b> es el producto. Nadie la había shippeado. <b>Nosotros sí.</b></p>
+        <div class="team">
+          <div><div class="n">Gabriel</div><div class="r">lead técnico</div></div>
+          <div><div class="n">Juan</div><div class="r">contratos compact</div></div>
+          <div><div class="n">German</div><div class="r">frontend · e2e</div></div>
+          <div><div class="n">Santiago</div><div class="r">qa · deck · video</div></div>
+        </div>
+        <div><span class="repo"><span class="dotm"></span>github · público · Apache 2.0 · label midnightntwrk</span></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="arrows">
+  <button class="prev" id="prev" aria-label="Slide anterior"></button>
+  <button class="next" id="next" aria-label="Slide siguiente"></button>
+</div>
+
+<div class="hint" id="hint">← → para navegar</div>
+
+<div class="chrome">
+  <div class="brandmark"><span class="dotm"></span>PhantomTrace</div>
+  <div class="dots" id="dots"></div>
+  <div class="counter" id="counter">01 / 11</div>
+</div>
+
+<script>
+  (function () {
+    var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+    var n = slides.length, i = 0;
+    var dotsWrap = document.getElementById("dots");
+    var counter = document.getElementById("counter");
+    var progress = document.getElementById("progress");
+    var hint = document.getElementById("hint");
+
+    slides.forEach(function (_, idx) {
+      var b = document.createElement("button");
+      b.setAttribute("aria-label", "Ir al slide " + (idx + 1));
+      b.addEventListener("click", function () { go(idx); });
+      dotsWrap.appendChild(b);
+    });
+    var dots = Array.prototype.slice.call(dotsWrap.children);
+    function pad(x) { return (x < 10 ? "0" : "") + x; }
+    function render() {
+      slides.forEach(function (s, idx) { s.classList.toggle("on", idx === i); });
+      dots.forEach(function (d, idx) { d.classList.toggle("on", idx === i); });
+      counter.textContent = pad(i + 1) + " / " + pad(n);
+      progress.style.width = (i / (n - 1) * 100) + "%";
+      if (slides[i]) slides[i].scrollTop = 0;
+    }
+    function go(x) { i = Math.max(0, Math.min(n - 1, x)); render(); }
+    function next() { go(i + 1); } function prev() { go(i - 1); }
+    document.getElementById("next").addEventListener("click", next);
+    document.getElementById("prev").addEventListener("click", prev);
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { next(); e.preventDefault(); }
+      else if (e.key === "ArrowLeft" || e.key === "PageUp") { prev(); e.preventDefault(); }
+      else if (e.key === "Home") { go(0); } else if (e.key === "End") { go(n - 1); }
+      if (hint) hint.style.opacity = "0";
+    });
+    var tx = 0;
+    document.addEventListener("touchstart", function (e) { tx = e.touches[0].clientX; }, { passive: true });
+    document.addEventListener("touchend", function (e) {
+      var dx = e.changedTouches[0].clientX - tx;
+      if (Math.abs(dx) > 45) { dx < 0 ? next() : prev(); }
+    }, { passive: true });
+    setTimeout(function () { if (hint) hint.style.opacity = "0"; }, 4200);
+    render();
+  })();
+</script>

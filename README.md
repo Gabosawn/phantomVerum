@@ -7,6 +7,9 @@
 
 Built on [Midnight](https://midnight.network) (Compact + ZK).
 
+📊 **[Pitch deck](https://claude.ai/code/artifact/e132aeac-d338-497b-8f41-8dbcf89e5dfc)** ·
+source in [`deck/`](deck/README.md)
+
 [![CI](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml/badge.svg)](https://github.com/Gabosawn/phantomVerum/actions/workflows/ci.yml)
 
 > The badge tracks the default branch. Until this work lands there it reads
