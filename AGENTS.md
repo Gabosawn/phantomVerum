@@ -23,7 +23,12 @@ tests/       → @phantomtrace/tests      (Vitest + E2E simulation)
 - After installing: `compact update` is MANDATORY (downloads compactc and sets it as default).
   `compact --version` works even if it's missing — ALWAYS verify `compact compile --version`
 - Compile: `compact compile contract.compact output/` → generates JS/TS + zkir/
-- Proof server: `docker run -d -p 6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server -v`
+- Proof server: `docker run -d -p 127.0.0.1:6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server`
+  ⚠️ **No `-v`, and bind to loopback.** Midnight's own install snippet passes
+  `-v`, which turns on `debug!("Received request: {hex}")` for every `/prove`
+  — a hex dump of every witness and every coin secret key into `docker logs`.
+  And a bare `-p 6300:6300` publishes the server on every interface, with
+  permissive CORS and no TLS. Neither is theoretical; both were found running.
   (pin the tag to 8.1.0 — `:latest` drifts away from ledger-v8 8.1.0.
   This machine runs real Docker 29.6.2, not a podman alias)
 - Quick verification:

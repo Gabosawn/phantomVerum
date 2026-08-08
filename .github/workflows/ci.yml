@@ -1,0 +1,68 @@
+# This gate exists to answer one question mechanically: does a clean clone
+# build and pass? The README tells a judge to run four commands; this runs
+# them on a machine that has never seen the project.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # Installs the `compact` CLI and runs `compact update`, which is what
+      # actually fetches `compactc`. `compact --version` answers even when the
+      # compiler is missing, so the real check is `compact compile --version`.
+      - name: Install the Compact toolchain
+        uses: midnightntwrk/setup-compact-action@v1
+
+      # The action's own cache key points at ~/.local/share/compact, which does
+      # not exist — the CLI lands in ~/.local/bin and its data in ~/.compact.
+      # Assert the compiler is really there instead of discovering it three
+      # steps later as a confusing parse error.
+      - name: Verify the compiler is present
+        run: |
+          which compact
+          compact --version
+          compact compile --version
+
+      - run: npm ci
+
+      # Contract artifacts are gitignored, and `contracts/test/harness.mjs` and
+      # `app/src/witnesses/selftest-simulator.ts` both import them statically —
+      # so `npm test` cannot even typecheck before this step. Full compile, not
+      # `compile:fast`: generating the PLONK keys is part of what we claim works.
+      - run: npm run compile
+
+      - name: Assert the compiler emitted all 5 circuits
+        run: |
+          missing=0
+          for c in registerOrganization issueCredential report revealAuthorship proveAuthorship; do
+            if [ ! -f "contracts/output/keys/$c.verifier" ]; then
+              echo "::error::missing verifier key for circuit '$c'"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - run: npm test
+
+      # Not covered by `npm test`: it builds the three Vite apps, which is
+      # where a bad import or a stale alias surfaces.
+      - run: npm run build --workspace=ui

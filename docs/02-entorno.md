@@ -6,8 +6,15 @@
 - After installing: **`compact update` is MANDATORY** — downloads compactc and sets it as default.
   `compact --version` works even if it's missing — ALWAYS verify `compact compile --version`
 - Compile: `compact compile contract.compact output/` → generates JS/TS + zkir/
-- Proof server: `docker run -d -p 6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server -v`
+- Proof server: `docker run -d -p 127.0.0.1:6300:6300 --name phantomtrace-proof-server midnightntwrk/proof-server:8.1.0 midnight-proof-server`
   (pin the tag to 8.1.0. This machine runs real Docker 29.6.2, not a podman alias)
+
+  ⚠️ **Two deliberate departures from Midnight's own install snippet.** Their
+  command ends in `-v`, which enables `debug!("Received request: {hex}")` on
+  every `/prove` call — that is a hex dump of every witness and every coin
+  secret key straight into `docker logs`. And a bare `-p 6300:6300` publishes
+  the server on every interface (permissive CORS, no TLS), so anything on the
+  LAN can use it. Loopback and no `-v`.
 - Target network: **Preview**. A local devnet is the rehearsal step before it —
   see `docs/05-deploy-local.md`.
 
