@@ -18,7 +18,7 @@ decisions validated against the compiler in
 npm run compile   --workspace=contracts    # WITH PLONK keys -> output/ (~30 s)
 npm run compile:fast --workspace=contracts # --skip-zk, for iterating   (~0.6 s)
 npm run check:fallback --workspace=contracts # verifies Option B is still alive
-npm test --workspace=contracts             # 47 checks against the compiled contract
+npm test --workspace=contracts             # 65 checks against the compiled contract
 ```
 
 The tests run the **real compiled contract** in the local simulator of
@@ -31,11 +31,16 @@ They require a prior `compile`.
 | `test/merkle-roundtrip.mjs` | the 4 acts of the demo, end to end |
 | `test/security-claims.mjs` | the load-bearing properties of the design |
 | `test/sec-audit.mjs` | regression of attacks that once worked |
+| `test/transcript-privacy.mjs` | what the public transcript of a report does and does not expose |
 
 `output/` is gitignored: only the `.compact` gets committed. A full `compile`
 produces `output/contract/{index.js,index.d.ts}` (ESM),
-`output/keys/*.{prover,verifier}` (8 files = 4 provable circuits × 2),
+`output/keys/*.{prover,verifier}` (10 files = 5 provable circuits × 2),
 `output/zkir/*.{zkir,bzkir}` and `output/compiler/contract-info.json`.
+
+⚠️ `output/` being gitignored means a stale build is invisible: it compiles,
+the tests pass, and a circuit added since the last `compile` simply is not
+there. Run `compile` after pulling anything that touches `src/`.
 
 ## Ledger state (all public)
 
@@ -58,6 +63,7 @@ whistleblower's machine (the proof server runs locally).
 | `issueCredential(orgId, credCommitment)` | tx | Option A helper — mock issuer |
 | `report(orgId, period: Uint<64>)` | tx | spec §4.2 — the heart |
 | `revealAuthorship(reportId, prosecutorPk)` | tx | spec §4.3 — the differentiator |
+| `proveAuthorship(reportId, evidenceHash, prosecutorPk)` | proof only | spec §4.4 — writes nothing; what the whistleblower exports instead of the secret |
 | `credCommitmentOf`, `leafOf`, `reportIdOf`, `nullifierOf`, `authorshipOf` | `pure` | recomputable off-chain, no proof server |
 
 The `pure circuit`s appear in the generated TS under `pureCircuits`, so
@@ -131,6 +137,32 @@ arguments (`orgId`, `anchor`, `leaf`, `reportId`) and the compiler rejects it
 witnesses. The `assert`s over pure comparisons between witness values (the C1
 of `revealAuthorship`) go without `disclose()`.
 
+## The authorship export carries no secret
+
+The package the whistleblower hands to a prosecutor used to contain the
+report's `secret`. It does not anymore, and that is a property of the
+circuits rather than a handling rule: `revealAuthorship` needs the secret as
+a **witness**, so someone holding the whole export — `reportId`,
+`evidenceHash`, `prosecutorPk`, `authorshipHash`, `proof` — cannot republish
+the authorship to their own key. The circuit rejects them with `not the
+author`. `test/sec-audit.mjs` §D asserts exactly that, and asserts alongside
+it that the secret itself is still omnipotent, which is why it stays on one
+machine.
+
+What replaces the secret is `proveAuthorship` (§4.4): it recomputes
+`authorshipOf(secret, reportId, prosecutorPk)` inside a circuit, writes
+nothing to the ledger, and returns the hash the verifier cross-checks against
+`ledger.authorships`.
+
+One implementation note worth keeping, because it is not obvious: a circuit
+that touches **no** ledger state at all compiles without a ZKIR and without a
+prover/verifier key pair. `proveAuthorship` asserts `reports.member(reportId)`
+partly for that reason — without a ledger read there is no key to prove with
+and no key to check against, and "exportable ZK proof" would just be a local
+hash with a good name. `compact compile` reports **5 circuits** and
+`output/keys/` holds `proveAuthorship.prover` / `.verifier`; if it ever
+reports 4, that assert was dropped and the export claim has silently died.
+
 ## Declared limitations
 
 - **Mock issuer:** `registerOrganization` and `issueCredential` have no
@@ -139,12 +171,15 @@ of `revealAuthorship`) go without `disclose()`.
 - **The truth of the reported content is not proven** (spec §6).
 - **No credential revocation** (spec §7).
 - **Depth 8** = 256 credentials per deploy, enough for the demo.
-- **The authorship key export hands the `secret` to the prosecutor**
-  (`03-plan-ejecucion.md` §3.2). Whoever holds it can republish the
-  authorship to another key and burn the real author's
-  `(report, prosecutor)` slot. Current mitigation: it is handed to a single
-  prosecutor, out of band. Roadmap: a ZK proof to the prosecutor instead of
-  the secret. Covered by `test/sec-audit.mjs` §D.
+- **The exported `proof` is not yet proof bytes.** The circuit and its key
+  pair exist, but in this build the `proof` field of the §3.2 package carries
+  the `authorshipHash` itself; nothing calls the proof server's `/prove` and
+  nothing checks against the verifier key. The consequence is precise: the
+  package proves that *the author designated this key*, and an observer who
+  read the pair off the chain can replay it, so it does not prove that
+  *whoever handed you the file* is the author. Wiring `/prove` and `/check`
+  closes it — no circuit or format change is needed, which is why the format
+  is already secret-free.
 - **The Merkle root revealed** by `checkRoot` narrows the anonymity set if
   the path is cached. `app/src/witnesses` must recompute the path with
   `findPathForLeaf` over the latest state before every report, so all

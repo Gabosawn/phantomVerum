@@ -115,11 +115,11 @@ export function Autoria() {
       )}
 
       {/*
-        CORRECCIÓN DELIBERADA AL DISEÑO ORIGINAL.
-        El .dc.html listaba acá "el secret del autor", pero eso contradice lo que
-        la app hace: el panel rojo calcula H(secret ‖ denunciaId ‖ pk), y esa
-        cuenta necesita el secret. El spec ya lo resolvió — ExportLlaveAutoria lo
-        incluye, con la limitación declarada (docs/03-plan-ejecucion.md §3.2).
+        El .dc.html listaba acá "el secret del autor" entre lo que el verificador
+        recibe. Ya no es cierto: el export v2 no lo lleva. El verificador compara
+        el `autoriaHash` que viene en el sobre contra el que está en la cadena y
+        contra su propia clave; el secret se queda en la máquina del denunciante
+        (circuito `proveAuthorship`, docs/03-plan-ejecucion.md §3.2).
         Lo que el verificador efectivamente NO ve es lo de abajo.
       */}
       <div

@@ -307,8 +307,9 @@ check(
 );
 
 console.log('\n=== 9. The per-report secret bounds the damage (H-3) ===');
-// Whoever receives report 1's export learns its reportSecret. That secret is
-// NO GOOD for report 2: it is the whole point of the v2 change.
+// The v2 export no longer carries the secret, so this is now a defence in
+// depth rather than the front line: even if report 1's secret leaked by some
+// other route, it is NO GOOD for report 2.
 checkRejects(
   'report 1\'s secret does not claim report 2\'s authorship',
   () => callAs(stageStoredReport(ps, record1), 'revealAuthorship', reportId2, prosecutorPk),

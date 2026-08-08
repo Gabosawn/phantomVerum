@@ -238,10 +238,18 @@ export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [
 // Public: reportId, evidenciaHash, prosecutorPk.
 // Private: personalSecret (the same one used in `report`).
 //
-// NO ledger writes: this circuit exists to generate a portable ZK proof
-// that the whitleblower gives to the verifier. The verifier checks the
+// NO ledger WRITES: this circuit exists to generate a portable ZK proof
+// that the whistleblower gives to the verifier. The verifier checks the
 // proof against the circuit's verifier key — the secret never leaves the
 // whistleblower's machine.
+//
+// It does read the ledger, and that is not incidental. A circuit that
+// touches no ledger state at all is compiled WITHOUT a ZKIR and without a
+// prover/verifier key pair — there would be nothing to prove with and
+// nothing to check against, and "exportable ZK proof" would be a name for a
+// local hash. C2 below is what makes this circuit provable, and it happens
+// to be the right constraint anyway: a proof of authorship over a report
+// that was never sealed proves nothing worth having.
 //
 // Returns `authorshipHash` so the verifier can cross-check it against
 // `ledger.authorships` (which `revealAuthorship` wrote).
@@ -252,8 +260,12 @@ export circuit proveAuthorship(
 ): Bytes<32> {
   const sec = personalSecret();
 
-  // The only assert: the secret must be the preimage of reportId.
+  // C1 — the secret must be the preimage of reportId.
   assert(reportIdOf(evidenciaHash, sec) == reportId, "not the author");
+
+  // C2 — the report exists on the ledger. Same constraint as
+  // `revealAuthorship`, and the read that makes this circuit provable.
+  assert(reports.member(disclose(reportId)), "report does not exist");
 
   // The authorship hash is disclosed so the verifier can confirm
   // it matches the one on-chain.

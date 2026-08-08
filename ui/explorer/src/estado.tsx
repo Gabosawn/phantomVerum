@@ -224,9 +224,10 @@ function useEstado() {
    */
   const verificarAutoria = useCallback(async () => {
     if (!material) return;
-    // Mock mode: check proof == autoriaHash (consistency) + ledger membership.
-    // In production: proveAuthorship ZK proof is verified by the proof server.
-    const r = await cliente.verificarAutoria({ ...material, fiscalPk: clave.pk });
+    // El material va TAL CUAL llegó: la clave de quien verifica se pasa aparte.
+    // Pisar `material.fiscalPk` con la propia clave era el bug que hacía que el
+    // Departamento Legal verificara igual que la Fiscalía — se auto-designaba.
+    const r = await cliente.verificarAutoria(material, clave.pk);
     setAutoriaRecomputada(null);
     setVeredictoAutoria(r.ok && r.enLedger ? "ok" : "fail");
   }, [cliente, clave.pk, material]);

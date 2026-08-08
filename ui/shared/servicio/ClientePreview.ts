@@ -215,11 +215,16 @@ export class ClientePreview implements TestigoClient {
   }
 
   /** Verifica la proof ZK contra el ledger vía indexer. */
-  async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
+  async verificarAutoria(
+    p: ExportLlaveAutoria,
+    verificadorPk: Hex32,
+  ): Promise<{ ok: boolean; enLedger: boolean }> {
     if (p.version !== 2) return { ok: false, enLedger: false };
     const state = await leerEstadoHex(this.contractAddress);
-    // Mock mode: proof == autoriaHash. Production: ZK proof verified by proof server /check.
-    const ok = p.proof === p.autoriaHash;
+    // Mock proof check. Production: ZK proof verified by proof server /check.
+    // The designation test is NOT a mock: without it, whoever intercepts the
+    // material verifies as if they had been chosen.
+    const ok = p.proof === p.autoriaHash && p.fiscalPk === verificadorPk;
     const enLedger = hexInState(state, p.autoriaHash);
     return { ok, enLedger };
   }

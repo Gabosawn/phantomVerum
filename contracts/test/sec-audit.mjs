@@ -3,7 +3,7 @@
 // Origin: security review of 2026-08-07 (findings HIGH-1 and MEDIUM-1).
 
 import {
-  pureCircuits, newWorld, b32, check, checkRejects, summary, EPOCH,
+  pureCircuits, newWorld, b32, hex, check, checkRejects, summary, EPOCH,
 } from './harness.mjs';
 
 const orgA = b32(0x11);
@@ -71,28 +71,65 @@ checkRejects('reporting on behalf of the phantom org',
   () => m.call('report', orgB, EPOCH), 'no credential');
 wantedLeaf = pureCircuits.leafOf(orgA, credComm);
 
-console.log('\n=== D. [DECLARED] Whoever holds the key export acts as the author ===');
-// The §3.2 export contains {secret, evidenceHash}: the prosecutor learns the
-// secret. It is a DECLARED limitation of the MVP (roadmap: ZK proof to the
-// prosecutor). This block documents the exact consequence so nobody is
-// surprised.
+console.log('\n=== D. The secret grants authorship — which is why it no longer travels ===');
+// This block used to document a limitation: the §3.2 export carried
+// {secret, evidenceHash}, so the prosecutor learned the secret and could act
+// as the author. `proveAuthorship` (§4.4) removed the secret from the export.
+// What is asserted here is the property that replaced it — and, at the end,
+// the reason the secret must stay home, which has not changed at all.
 secrets.ev = b32(0x33); // back to the original report's evidence
 const reportId = pureCircuits.reportIdOf(b32(0x33), sec);
 const prosecutor2 = b32(0x99);
-const withTheExport = {
+
+const fingerprint = () => [
+  m.state().organizations.size(),
+  m.state().reports.size(),
+  m.state().nullifiers.size(),
+  m.state().authorships.size(),
+  m.state().credentials.root().field,
+].join('|');
+
+// D1 — the proof the whistleblower exports instead of the secret.
+const before = fingerprint();
+const proved = m.call('proveAuthorship', reportId, b32(0x33), prosecutor2).result;
+check('proveAuthorship returns authorshipOf(secret, reportId, prosecutorPk)',
+  hex(proved) === hex(pureCircuits.authorshipOf(sec, reportId, prosecutor2)));
+check('and it writes NOTHING to the ledger — the proof is portable, not a tx',
+  fingerprint() === before);
+
+// The two constraints inside it, each with its own failure.
+const foreignSecret = { ...witnesses, personalSecret: (c) => [c.privateState, b32(0xde)] };
+checkRejects('a foreign secret cannot produce the proof',
+  () => m.callAs(foreignSecret, 'proveAuthorship', reportId, b32(0x33), prosecutor2),
+  'not the author');
+checkRejects('nor can a proof be produced over a report that was never sealed',
+  () => m.call('proveAuthorship', pureCircuits.reportIdOf(b32(0x7a), sec), b32(0x7a), prosecutor2),
+  'report does not exist');
+
+// D2 — THE PROPERTY. Everything the v2 export carries is public: reportId,
+// evidenceHash, prosecutorPk, authorshipHash, the proof. Hold all of it and
+// you still cannot act as the author, because `revealAuthorship` needs the
+// secret as a witness and the secret is not in the file.
+const holdsTheExport = {
   credentialSecret: (c) => [c.privateState, b32(0)],
   credentialPath: (c) => [c.privateState, []],
-  personalSecret: (c) => [c.privateState, sec],
-  evidenceHash: (c) => [c.privateState, b32(0x33)],
+  evidenceHash: (c) => [c.privateState, b32(0x33)], // in the export
+  personalSecret: (c) => [c.privateState, b32(0xde)], // NOT in the export
 };
-let republished = true;
-try { m.callAs(withTheExport, 'revealAuthorship', reportId, b32(0x88)); } catch { republished = false; }
-check('KNOWN: with the export the authorship can be republished to another pk', republished);
-m.callAs(withTheExport, 'revealAuthorship', reportId, prosecutor2);
-checkRejects('KNOWN: and burn the (report, prosecutor2) slot of the real author',
-  () => m.call('revealAuthorship', reportId, prosecutor2), 'authorship already revealed to this prosecutor');
-console.log('  -> Current mitigation: the export is handed to ONE prosecutor, out of band.');
-console.log('  -> Roadmap: ZK proof to the prosecutor instead of handing over the secret.');
+checkRejects('holding the whole export does NOT let you republish the authorship',
+  () => m.callAs(holdsTheExport, 'revealAuthorship', reportId, b32(0x88)),
+  'not the author');
+check('and the slot the real author would use is still free',
+  !m.state().authorships.member(pureCircuits.authorshipOf(sec, reportId, b32(0x88))));
+
+// D3 — and the reason that matters: the secret itself is still omnipotent.
+// Nothing here was weakened. The whole defence is that it stays on one machine.
+const holdsTheSecret = { ...holdsTheExport, personalSecret: (c) => [c.privateState, sec] };
+m.callAs(holdsTheSecret, 'revealAuthorship', reportId, prosecutor2);
+checkRejects('WITH the secret, the (report, prosecutor2) slot can still be burned',
+  () => m.call('revealAuthorship', reportId, prosecutor2),
+  'authorship already revealed to this prosecutor');
+console.log('  -> The export is safe to hand over; the secrets file is not. That is the line.');
 
 console.log('\n=== E. The Merkle root changes with every insertion ===');
 // An observer can use the revealed root as a synchronization counter.
