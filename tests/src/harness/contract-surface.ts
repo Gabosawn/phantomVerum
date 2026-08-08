@@ -19,6 +19,16 @@ export {
   DOMAIN_TAGS,
 } from "@phantomtrace/shared/crypto";
 
+/**
+ * The anonymity floor H-1 enforces: `report` refuses to run while the credential tree holds
+ * fewer credentials than this — proving membership in a tree of one names exactly one person.
+ *
+ * Mirrors `minAnonymitySet()` in `contracts/src/testigo.compact` (currently `8`). Read straight
+ * off the compiled `pureCircuits` by `contract-agreement.test.ts`, so a change in the contract
+ * drifts THIS constant rather than silently diverging the model.
+ */
+export const MIN_ANONYMITY_SET = 8;
+
 /** Public ledger fields. */
 export const LEDGER = {
   organizations: "organizations",
@@ -75,12 +85,18 @@ export const WITNESSES = {
 
 /** `assert` messages, copied verbatim from the contract. Tests match on these. */
 export const ASSERTS = {
+  /** H-2 — `registerOrganization` asserts the id is the fingerprint of the caller's secret. */
+  orgIdNotDerived: "orgId is not derived from this issuer secret",
+  /** H-2 — `registerOrganization` asserts the anchor commits to the caller's secret. */
+  anchorNotCommitted: "anchor does not commit to this issuer secret",
   orgAlreadyRegistered: "organization already registered",
   orgNotRegistered: "organization not registered",
   /** C0 — `period` is ahead of the chain clock: `blockTime < period * duration`. */
   periodNotStarted: "period not started yet",
   /** C0 — `period` is stale: `blockTime >= (period + 1) * duration`. */
   periodAlreadyOver: "period already over",
+  /** C0b — H-1: `report` refuses while the anonymity set is below the floor. */
+  anonymitySetTooSmall: "anonymity set too small — not enough credentials issued yet",
   credentialNotInOrg: "credential does not belong to the organization",
   alreadyReportedThisPeriod: "already reported this period",
   reportAlreadySealed: "report already sealed",

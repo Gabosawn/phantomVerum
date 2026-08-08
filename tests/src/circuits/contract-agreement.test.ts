@@ -28,6 +28,7 @@ import { EPOCH_DURATION } from "../harness/contract-surface.js";
 import {
   ACME,
   AUGUST,
+  BASE_CREDENTIAL_COUNT,
   BETA,
   EMPLOYEE_A,
   EMPLOYEE_B,
@@ -142,7 +143,7 @@ describe("both backends reach the same public ledger", () => {
       expect(() => h.as(IMPOSTOR).report(ACME, AUGUST)).toThrow();
       expect(() => h.as(EMPLOYEE_A).report(ACME, AUGUST)).toThrow();
       expect(() => h.as(EMPLOYEE_B).revealAuthorship(reportA)).toThrow();
-      expect(() => h.registerOrganization(ACME, "ff".repeat(32))).toThrow();
+      expect(() => h.as(EMPLOYEE_A).registerOrganization(ACME, "ff".repeat(32))).toThrow();
 
       const l = h.ledger();
       return {
@@ -158,7 +159,7 @@ describe("both backends reach the same public ledger", () => {
     // Sanity: the scenario has to actually produce state, or "they agree" is vacuous.
     const first = snapshots[0]!;
     expect(first.organizations).toHaveLength(2);
-    expect(first.credentialsCount).toBe(3);
+    expect(first.credentialsCount).toBe(BASE_CREDENTIAL_COUNT);
     expect(first.reports).toHaveLength(4);
     expect(first.nullifiers).toHaveLength(4);
     expect(first.authorships).toHaveLength(2);

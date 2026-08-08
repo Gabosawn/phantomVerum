@@ -108,6 +108,27 @@ export const EMPLOYEE_BETA: Actor = {
   prosecutorNonce: PROSECUTOR_NONCE,
 };
 
+/**
+ * Anonymous ACME crowd — the rest of the anonymity set. `report` (H-1) refuses to run while the
+ * tree holds fewer than `minAnonymitySet()` credentials: proving membership in a tree of one
+ * names exactly one person. The demo's three named employees are not enough, so `baseScenario`
+ * tops the tree up to the floor with employees who never speak.
+ */
+const CROWD_SECRETS: readonly Hex32[] = [byte(0x51), byte(0x52), byte(0x53), byte(0x54), byte(0x55)];
+export const CROWD: readonly Actor[] = CROWD_SECRETS.map((credentialSecret, i) => ({
+  name: `crowd ${i + 1} (ACME)`,
+  orgId: ACME,
+  credentialSecret,
+  personalSecret: byte(0x60 + i),
+  evidenceHash: byte(0x70 + i),
+  issuerSecret: ACME_ISSUER,
+  prosecutorNonce: PROSECUTOR_NONCE,
+}));
+export const CROWD_CREDENTIAL_COUNT = CROWD_SECRETS.length;
+
+/** Total named + crowd credentials issued by `baseScenario` — must clear the H-1 floor. */
+export const BASE_CREDENTIAL_COUNT = 3 + CROWD_CREDENTIAL_COUNT;
+
 /** Claims to be at ACME but never received a credential. Must fail C1. */
 export const IMPOSTOR: Actor = {
   name: "impostor (no credential)",
@@ -150,10 +171,16 @@ export function claimingOrg(actor: Actor, orgId: Hex32): Actor {
  * The impostor is deliberately left out of the tree.
  */
 export function baseScenario<T extends TestigoHarness>(h: T): T {
-  h.registerOrganization(ACME, ACME_ANCHOR);
-  h.registerOrganization(BETA, BETA_ANCHOR);
+  // H-2: `registerOrganization` asserts the caller holds the secret behind the orgId/anchor,
+  // so the org registers under the actor that owns its issuer secret.
+  h.as(EMPLOYEE_A).registerOrganization(ACME, ACME_ANCHOR);
+  h.as(EMPLOYEE_BETA).registerOrganization(BETA, BETA_ANCHOR);
   h.as(EMPLOYEE_A).issueCredential(ACME, credCommitmentOf(EMPLOYEE_A.credentialSecret));
   h.as(EMPLOYEE_B).issueCredential(ACME, credCommitmentOf(EMPLOYEE_B.credentialSecret));
   h.as(EMPLOYEE_BETA).issueCredential(BETA, credCommitmentOf(EMPLOYEE_BETA.credentialSecret));
+  // H-1: top the tree up to the anonymity floor — see `CROWD`.
+  for (const member of CROWD) {
+    h.as(EMPLOYEE_A).issueCredential(ACME, credCommitmentOf(member.credentialSecret));
+  }
   return h;
 }

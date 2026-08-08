@@ -144,7 +144,7 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
 
   it("refuses to report against an organization that was never registered", () => {
     const h = fresh();
-    h.registerOrganization(ACME, ACME_ANCHOR);
+    h.as(EMPLOYEE_A).registerOrganization(ACME, ACME_ANCHOR);
     h.as(EMPLOYEE_A).issueCredential(ACME, leafOf(ACME, EMPLOYEE_A.credentialSecret));
 
     // BETA does not exist, and no leaf binds to it either.

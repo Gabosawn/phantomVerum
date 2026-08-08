@@ -115,7 +115,7 @@ function runDemo(h: TestigoHarness): void {
   // ── T1 ────────────────────────────────────────────────────────────────────────────────
   act(1, "ACME registers and issues credentials", "The anchor goes public. The secrets never do.");
 
-  h.registerOrganization(ACME, ACME_ANCHOR);
+  h.as(EMPLOYEE_A).registerOrganization(ACME, ACME_ANCHOR);
   step(`registerOrganization(ACME, anchor) — ${short(ACME_ANCHOR)}`);
 
   for (const employee of [EMPLOYEE_A, EMPLOYEE_B]) {

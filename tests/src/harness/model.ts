@@ -15,13 +15,14 @@
 
 import { StateBoundedMerkleTree } from "@midnight-ntwrk/compact-runtime";
 
-import { ASSERTS, EPOCH_DURATION, MERKLE_DEPTH } from "./contract-surface.js";
+import { ASSERTS, EPOCH_DURATION, MERKLE_DEPTH, MIN_ANONYMITY_SET } from "./contract-surface.js";
 import {
   anchorOf,
   credCommitmentOf,
   leafHashOf,
   leafOf,
   nullifierOf,
+  orgIdOf,
   receiptOf,
   reportIdOf,
 } from "./crypto.js";
@@ -72,6 +73,12 @@ export class ModelHarness implements TestigoHarness {
   // ── registerOrganization ──────────────────────────────────────────────────────────────
 
   registerOrganization(orgId: Hex32, anchor: Hex32): void {
+    // H-2 — mirror the contract: the caller must hold the secret whose fingerprint is the
+    // orgId and whose commitment is the anchor. Without this the model would accept orgs
+    // the circuit rejects, and the differential suite would paper over the contract's guard.
+    const secret = this.privateState().issuerSecret;
+    assert(orgIdOf(secret) === orgId, ASSERTS.orgIdNotDerived);
+    assert(anchorOf(secret) === anchor, ASSERTS.anchorNotCommitted);
     assert(!this.organizations.has(orgId), ASSERTS.orgAlreadyRegistered);
     this.organizations.set(orgId, anchor);
   }
@@ -110,6 +117,10 @@ export class ModelHarness implements TestigoHarness {
     const windowStart = period * EPOCH_DURATION;
     assert(this.blockTime >= windowStart, ASSERTS.periodNotStarted);
     assert(this.blockTime < windowStart + EPOCH_DURATION, ASSERTS.periodAlreadyOver);
+
+    // C0b — H-1: the anonymity floor, mirroring the contract. Proving membership in a
+    // tree of three names one of three people; the crowd is the anonymity set.
+    assert(this.nextLeaf >= MIN_ANONYMITY_SET, ASSERTS.anonymitySetTooSmall);
 
     // C1 — membership.
     //
