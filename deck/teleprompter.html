@@ -1,0 +1,596 @@
+<title>PhantomTrace — Teleprompter del pitch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  /* ── PhantomTrace teleprompter · committed dark (Cliente register) ──
+     Palette inherited from ui/shared/tokens.css. Single visual world (a
+     presentation surface), so no theme swap — but bg and every color are
+     painted explicitly with tokens, so it holds on any host ground. */
+  :root {
+    --void: #07090f;
+    --graphite: #0e1219;
+    --panel: #12161f;
+    --navy: #0a1226;
+    --line: rgba(237, 234, 230, 0.10);
+    --line-hi: rgba(237, 234, 230, 0.18);
+    --text: #edeae6;
+    --text2: #a7afc0;
+    --muted: #5a6478;
+    --dim: #454d5e;
+    --pulse: #2e6bff;
+    --pulse-hi: #7aa2ff;
+    --green: #5fd0b4;
+    --green-bg: #101c1a;
+    --red: #ee7a6a;
+    --red-bg: #1c1210;
+    --amber: #d0a15a;
+    --amber-bg: #1c1710;
+    --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+    --ui: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --maxw: 1120px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--void);
+    color: var(--text);
+    font-family: var(--ui);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+  .app {
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    max-width: var(--maxw);
+    margin: 0 auto;
+    padding: 0 clamp(16px, 3vw, 40px);
+  }
+
+  /* ── Top rail ─────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 18px 2px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .mark {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .mark .dot { color: var(--pulse-hi); }
+  .segs {
+    flex: 1;
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+  }
+  .seg {
+    flex: 1;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--line);
+    transition: background 0.25s;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+  }
+  .seg.done { background: var(--line-hi); }
+  .seg.now { background: var(--pulse); box-shadow: 0 0 10px rgba(46, 107, 255, 0.5); }
+  .seg.cut.now { background: var(--amber); box-shadow: 0 0 10px rgba(208, 161, 90, 0.45); }
+  .clock {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    white-space: nowrap;
+  }
+  .clock .big { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+  .clock .sep { color: var(--dim); }
+  .clock .tot { color: var(--muted); }
+  .clock.ontime .big { color: var(--green); }
+  .clock.warn .big { color: var(--amber); }
+  .clock.over .big { color: var(--red); }
+  .clock.idle .big { color: var(--text2); }
+
+  /* ── Stage ────────────────────────────────────────────── */
+  main {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+    padding: clamp(14px, 3vh, 34px) 2px;
+    overflow-y: auto;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+  }
+  .eyebrow .num { color: var(--text2); }
+  .eyebrow .section { color: var(--pulse-hi); letter-spacing: 0.1em; }
+  .chip {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--amber);
+    color: var(--amber);
+  }
+  .slide-title {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(15px, 1.9vw, 20px);
+    color: var(--muted);
+    margin: 0 0 clamp(16px, 2.6vh, 30px);
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .slide-title::before { content: "▸ "; color: var(--dim); }
+  .lines {
+    font-family: var(--display);
+    font-weight: 500;
+    font-size: clamp(23px, 3.15vw, 40px);
+    line-height: 1.28;
+    letter-spacing: -0.018em;
+    max-width: 20ch;
+    text-wrap: pretty;
+    margin: 0;
+  }
+  .lines.small { font-size: clamp(20px, 2.5vw, 31px); max-width: 26ch; }
+  .lines b { font-weight: 700; color: var(--pulse-hi); }
+  .lines b.g { color: var(--green); }
+  .lines b.r { color: var(--red); }
+  .lines .yes, .lines .no { font-family: var(--mono); font-weight: 700; }
+  .lines .yes { color: var(--green); }
+  .lines .no { color: var(--red); }
+
+  .cue {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin-top: clamp(20px, 3.4vh, 40px);
+    padding: 13px 16px;
+    background: var(--graphite);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--pulse);
+    border-radius: 8px;
+    max-width: 62ch;
+    color: var(--text2);
+    font-size: 14.5px;
+    line-height: 1.5;
+  }
+  .cue .ic { flex: none; }
+
+  /* ── Bottom controls ──────────────────────────────────── */
+  footer {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 2px 18px;
+    border-top: 1px solid var(--line);
+  }
+  .btn {
+    font-family: var(--ui);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--line-hi);
+    border-radius: 8px;
+    padding: 9px 15px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: border-color 0.15s, background 0.15s, transform 0.05s;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--pulse); }
+  .btn:active { transform: translateY(1px); }
+  .btn .k {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .btn.primary { background: var(--pulse); border-color: var(--pulse); color: #fff; }
+  .btn.primary:hover { background: var(--pulse-hi); border-color: var(--pulse-hi); }
+  .btn.playing { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+  .spacer { flex: 1; }
+  .pos {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .pos b { color: var(--text); font-weight: 600; }
+
+  :focus-visible { outline: 2px solid var(--pulse-hi); outline-offset: 2px; border-radius: 6px; }
+
+  /* ── Ref drawer ───────────────────────────────────────── */
+  .scrim {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 6, 11, 0.6);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    z-index: 20;
+  }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    height: 100dvh;
+    width: min(560px, 92vw);
+    background: var(--graphite);
+    border-left: 1px solid var(--line-hi);
+    transform: translateX(100%);
+    transition: transform 0.24s cubic-bezier(0.2, 0.7, 0.2, 1);
+    z-index: 21;
+    display: flex;
+    flex-direction: column;
+  }
+  .drawer.open { transform: none; }
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--line);
+  }
+  .drawer-head h2 {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+  }
+  .tabs { display: flex; gap: 6px; }
+  .tab {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 6px 11px;
+    border-radius: 7px;
+    border: 1px solid var(--line-hi);
+    background: transparent;
+    color: var(--text2);
+    cursor: pointer;
+  }
+  .tab.on[data-tab="trampas"] { border-color: var(--red); color: var(--red); background: var(--red-bg); }
+  .tab.on[data-tab="qa"] { border-color: var(--pulse); color: var(--pulse-hi); background: var(--navy); }
+  .drawer-body { overflow-y: auto; padding: 8px 22px 40px; }
+  .ref-item {
+    padding: 15px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .ref-item:last-child { border-bottom: none; }
+  .ref-q {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 15px;
+    margin: 0 0 6px;
+    color: var(--text);
+    text-wrap: balance;
+  }
+  .ref-item.trampa .ref-q { color: var(--red); }
+  .ref-item.trampa .ref-q::before { content: "✕ "; }
+  .ref-a { margin: 0; font-size: 14px; line-height: 1.55; color: var(--text2); }
+  .ref-a b { color: var(--text); font-weight: 600; }
+  .ref-a code, .ref-q code { font-family: var(--mono); font-size: 0.86em; color: var(--pulse-hi); }
+  .hidden { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 620px) {
+    .clock .tot { display: none; }
+    .btn .label { display: none; }
+    .btn { padding: 9px 12px; }
+  }
+</style>
+
+<div class="app">
+  <header>
+    <div class="mark">PhantomTrace <span class="dot">·</span> pitch</div>
+    <div class="segs" id="segs" role="tablist" aria-label="Slides"></div>
+    <div class="clock idle" id="clock">
+      <span class="big" id="elapsed">0:00</span>
+      <span class="sep">/</span>
+      <span class="tot" id="target">objetivo 0:00</span>
+    </div>
+  </header>
+
+  <main id="stage" tabindex="-1">
+    <div class="eyebrow">
+      <span class="num" id="ey-num">01 / 14</span>
+      <span class="section" id="ey-section">Portada</span>
+      <span class="chip hidden" id="ey-cut">recortable</span>
+    </div>
+    <h1 class="slide-title" id="s-title"></h1>
+    <p class="lines" id="s-lines"></p>
+    <div class="cue"><span class="ic">🎯</span><span id="s-cue"></span></div>
+  </main>
+
+  <footer>
+    <button class="btn" id="prev">← <span class="label">Anterior</span></button>
+    <button class="btn primary" id="next"><span class="label">Siguiente</span> →</button>
+    <button class="btn" id="play"><span id="play-ic">▶</span> <span class="label" id="play-lbl">Cronómetro</span> <span class="k">P</span></button>
+    <div class="spacer"></div>
+    <div class="pos"><b id="pos-n">1</b> / 14</div>
+    <button class="btn" id="ref-btn">Ref <span class="k">R</span></button>
+  </footer>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h2 id="drawer-title">Referencia</h2>
+    <div class="tabs">
+      <button class="tab on" data-tab="trampas">Trampas</button>
+      <button class="tab" data-tab="qa">Q&amp;A</button>
+    </div>
+    <button class="btn" id="ref-close" aria-label="Cerrar" style="padding:7px 11px">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div id="ref-trampas"></div>
+    <div id="ref-qa" class="hidden"></div>
+  </div>
+</aside>
+
+<script>
+  "use strict";
+
+  // Cumulative start time (s) of each slide, and the END mark. Budget of a
+  // slide = next start - this start. Target run: 3:40.
+  var MARKS = [0, 22, 44, 68, 90, 112, 132, 150, 162, 176, 180, 202, 215, 228, 242];
+
+  var SLIDES = [
+    { section: "Portada", cut: false,
+      title: "El anonimato, reversible.",
+      lines: 'Lena descubre un fraude de cuarenta millones en la empresa donde trabaja. Para cobrar la recompensa, o para que la ley la proteja, tiene que <b>probar que fue ella</b>. Pero el día que da la cara, la echan. Hoy denunciar en serio es elegir: o estás a salvo, o podés reclamar. Somos PhantomTrace, Midnight Hack Buenos Aires, y borramos esa elección: el anonimato es <b>reversible</b> — probás que fuiste vos cuando quieras, ante quien elijas.',
+      cue: "Abrí con Lena, no con una tesis: agarra a un jurado cansado. Nombre del hackathon a los ~15s. Remate opcional: “Anónimo ante el mundo, demostrable ante uno, reversible solo por el autor.”", small: true },
+    { section: "El problema", cut: false,
+      title: "Hoy elegís: anonimato o recompensa.",
+      lines: 'Ese dilema es de todos los que saben algo. Para cobrar protección o reclamar cuando te toman represalias, tenés que <b>probar que fuiste vos</b> — y hoy eso quema tu anonimato desde el día uno. Proteger al denunciante <b>no</b> es lo mismo que anonimato eterno.',
+      cue: 'Marcá el "o" con la voz. NO cites porcentajes de la SEC (Trampa #3).' },
+    { section: "La solución · Midnight", cut: false,
+      title: "Lo privado no sale de tu máquina. Lo público es un hash.",
+      lines: 'Lo resolvemos con Midnight: la lógica corre como <b>prueba ZK</b> y el estado sensible nunca se publica. La evidencia, la credencial y la identidad son <b>witness</b> — se prueban en zero-knowledge y el <b>proving corre local</b>, así nunca cruzan a un input público. Por <code>disclose()</code> al ledger sale solo un puñado de valores: el sello, un nullifier, la época y una raíz. Y no hay <b>msg.sender</b>: no hay a quién delatar.',
+      cue: "El corazón técnico (40%). witness · disclose() · proving local · sin msg.sender. NO digas “nunca sale de tu máquina” en absoluto — el proof server ve los witness; por eso recalcás “local”.", small: true },
+    { section: "Los 4 tiempos", cut: false,
+      title: "De la denuncia sellada a la autoría probada.",
+      lines: '<b>Uno</b>: la empresa ancla sus credenciales en la cadena. <b>Dos</b>: un empleado denuncia — el circuito prueba pertenencia en privado, contra un <b>HistoricMerkleTree</b>: vale cualquier raíz histórica, así emitir credenciales nuevas no le invalida la prueba. <b>Tres</b>: el hash de la evidencia queda sellado, inmutable. <b>Cuatro</b>, meses después: revela su autoría ante quien elija.',
+      cue: "Contá 1-2-3-4 con los dedos. “HistoricMerkleTree y no uno común” es profundidad de ingeniería gratis.", small: true },
+    { section: "El mecanismo", cut: false,
+      title: "Un solo H(). Todo depende de qué entra.",
+      lines: 'Un solo hash con separación de dominios, usado tres veces. El <b>sello</b>: evidencia + tu secreto. El <b>nullifier</b> (anti-spam): secreto de la credencial + época — y la época <b>no la elige quien denuncia</b>, el circuito la clava al reloj de la cadena. El <b>recibo</b>: la denuncia + un nonce que te manda el fiscal.',
+      cue: "No te enredes en fórmulas. A Q&A: el mismo secreto alimenta pertenencia y nullifier dentro del circuito.", small: true },
+    { section: "Frontera de privacidad", cut: false,
+      title: "Dos apps. Dos orígenes. Sin estado compartido.",
+      lines: 'El modelo de Midnight tiene un ledger <b>público</b> y uno <b>shielded</b>. Nuestro contrato vive entero en el público — solo escribe commitments, nullifiers y raíces; <b>no mueve un solo token</b>. Lo shielded aparece en un lugar: el fee en DUST, con su propio commitment/nullifier, sin ligar la denuncia a una cuenta. La frontera de privacidad la hicimos arquitectura: el Cliente corre local y guarda los witness; el Explorer solo lee. Nada privado tiene dónde filtrarse.',
+      cue: "IMPORTANTE: dual-ledger = público + shielded, NO “dos apps”. Las dos apps son la frontera. Decirlo mal hace rodar los ojos al panel.", small: true },
+    { section: "Prior art", cut: false,
+      title: "El buzón ya existe. La autoría diferida, no.",
+      lines: 'El buzón anónimo ya existe — hasta Vera Report, de la propia Foundation, resolvió el reporting anónimo en Midnight. Pero Vera, y todos, hacen el anonimato <b>permanente</b>. Ninguno deja al autor volver y probar que fue él, ante un destinatario elegido. Y Midnight <b>pidió esto</b>: su Request for Startups lista whistleblowing anónimo con evidencia tamper-proof. Nadie la había shippeado en producción. Nosotros sí.',
+      cue: "Nombrá a Vera vos primero. NO digas “primer reporting anónimo” (es de Vera) — vos tenés “primer anonimato reversible”. Si no podés citar el RFS textual, parafraseá sin comillas.", small: true },
+    { section: "Caso Nordwind · escena", cut: true,
+      title: "Por qué hoy nadie usa el canal interno.",
+      lines: 'Aterrizado, un caso compuesto de casos reales: Nordwind Logistics, ocho mil empleados. Lena, de contaduría, ve el fraude — pero el canal interno lo opera <b>justo el área que tendría que denunciar</b>. Por eso nadie lo usa.',
+      cue: "La escena es lo más fuerte del deck. Si vas corto, contá esta (8) y el remate (10), saltá el despliegue (9)." },
+    { section: "Caso Nordwind · despliegue", cut: true,
+      title: "Se enchufa al directorio que ya tienen.",
+      lines: 'Las credenciales se enchufan al <b>Azure AD que la empresa ya tiene</b>, sin cambiar nada. La cadena sella la evidencia, con fecha, sin nombrar a nadie.',
+      cue: "Recortable. El “cómo se despliega” — útil para el jurado técnico, saltable si apremia." },
+    { section: "Caso Nordwind · remate", cut: true,
+      title: "Lena reclama. Nordwind nunca se entera.",
+      lines: 'Cuando llega el momento de reclamar, Lena abre la prueba <b>solo ante el fiscal</b>. Nordwind nunca se entera de quién fue, y la <b>Directiva UE</b> la protege aunque después la identifiquen. <b class="g">Nunca tuvo que elegir entre estar a salvo y poder reclamar.</b>',
+      cue: "El corazón emocional — bajá el ritmo en la última frase. NO digas “cobra la recompensa de la SEC”: somos un sello previo; la protección real es la UE." },
+    { section: "Honestidad + prueba · EL MOMENTO", cut: false,
+      title: "Los 4 tiempos corren en Preview. Verificalo vos.",
+      lines: 'Esto no es maqueta: los cuatro tiempos ya corrieron en <b>Preview</b>, contra el contrato desplegado — cada bloque es verificable desde una terminal. Y acá está el momento: los mismos bytes, dos personas. El fiscal que Lena eligió, con su nonce, <span class="yes">verifica ✅</span>. El empleador, que no tiene ese nonce, <span class="no">ni ubica el recibo ❌</span>. Y el autor on-chain: no está. Nunca estuvo.',
+      cue: "ACÁ frenás. Señalá el ✅ FISCAL y el ❌ EMPLEADOR — dos segundos de silencio. Con bloques reales debajo. NO expliques la “recomputación” — mata el momento; va a Q&A.", small: true },
+    { section: "La ingeniería", cut: false,
+      title: "Tests con dientes.",
+      lines: 'Verificamos por <b>diferencial</b>: dos implementaciones independientes tienen que coincidir en cada resultado publicado, o la suite rompe. <b>48 casos, 375 chequeos</b>, todos verdes. Y <b>trece bugs</b> inyectados a propósito — los trece mueren. Compila limpio desde un clone, con el compilador pinneado.',
+      cue: "Arrancá por el diferencial (premia fiabilidad). Decí “48 casos, 375 chequeos” — coincide con el 48 de la slide.", small: true },
+    { section: "Quién compra", cut: true,
+      title: "Denuncias creíbles, como producto.",
+      lines: 'El comprador: la empresa de +50 empleados que la <b>Directiva Europea</b> obliga a tener un canal de denuncias — pero que no quiere custodiar una base de datos de denunciantes que le pueden filtrar. Somos ese canal: <b>cumple la ley sin crear el riesgo</b>.',
+      cue: "Si vas justo, saltala. Un comprador, un gancho legal (UE), una línea. Business Viability pesa 5%." },
+    { section: "Cierre", cut: false,
+      title: "PhantomTrace · Midnight Hack BA 2026",
+      lines: 'Lena denunció esa misma noche, anónima. Y el día que quiso, probó que fue ella — solo ante el fiscal, nunca ante la empresa. Nunca tuvo que elegir entre estar a salvo y reclamar. El buzón anónimo es plomería; la autoría diferida es el producto. Nadie la había shippeado. <b>Nosotros sí. PhantomTrace.</b>',
+      cue: "Repo/Apache/label viven en la slide, no en tu boca. Última palabra: “PhantomTrace”. Silencio. Sonreí.", small: true }
+  ];
+
+  var TRAMPAS = [
+    { q: 'No digas "designated verifier" como propiedad', a: 'El recibo se verifica contra datos públicos → es <b>transferible</b> una vez que el fiscal comparte su nonce. Tenés separación por destinatario, no no-transferibilidad. Un juez que lea <code>proveAuthorship.zkir</code> ve que no hay opcode <code>member</code>. Decí "ligado a un destinatario por vez".' },
+    { q: 'No digas "el orgId se ve en cada denuncia"', a: '<code>report</code> <b>no</b> publica el orgId — solo el sello, el nullifier, la época y la raíz. La org es pública porque se <b>registra y emite credenciales</b>, no por la denuncia. Frase segura: "una denuncia individual no revela de qué org es".' },
+    { q: 'No digas "10–30% de la multa al primero en reportar"', a: 'La ley SEC dice "de lo <b>recaudado</b>", agregado entre denunciantes, y exige revelar identidad para cobrar. Somos un <b>sello de evidencia previo</b>, no una submission ante la SEC. Andá a la <b>Directiva UE 2019/1937</b>: conserva la protección y invierte la carga de la prueba.' },
+    { q: 'No digas "inventamos la técnica"', a: 'Commitment + firma a destinatario son viejos. La novedad es <b>el workflow productizado, sobre una ZK chain en vivo</b>.' },
+    { q: 'No presentes mocks como reales', a: 'El Cliente corre contra un mock local; el Explorer lee la cadena real. Si preguntan, la tabla "qué es real / qué está mockeado" del README te salva.' }
+  ];
+
+  var QA = [
+    { q: "¿La wallet no lo delata?", a: 'Midnight no tiene <code>msg.sender</code>; la tx es transcript público + prueba ZK. Fees en DUST shielded. El límite es la metadata off-chain (indexer ve viewing key e IP) — se mitiga con proof server local o Tor.' },
+    { q: "¿Esto no lo hizo depapp / Vera ya?", a: 'El buzón, sí. La <b>autoría diferida</b>, no: eso solo existía en papers.' },
+    { q: "¿No es un designated verifier de verdad?", a: 'No. Es <b>separación por destinatario</b>: el recibo se recomputa con el nonce del fiscal. Una vez que él comparte el nonce, es verificable por terceros. La no-transferibilidad real (esquema DV con simulación) está en el roadmap.' },
+    { q: "¿La raíz de Merkle no estrecha el anonimato dentro de la org?", a: '(own H-1, desarma) Buen punto: el conjunto de anonimato es tan grande como las credenciales que emitió tu org; con pocas y recientes, el emisor podría estrecharlo. Por eso el roadmap trae un piso de <b>k-anonimato in-circuit</b> + emisión en batch.' },
+    { q: "¿La emisión on-chain está autenticada de verdad?", a: '(own C-1) En el demo el secreto del emisor se deriva del <code>orgId</code> público, así que es <b>demo-grade</b>; el contrato verifica bien, el fix real (secret aleatorio en vault) es una hora.' },
+    { q: "¿Cómo saben que la denuncia es verdadera?", a: 'No lo sabemos y no lo prometemos. Probamos que viene de adentro y que nadie la alteró.' },
+    { q: "¿Quién emite las credenciales? ¿La empresa denunciada?", a: 'El emisor es un mock; en producción, el directorio corporativo (Azure AD), un colegio o el regulador.' },
+    { q: "¿Por qué blockchain y no una base de datos?", a: 'El sello no depende de confiar en quien opera el servidor (que puede ser el adversario); el timestamp lo verifica un tercero; y la pertenencia se prueba sin que ningún servidor vea la credencial.' },
+    { q: "¿Y si el empleador intercepta la prueba?", a: 'El recibo no lleva ningún secreto adentro. El empleador recomputa con su propio nonce, le da otro valor, y ese valor no está publicado en ninguna parte.' },
+    { q: "¿Qué evita el spam?", a: 'El nullifier: una denuncia por credencial por época, y las épocas no son linkeables entre sí.' }
+  ];
+
+  var fmt = function (s) {
+    s = Math.max(0, Math.round(s));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  };
+
+  var i = 0, N = SLIDES.length;
+  var timerOn = false, t0 = 0, raf = 0;
+
+  var el = function (id) { return document.getElementById(id); };
+  var segsBox = el("segs");
+
+  // Build segments
+  SLIDES.forEach(function (s, idx) {
+    var b = document.createElement("button");
+    b.className = "seg" + (s.cut ? " cut" : "");
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-label", "Slide " + (idx + 1) + ": " + s.title);
+    b.title = (idx + 1) + " · " + s.title;
+    b.addEventListener("click", function () { go(idx); });
+    segsBox.appendChild(b);
+  });
+  var segEls = Array.prototype.slice.call(segsBox.children);
+
+  function render() {
+    var s = SLIDES[i];
+    el("ey-num").textContent = String(i + 1).padStart(2, "0") + " / 14";
+    el("ey-section").textContent = s.section;
+    el("ey-cut").classList.toggle("hidden", !s.cut);
+    el("s-title").textContent = s.title;
+    var L = el("s-lines");
+    L.innerHTML = s.lines;
+    L.className = "lines" + (s.small ? " small" : "");
+    el("s-cue").textContent = s.cue;
+    el("pos-n").textContent = i + 1;
+    segEls.forEach(function (e, idx) {
+      e.classList.toggle("now", idx === i);
+      e.classList.toggle("done", idx < i);
+    });
+    el("target").textContent = "objetivo " + fmt(MARKS[i]) + "–" + fmt(MARKS[i + 1]);
+    el("stage").scrollTop = 0;
+    tick();
+  }
+
+  function go(n) { i = Math.max(0, Math.min(N - 1, n)); render(); }
+  function next() { if (i < N - 1) go(i + 1); }
+  function prev() { if (i > 0) go(i - 1); }
+
+  // Timer: compares elapsed against the CURRENT slide's cumulative window.
+  function tick() {
+    var c = el("clock"), big = el("elapsed");
+    if (!timerOn) {
+      c.className = "clock idle";
+      if (t0 === 0) big.textContent = "0:00";
+      return;
+    }
+    var e = (Date.now() - t0) / 1000;
+    big.textContent = fmt(e);
+    var winEnd = MARKS[i + 1], winStart = MARKS[i];
+    var cls = "ontime";
+    if (e > winEnd) cls = "over";
+    else if (e > winStart + (winEnd - winStart) * 0.65) cls = "warn";
+    // if you're behind the window (slide ahead of pace) keep it calm
+    if (e < winStart) cls = "ontime";
+    c.className = "clock " + cls;
+  }
+  function loop() { if (timerOn) { tick(); raf = requestAnimationFrame(loop); } }
+
+  function playToggle() {
+    timerOn = !timerOn;
+    var b = el("play");
+    if (timerOn) {
+      if (t0 === 0) t0 = Date.now();
+      else t0 = Date.now() - ((el("elapsed").textContent.split(":")[0] * 60 + +el("elapsed").textContent.split(":")[1]) * 1000);
+      el("play-ic").textContent = "⏸";
+      el("play-lbl").textContent = "Pausa";
+      b.classList.add("playing");
+      loop();
+    } else {
+      el("play-ic").textContent = "▶";
+      el("play-lbl").textContent = "Seguir";
+      b.classList.remove("playing");
+      cancelAnimationFrame(raf);
+      tick();
+    }
+  }
+  function resetTimer() {
+    timerOn = false; t0 = 0; cancelAnimationFrame(raf);
+    el("play-ic").textContent = "▶"; el("play-lbl").textContent = "Cronómetro";
+    el("play").classList.remove("playing");
+    el("elapsed").textContent = "0:00"; tick();
+  }
+
+  // Ref drawer
+  function buildRef() {
+    var t = el("ref-trampas"), q = el("ref-qa");
+    TRAMPAS.forEach(function (r) {
+      var d = document.createElement("div");
+      d.className = "ref-item trampa";
+      d.innerHTML = '<p class="ref-q">' + r.q + '</p><p class="ref-a">' + r.a + '</p>';
+      t.appendChild(d);
+    });
+    QA.forEach(function (r) {
+      var d = document.createElement("div");
+      d.className = "ref-item";
+      d.innerHTML = '<p class="ref-q">' + r.q + '</p><p class="ref-a">' + r.a + '</p>';
+      q.appendChild(d);
+    });
+  }
+  function drawer(open) {
+    el("drawer").classList.toggle("open", open);
+    el("scrim").classList.toggle("open", open);
+    el("drawer").setAttribute("aria-hidden", open ? "false" : "true");
+  }
+  function switchTab(name) {
+    document.querySelectorAll(".tab").forEach(function (b) { b.classList.toggle("on", b.dataset.tab === name); });
+    el("ref-trampas").classList.toggle("hidden", name !== "trampas");
+    el("ref-qa").classList.toggle("hidden", name !== "qa");
+    el("drawer-title").textContent = name === "trampas" ? "Trampas — lo que no hay que decir" : "Q&A ensayado";
+  }
+
+  // Events
+  el("next").addEventListener("click", next);
+  el("prev").addEventListener("click", prev);
+  el("play").addEventListener("click", playToggle);
+  el("ref-btn").addEventListener("click", function () { drawer(true); });
+  el("ref-close").addEventListener("click", function () { drawer(false); });
+  el("scrim").addEventListener("click", function () { drawer(false); });
+  document.querySelectorAll(".tab").forEach(function (b) {
+    b.addEventListener("click", function () { switchTab(b.dataset.tab); });
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); prev(); }
+    else if (e.key === "p" || e.key === "P") { playToggle(); }
+    else if (e.key === "r" || e.key === "R") { drawer(!el("drawer").classList.contains("open")); }
+    else if (e.key === "Escape") { drawer(false); }
+    else if (e.key === "Home") { go(0); }
+    else if (e.key === "0") { resetTimer(); }
+  });
+
+  buildRef();
+  render();
+</script>

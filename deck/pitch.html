@@ -307,7 +307,7 @@
               <text x="792" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">exige revelarte</text>
             </g>
           </svg>
-          <figcaption>La SEC paga 10–30% de la multa solo a quien prueba que fue el primero. Eso hoy = quemar tu anonimato.</figcaption>
+          <figcaption>Para cobrar protección o reclamar represalias hay que probar que fuiste vos — y hoy eso significa quemar tu anonimato desde el día uno.</figcaption>
         </figure>
       </div>
     </div>
@@ -322,7 +322,7 @@
       </div>
       <div class="figwrap">
         <figure class="dg">
-          <svg viewBox="0 0 960 320" role="img" aria-label="Los datos privados entran a un circuito ZK report(); solo cruzan la frontera al ledger público dos hashes: reportId y nullifier" style="color:var(--text2)">
+          <svg viewBox="0 0 960 320" role="img" aria-label="Los datos privados entran a un circuito ZK report(); solo cruzan la frontera al ledger público hashes: reportId, nullifier, la época y una raíz global" style="color:var(--text2)">
             <!-- private box -->
             <text x="20" y="52" style="fill:var(--muted)" font-size="12" letter-spacing="1.5">NUNCA SALE DE TU MÁQUINA</text>
             <rect x="20" y="64" width="310" height="212" rx="16" fill="var(--sunken)" stroke="currentColor" stroke-opacity="0.32"/>
@@ -355,7 +355,7 @@
             <rect x="646" y="182" width="270" height="46" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
             <text x="666" y="209" style="fill:var(--text2)" font-size="13.5">nullifier · anti-spam</text>
           </svg>
-          <figcaption>Identidad, credencial y evidencia nunca tocan la cadena. El ledger solo ve dos hashes.</figcaption>
+          <figcaption>Identidad, credencial y evidencia nunca tocan la cadena. Al ledger solo llegan hashes: reportId, nullifier, la época y una raíz global — ninguno reversible a tu nombre.</figcaption>
         </figure>
       </div>
     </div>
@@ -422,7 +422,7 @@
       </div>
       <div class="figwrap">
         <figure class="dg">
-          <svg viewBox="0 0 960 400" role="img" aria-label="Tres máquinas de hash: reportId sella la evidencia, el nullifier evita spam, y la autoría se ata a la clave del fiscal — verde con la clave correcta, roja con cualquier otra" style="color:var(--text2)">
+          <svg viewBox="0 0 960 400" role="img" aria-label="Tres máquinas de hash: reportId sella la evidencia, el nullifier evita spam, y la autoría se recomputa con el nonce que el fiscal elige — verde con ese nonce, otro valor con cualquier otro" style="color:var(--text2)">
             <!-- ROW 1: reportId -->
             <g font-size="13">
               <rect x="16" y="22" width="150" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="91" y="46" text-anchor="middle" style="fill:var(--text)">evidencia</text>
@@ -436,8 +436,8 @@
             </g>
             <!-- ROW 2: nullifier -->
             <g font-size="13">
-              <rect x="16" y="150" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="174" text-anchor="middle" style="fill:var(--text)">secret</text>
-              <rect x="122" y="150" width="72" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="158" y="174" text-anchor="middle" style="fill:var(--text)">org</text>
+              <rect x="16" y="150" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="174" text-anchor="middle" style="fill:var(--text)">credencial</text>
+              <rect x="122" y="150" width="72" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="158" y="174" text-anchor="middle" style="fill:var(--text)">dom</text>
               <rect x="204" y="150" width="90" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="249" y="174" text-anchor="middle" style="fill:var(--text)">período</text>
               <line x1="300" y1="169" x2="352" y2="169" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
               <rect x="356" y="144" width="52" height="50" rx="11" fill="var(--h10)" stroke="var(--accent)"/><text x="382" y="176" text-anchor="middle" style="fill:var(--accent)" font-size="21">H</text>
@@ -445,13 +445,13 @@
               <rect x="466" y="148" width="210" height="42" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.4"/>
               <text x="486" y="174" style="fill:var(--text2)">nullifier · anti-spam</text>
             </g>
-            <!-- ROW 3: authorship + designated verifier -->
+            <!-- ROW 3: authorship receipt = H(dom ‖ reportId ‖ nonce), bound per recipient -->
             <g font-size="13">
-              <rect x="16" y="290" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="314" text-anchor="middle" style="fill:var(--text)">secret</text>
+              <rect x="16" y="290" width="96" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="64" y="314" text-anchor="middle" style="fill:var(--text)">dom</text>
               <rect x="122" y="290" width="120" height="38" rx="9" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/><text x="182" y="314" text-anchor="middle" style="fill:var(--text)">denunciaId</text>
               <rect x="252" y="290" width="112" height="38" rx="9" fill="var(--probado-bg)" stroke="var(--probado)"/>
               <g style="color:var(--probado)" stroke="currentColor" stroke-width="2" fill="none" transform="translate(272,309)"><circle cx="0" cy="0" r="7"/><line x1="7" y1="0" x2="20" y2="0"/><line x1="15" y1="0" x2="15" y2="6"/></g>
-              <text x="300" y="314" style="fill:var(--probado)">fiscalPk</text>
+              <text x="300" y="314" style="fill:var(--probado)">nonce fiscal</text>
               <line x1="372" y1="309" x2="410" y2="309" stroke="currentColor" stroke-opacity="0.5" stroke-width="1.5" marker-end="url(#ah)"/>
               <rect x="414" y="284" width="52" height="50" rx="11" fill="var(--h10)" stroke="var(--accent)"/><text x="440" y="316" text-anchor="middle" style="fill:var(--accent)" font-size="21">H</text>
               <!-- branch to two verdicts -->
@@ -460,10 +460,10 @@
               <rect x="532" y="258" width="230" height="40" rx="10" fill="var(--probado-bg)" stroke="var(--probado)"/>
               <text x="552" y="283" style="fill:var(--probado)">✓ el fiscal elegido — verifica</text>
               <rect x="532" y="322" width="230" height="40" rx="10" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
-              <text x="552" y="347" style="fill:var(--rechazo)">✕ cualquier otro — no vale nada</text>
+              <text x="552" y="347" style="fill:var(--rechazo)">✕ sin ese nonce — otro valor</text>
             </g>
           </svg>
-          <figcaption>La autoría se ata a la clave del fiscal (designated verifier). Si el empleador la intercepta, no verifica.</figcaption>
+          <figcaption>La autoría se ata a un nonce que el fiscal elige y te pasa fuera de la cadena — un destinatario por vez. El recibo no lleva ningún secreto adentro.</figcaption>
         </figure>
       </div>
     </div>
@@ -597,7 +597,7 @@
             <rect x="596" y="168" width="248" height="44" rx="10" fill="none" stroke="var(--rechazo)" stroke-opacity="0.7"/>
             <text x="720" y="195" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">✕ Lena despedida en 60 días</text>
           </svg>
-          <figcaption>Nordwind Logistics AG · 8.000 empleados · cotiza en EE.UU. y Frankfurt. El canal interno lo opera el área denunciada.</figcaption>
+          <figcaption>Nordwind Logistics AG (caso compuesto, basado en casos reales) · ~8.000 empleados · el canal interno lo opera el área denunciada.</figcaption>
         </figure>
       </div>
     </div>
@@ -656,31 +656,31 @@
       </div>
       <div class="figwrap">
         <figure class="dg">
-          <svg viewBox="0 0 960 270" role="img" aria-label="El reportId sellado en el mes 0 prueba que Lena fue la primera; meses después revela autoría al fiscal de la SEC y cobra 10 a 30 por ciento de la multa; si Nordwind intercepta la prueba, no verifica" style="color:var(--text2)">
+          <svg viewBox="0 0 960 270" role="img" aria-label="El reportId sellado en el mes 0 deja un sello con fecha; meses después Lena revela autoría solo ante el fiscal que elige; sin el nonce de ese fiscal, el recibo no se ubica en la cadena" style="color:var(--text2)">
             <!-- money flow -->
             <rect x="14" y="62" width="182" height="58" rx="11" fill="var(--h10)" stroke="var(--accent)"/>
             <text x="105" y="86" text-anchor="middle" style="fill:var(--accent)" font-size="12.5">reportId sellado</text>
-            <text x="105" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">mes 0 · "fui la primera"</text>
+            <text x="105" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">mes 0 · sello con fecha</text>
             <line x1="196" y1="91" x2="246" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="5 5" marker-end="url(#ah)"/>
             <text x="221" y="81" text-anchor="middle" style="fill:var(--muted)" font-size="9.5">meses…</text>
             <rect x="248" y="62" width="212" height="58" rx="11" fill="var(--probado-bg)" stroke="var(--probado)"/>
             <g style="color:var(--probado)" transform="translate(272,91)" stroke="currentColor" stroke-width="2.2" fill="none"><circle cx="0" cy="0" r="7"/><line x1="7" y1="0" x2="18" y2="0"/><line x1="13" y1="0" x2="13" y2="6"/></g>
             <text x="356" y="86" text-anchor="middle" style="fill:var(--probado)" font-size="12.5">revealAuthorship</text>
-            <text x="356" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">→ fiscal SEC · su clave</text>
+            <text x="356" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">→ fiscal / regulador · su nonce</text>
             <line x1="460" y1="91" x2="496" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" marker-end="url(#ah)"/>
             <rect x="498" y="62" width="176" height="58" rx="11" fill="var(--surface)" stroke="currentColor" stroke-opacity="0.4"/>
-            <text x="586" y="86" text-anchor="middle" style="fill:var(--text)" font-size="12.5">SEC prueba</text>
-            <text x="586" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">el fraude</text>
+            <text x="586" y="86" text-anchor="middle" style="fill:var(--text)" font-size="12.5">el regulador</text>
+            <text x="586" y="105" text-anchor="middle" style="fill:var(--muted)" font-size="10">investiga</text>
             <line x1="674" y1="91" x2="710" y2="91" stroke="currentColor" stroke-opacity="0.45" stroke-width="1.5" marker-end="url(#ah)"/>
             <rect x="712" y="54" width="234" height="74" rx="12" fill="var(--probado-bg)" stroke="var(--probado)"/>
-            <text x="829" y="88" text-anchor="middle" style="fill:var(--probado)" font-size="21">10–30%</text>
-            <text x="829" y="110" text-anchor="middle" style="fill:var(--muted)" font-size="11">de la multa → recompensa</text>
-            <!-- designated verifier failure -->
+            <text x="829" y="88" text-anchor="middle" style="fill:var(--probado)" font-size="16">protección UE</text>
+            <text x="829" y="110" text-anchor="middle" style="fill:var(--muted)" font-size="11">+ recompensa si aplica</text>
+            <!-- without the fiscal's nonce, the receipt can't be located on-chain -->
             <line x1="356" y1="120" x2="356" y2="182" stroke="var(--rechazo)" stroke-width="1.5" marker-end="url(#ah)"/>
             <rect x="150" y="188" width="470" height="50" rx="11" fill="var(--rechazo-bg)" stroke="var(--rechazo)"/>
-            <text x="385" y="218" text-anchor="middle" style="fill:var(--rechazo)" font-size="12.5">✕ Nordwind intercepta la prueba → clave equivocada → en blanco</text>
+            <text x="385" y="218" text-anchor="middle" style="fill:var(--rechazo)" font-size="12">✕ sin el nonce del fiscal, el recibo no se ubica en la cadena</text>
           </svg>
-          <figcaption>Lena cobra la recompensa sin quemar su anonimato. Y Nordwind cumple la Directiva UE sin crear una base de datos de denunciantes que filtrar.</figcaption>
+          <figcaption>Lena reclama protegida por la Directiva UE, sin quemar su anonimato. Y Nordwind cumple la ley sin crear una base de datos de denunciantes que le pueden filtrar.</figcaption>
         </figure>
       </div>
     </div>
@@ -701,7 +701,7 @@
           <div class="row"><span class="act">ACT 2 · report sellado <span style="color:var(--dim)">· epoch 20673</span></span><span class="blk">block 325623</span></div>
           <div class="row rej"><span class="act">ACT 3 · doble reporte → rechazado</span><span class="blk">PROOF TIME · sin tx</span></div>
           <div class="row"><span class="act">ACT 4 · revealAuthorship</span><span class="blk">block 325627</span></div>
-          <div class="verdicts"><span class="vd ok">✅ PROSECUTOR verifica</span><span class="vd no">❌ EMPLOYER no verifica</span></div>
+          <div class="verdicts"><span class="vd ok">✅ FISCAL verifica</span><span class="vd no">❌ EMPLEADOR (sin el nonce) no lo ubica</span></div>
         </div>
         <div class="hcol mock">
           <h3>◇ Límites que sí declaramos</h3>
@@ -752,7 +752,7 @@
         <div class="buyers">
           <div class="buyer">
             <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="8" y="14" width="24" height="20"/><path d="M6 14 L20 6 L34 14"/><line x1="15" y1="20" x2="15" y2="28"/><line x1="25" y1="20" x2="25" y2="28"/></svg>
-            <h3>SEC-style</h3><p>Recompensa de 10–30% al primero en reportar.</p>
+            <h3>Reguladores</h3><p>Pagan por información original verificable — no por llegar primero.</p>
           </div>
           <div class="buyer">
             <svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2"><circle cx="20" cy="20" r="14"/><circle cx="20" cy="8" r="1.6" fill="currentColor"/><circle cx="30" cy="14" r="1.6" fill="currentColor"/><circle cx="30" cy="26" r="1.6" fill="currentColor"/><circle cx="20" cy="32" r="1.6" fill="currentColor"/><circle cx="10" cy="26" r="1.6" fill="currentColor"/><circle cx="10" cy="14" r="1.6" fill="currentColor"/></svg>
@@ -771,8 +771,8 @@
         <div class="road">
           <span class="r">emisor real (Azure AD / JWT)</span><span class="sep">→</span>
           <span class="r">evidencia cifrada E2E</span><span class="sep">→</span>
-          <span class="r">DV no-transferible</span><span class="sep">→</span>
-          <span class="r">fee-sponsor · Transaction.merge</span><span class="sep">→</span>
+          <span class="r">no-transferibilidad real (DV con simulación)</span><span class="sep">→</span>
+          <span class="r">fee-sponsor (un tercero paga el DUST)</span><span class="sep">→</span>
           <span class="r">auditoría del circuito</span>
         </div>
       </div>

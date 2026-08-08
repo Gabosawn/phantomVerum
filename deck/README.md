@@ -2,7 +2,32 @@
 
 **Link para el jurado (se abre en el navegador, sin instalar nada):**
 
-## 👉 https://claude.ai/code/artifact/e132aeac-d338-497b-8f41-8dbcf89e5dfc
+## 👉 https://claude.ai/code/artifact/5da05683-cd06-4f1b-b76b-31405cc0903f
+
+> **v2 (corregido, 8/8).** Reemplaza al link viejo
+> `e132aeac-…` — ese tenía afirmaciones que un jurado técnico podía pinchar
+> ("designated verifier", "10–30% al primero", `org` en el nullifier,
+> `Transaction.merge`). Compartir SOLO este link nuevo.
+
+---
+
+## Para presentar (lo que dice el presentador)
+
+- **Guion hablado, slide por slide (3–4 min):** [`guion-pitch.md`](./guion-pitch.md)
+  — texto verbatim, cue de entrega por slide, cronometrado a 3:40, con las
+  "trampas" (lo que no hay que decir, verificado en la auditoría) y el Q&A
+  ensayado al final.
+- **Teleprompter para presentar en vivo** (texto grande, cronómetro de ritmo
+  verde/ámbar/rojo, cajón de Trampas + Q&A a una tecla · ← → o espacio):
+  **https://claude.ai/code/artifact/b21804c9-f418-4aa8-b4de-1a4ce3e3c41b**
+  · fuente en [`teleprompter.html`](./teleprompter.html). Arranca privado —
+  compartir desde *Share* si lo abre otra persona.
+
+> El guion está alineado con la auditoría del 9/8: no dice "designated
+> verifier" como propiedad, no afirma que `report` publique `orgId`, y usa el
+> encuadre legal defendible (Directiva UE, no el "10–30% al primero" de la SEC).
+
+---
 
 > ⚠️ El artifact arranca **privado**. Para que el jurado lo abra, hay que
 > compartirlo desde el menú *Share* de la página (arriba a la derecha) y elegir
