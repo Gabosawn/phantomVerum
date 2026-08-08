@@ -1,5 +1,5 @@
 /**
- * THE single mirror of the contract's seven pure circuits lives in
+ * THE single mirror of the contract's six pure circuits lives in
  * `@phantomtrace/shared/crypto` — verified digest-for-digest against the compiled contract by
  * `contract-agreement.test.ts`. This file exists so every test, the model backend, the
  * witnesses and the e2e keep their existing import site.
