@@ -113,27 +113,6 @@ The contract in the box above is the fixed one.
 Full detail: [`docs/00-idea.md`](docs/00-idea.md) and
 [`docs/01-arquitectura.md`](docs/01-arquitectura.md).
 
-## Prior art
-
-Other projects published under the `midnightntwrk` topic solve neighbouring
-problems. Describing them accurately is the point: "nobody else does deferred
-authorship" is only worth saying if we can say what everybody else *does* do.
-
-| Project | What it proves | Where it stops short of this |
-|---|---|---|
-| **velo** | that a forensic verdict is legitimate — the evidence is sealed on the expert's machine and attested in ZK | It attests a verdict. It has no mechanism for the author of a sealed record to come forward *later* and prove they wrote it, to one chosen recipient. That gap is deferred authorship. |
-| **asfalia** | solvency, with a proof that expires | The expiry idea is the same one enforced here by `blockTimeGte`/`blockTimeLt` on every report. We constrain the window inside the circuit rather than around it, with no oracle and no trusted clock. |
-| **midnight-mail** | private messaging | Deployed to Preprod with a real contract address and block numbers. On deployment they are ahead of us. |
-
-The framing we borrow from velo, because it is the right one:
-
-> It is not a code-review convention. It is a constraint of the circuit: a
-> report that violates it cannot be produced.
-
-That is literally true here of the nullifier (one report per credential per
-period), of domain separation (every hash bound to its own tag), and of the
-report window (`blockTime`, checked in-circuit).
-
 ## Quick start
 
 ```bash
