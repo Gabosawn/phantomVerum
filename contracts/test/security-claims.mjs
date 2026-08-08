@@ -11,6 +11,11 @@ const credSecret = b32(0x22);
 const sec = b32(0x44);
 const ev = b32(0x33);
 
+const issuerA = b32(0x5a);
+const issuerB = b32(0x5b);
+const anchorA = pureCircuits.anchorOf(issuerA);
+const anchorB = pureCircuits.anchorOf(issuerB);
+
 const credComm = pureCircuits.credCommitmentOf(credSecret);
 const leafA = pureCircuits.leafOf(orgA, credComm);
 
@@ -20,6 +25,8 @@ const secrets = { ev };
 
 const mkWitnesses = (pathOverride, wantedLeaf = leafA) => ({
   credentialSecret: (c) => [c.privateState, credSecret],
+  issuerSecret: (c) => [c.privateState, issuerA],
+  prosecutorNonce: (c) => [c.privateState, b32(0x66)],
   personalSecret: (c) => [c.privateState, sec],
   evidenceHash: (c) => [c.privateState, secrets.ev],
   credentialPath: (c) => {
@@ -31,8 +38,8 @@ const mkWitnesses = (pathOverride, wantedLeaf = leafA) => ({
 });
 
 const m = newWorld(mkWitnesses());
-m.call('registerOrganization', orgA, b32(0xaa));
-m.call('registerOrganization', orgB, b32(0xbb));
+m.call('registerOrganization', orgA, anchorA);
+m.call('registerOrganization', orgB, anchorB);
 m.call('issueCredential', orgA, credComm);
 
 console.log('=== (1) The witness cannot lie about its organization ===');
@@ -65,7 +72,7 @@ check('findPathForLeaf of a nonexistent leaf -> undefined',
 
 console.log('\n=== (4) The epoch is fixed by blockTime, not by the caller ===');
 const m2 = newWorld(mkWitnesses());
-m2.call('registerOrganization', orgA, b32(0xaa));
+m2.call('registerOrganization', orgA, anchorA);
 m2.call('issueCredential', orgA, credComm);
 checkRejects('future epoch', () => m2.call('report', orgA, EPOCH + 1n), 'period not started yet');
 checkRejects('past epoch', () => m2.call('report', orgA, EPOCH - 1n), 'period already over');
@@ -74,8 +81,8 @@ try { m2.call('report', orgA, EPOCH); } catch { okEpoch = false; }
 check('the current epoch IS accepted', okEpoch);
 
 console.log('\n=== (5) Distinct epochs -> unlinkable nullifiers ===');
-const n1 = pureCircuits.nullifierOf(credSecret, orgA, EPOCH);
-const n2 = pureCircuits.nullifierOf(credSecret, orgA, EPOCH + 1n);
+const n1 = pureCircuits.nullifierOf(credSecret, EPOCH);
+const n2 = pureCircuits.nullifierOf(credSecret, EPOCH + 1n);
 check('the nullifier changes from epoch to epoch', Buffer.compare(n1, n2) !== 0);
 // Moving the clock one epoch forward, the same credential can report again
 // (with DIFFERENT evidence: the same report twice is cut by the guard).

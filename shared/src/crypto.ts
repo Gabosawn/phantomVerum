@@ -1,5 +1,5 @@
 /**
- * THE single TypeScript mirror of the five `export pure circuit`s in
+ * THE single TypeScript mirror of the seven `export pure circuit`s in
  * `contracts/src/testigo.compact`.
  *
  * One implementation, two consumers:
@@ -37,15 +37,20 @@ import {
 /** 64 lowercase hex chars, no `0x` prefix. */
 export type Hex32 = string;
 
-/** Credential tree depth (`HistoricMerkleTree<8, Bytes<32>>`). */
-export const MERKLE_DEPTH = 8;
+/**
+ * Credential tree depth (`HistoricMerkleTree<16, Bytes<32>>`).
+ *
+ * THE definition — `app/src/witnesses` imports this rather than repeating the
+ * literal, because a witness that builds a path of the wrong length is rejected
+ * by the circuit with an error that points nowhere near the mismatch.
+ */
+export const MERKLE_DEPTH = 16;
 
 const BYTES32 = new CompactTypeBytes(32);
 const VECTOR2 = new CompactTypeVector(2, BYTES32);
 const VECTOR3 = new CompactTypeVector(3, BYTES32);
-const VECTOR4 = new CompactTypeVector(4, BYTES32);
 
-/** Runtime type of `MerkleTreePath<8, Bytes<32>>`. */
+/** Runtime type of `MerkleTreePath<16, Bytes<32>>`. */
 export const MERKLE_PATH_TYPE = new CompactTypeMerkleTreePath(MERKLE_DEPTH, BYTES32);
 
 // ── Contract surface constants ──────────────────────────────────────────────
@@ -59,11 +64,11 @@ export const MERKLE_PATH_TYPE = new CompactTypeMerkleTreePath(MERKLE_DEPTH, BYTE
 export const EPOCH_DURATION = 86400n;
 
 /**
- * Domain separation tags, in position 0 of all five hashes.
+ * Domain separation tags, in position 0 of every hash.
  *
- * Without them `nullifierOf` and `authorshipOf` share a shape — H(sec, X, Y) — so an attacker
- * who registers an org whose `orgId` equals a victim's `reportId` forces a cross-domain
- * collision.
+ * Without them same-arity hashes collide across purposes: `reportIdOf` and `leafOf` are both
+ * H(_, X, Y) over `Bytes<32>`, and so are `nullifierOf` and `receiptOf`. An attacker who gets
+ * to choose one operand — and `orgId` is caller-chosen — could force a cross-domain collision.
  */
 export const DOMAIN_TAGS = {
   cred: "phantomtrace:cred:v1",
@@ -71,7 +76,10 @@ export const DOMAIN_TAGS = {
   credcomm: "phantomtrace:credcomm:v1",
   report: "phantomtrace:report:v1",
   nullifier: "phantomtrace:nullifier:v1",
-  authorship: "phantomtrace:authorship:v1",
+  /** The authorship receipt. Renamed from `authorship` when the secret left the preimage. */
+  receipt: "phantomtrace:receipt:v1",
+  /** The organization's issuer commitment, published as its `anchor`. */
+  issuer: "phantomtrace:issuer:v1",
 } as const;
 
 // ── conversions ─────────────────────────────────────────────────────────────
@@ -108,7 +116,7 @@ export const padHex32 = (s: string): Hex32 => bytesToHex(pad32(s));
 
 /**
  * The circuit's `(period as Field) as Bytes<32>` — how `nullifierOf` feeds a `Uint<64>` epoch
- * index into a `Vector<4, Bytes<32>>` hash.
+ * index into a `Vector<3, Bytes<32>>` hash.
  *
  * Reimplemented, not imported: compact-runtime's `convertFieldToBytes` (dist/casts.js) writes
  * the value LITTLE-ENDIAN, least significant byte first, zero-padded to the width. Mirroring it
@@ -141,7 +149,7 @@ const alignedBytes32 = (b: Uint8Array): AlignedValue => ({
 /** Compact's Merkle leaf hash. What gets inserted, and what gets looked up. */
 export const leafHashOf = (leaf: Hex32): AlignedValue => leafHash(alignedBytes32(hexToBytes(leaf)));
 
-// ── the five pure circuits ──────────────────────────────────────────────────
+// ── the seven pure circuits ─────────────────────────────────────────────────
 
 /**
  * `commitment = H(tag ‖ credSecret)` — the ONLY thing the employee hands to the issuer.
@@ -179,36 +187,53 @@ export function reportIdOf(evidenceHash: Hex32, personalSecret: Hex32): Hex32 {
 }
 
 /**
- * `nullifier = H(tag ‖ credSecret ‖ orgId ‖ periodBytes32(period))` — anti-spam, one report
- * per epoch. `period` is the epoch index the circuit's C0 pins to blockTime.
+ * `nullifier = H(tag ‖ credSecret ‖ periodBytes32(period))` — anti-spam, one report per epoch.
+ * `period` is the epoch index the circuit's C0 pins to blockTime.
+ *
+ * `orgId` is deliberately NOT here. It is a caller-chosen public argument, and while C0 pins
+ * `period` to the chain clock, nothing pinned `orgId` — so with free org registration the same
+ * credential bought one report per phantom org per epoch. Org-independent is the only version
+ * of this guard that holds.
  *
  * Note the secret: the CREDENTIAL one, not the personal one. That keeps anti-spam strong — one
  * credential is one report per period — and it is what keeps the issuer from scanning the
  * ledger to learn who reported: the issuer only ever held `credCommitmentOf(credSecret)`.
  */
-export function nullifierOf(credSecret: Hex32, orgId: Hex32, period: bigint): Hex32 {
+export function nullifierOf(credSecret: Hex32, period: bigint): Hex32 {
   return bytesToHex(
-    persistentHash(VECTOR4, [
+    persistentHash(VECTOR3, [
       pad32(DOMAIN_TAGS.nullifier),
       hexToBytes(credSecret),
-      hexToBytes(orgId),
       periodBytes32(period),
     ]),
   );
 }
 
-/** `authorship = H(tag ‖ personalSecret ‖ reportId ‖ prosecutorPk)` — the verifier binding. */
-export function authorshipOf(
-  personalSecret: Hex32,
-  reportId: Hex32,
-  prosecutorPk: Hex32,
-): Hex32 {
+/**
+ * `receipt = H(tag ‖ reportId ‖ prosecutorNonce)` — the authorship receipt.
+ *
+ * No secret in the preimage, by design. The ZK proof behind `revealAuthorship` is what
+ * establishes authorship; the hash only has to be recomputable by the prosecutor and by nobody
+ * else. So the prosecutor is handed nothing secret — and cannot mint a receipt under a nonce of
+ * their own choosing, which is what stops them from reselling the authorship.
+ */
+export function receiptOf(reportId: Hex32, prosecutorNonce: Hex32): Hex32 {
   return bytesToHex(
-    persistentHash(VECTOR4, [
-      pad32(DOMAIN_TAGS.authorship),
-      hexToBytes(personalSecret),
+    persistentHash(VECTOR3, [
+      pad32(DOMAIN_TAGS.receipt),
       hexToBytes(reportId),
-      hexToBytes(prosecutorPk),
+      hexToBytes(prosecutorNonce),
     ]),
+  );
+}
+
+/**
+ * `anchor = H(tag ‖ issuerSecret)` — what `registerOrganization` publishes and
+ * `issueCredential` checks against. Turns the org's anchor from decorative metadata into the
+ * credential channel's access control.
+ */
+export function anchorOf(issuerSecret: Hex32): Hex32 {
+  return bytesToHex(
+    persistentHash(VECTOR2, [pad32(DOMAIN_TAGS.issuer), hexToBytes(issuerSecret)]),
   );
 }
