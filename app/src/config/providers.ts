@@ -89,7 +89,8 @@ export type TestigoCircuitId =
   | 'registerOrganization'
   | 'issueCredential'
   | 'report'
-  | 'revealAuthorship';
+  | 'revealAuthorship'
+  | 'proveAuthorship';
 
 /** The same ones, as an array — to check that the artifacts exist. */
 export const TESTIGO_CIRCUIT_IDS: readonly TestigoCircuitId[] = [
@@ -97,6 +98,10 @@ export const TESTIGO_CIRCUIT_IDS: readonly TestigoCircuitId[] = [
   'issueCredential',
   'report',
   'revealAuthorship',
+  // Has a key pair because it reads the ledger. A circuit that touches no
+  // ledger state compiles without a ZKIR and without keys, and then there is
+  // no proof to export — see the note on `proveAuthorship` in the contract.
+  'proveAuthorship',
 ];
 
 /**

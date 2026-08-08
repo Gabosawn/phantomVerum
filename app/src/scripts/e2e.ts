@@ -78,12 +78,14 @@ console.log(`authorship revealed to prosecutor ${prosecutorPk.slice(0, 16)}…`)
 console.log(`authorshipHash : ${reveal.authorshipHash}`);
 printTx(reveal.tx);
 
-const prosecutorKey = api.exportKey(sealed.reportId, prosecutorPk);
-const vProsecutor = await api.verifyAuthorship(prosecutorKey);
-const employerKey = api.exportKey(sealed.reportId, employerPk);
-const vEmployer = await api.verifyAuthorship(employerKey);
+// ONE package, addressed to the prosecutor. The employer intercepts it and
+// reads it with their own key — the bytes are identical, the verdict is not.
+const pkg = api.exportKey(sealed.reportId, prosecutorPk);
+console.log(`package fields : ${Object.keys(pkg).join(', ')} — no secret leaves the machine`);
+const vProsecutor = await api.verifyAuthorship(pkg, prosecutorPk);
+const vEmployer = await api.verifyAuthorship(pkg, employerPk);
 
-console.log('\n--- same report, two verifiers ---');
+console.log('\n--- one package, two verifiers ---');
 console.log(
   `PROSECUTOR : ${vProsecutor.ok && vProsecutor.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY'}`,
 );

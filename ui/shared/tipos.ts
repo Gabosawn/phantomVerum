@@ -196,7 +196,15 @@ export interface TestigoClient {
   ): Promise<{ autoriaHash: Hex32; tx: TxResult }>;
 
   /** 100 % off-chain: recomputa con los pure circuits y lee el ledger. */
-  verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }>;
+  /**
+   * `verificadorPk` va aparte del material: es la clave de quien verifica, no
+   * la que viene en el sobre. Comparar una contra otra es lo que hace que la
+   * prueba no sea transferible.
+   */
+  verificarAutoria(
+    p: ExportLlaveAutoria,
+    verificadorPk: Hex32,
+  ): Promise<{ ok: boolean; enLedger: boolean }>;
 
   leerEstadoLedger(): Promise<EstadoLedger>;
 }

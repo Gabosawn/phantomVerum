@@ -230,13 +230,13 @@ teóricos. Lo que cambia:
 | # | Hallazgo | Estado |
 |---|---|---|
 | H-1 | `periodo` es parámetro libre → 4 denuncias aceptadas con una credencial variando el período. El anti-spam es evadible | ✅ **ARREGLADO** — `periodo: Uint<64>` índice de época atado a `blockTimeGte`/`blockTimeLt`, época de 86400 s. Solo la época actual es válida. Regresión: 0/3 denuncias extra aceptadas |
-| H-2 | El export contiene el witness set completo → **quien lo recibe puede actuar como el autor**: republicó autoría a la pk del empleador y quemó el slot de otro fiscal, bloqueando al autor real para siempre | Mitigado con secret por denuncia + reframe honesto |
+| H-2 | El export contiene el witness set completo → **quien lo recibe puede actuar como el autor**: republicó autoría a la pk del empleador y quemó el slot de otro fiscal, bloqueando al autor real para siempre | ✅ **ARREGLADO** — el export v2 no lleva el `secret`; se exporta `proveAuthorship` (§4.4). Con el export completo en la mano, `revelarAutoria` rechaza con `not the author`: el secret es witness. Regresión: `sec-audit.mjs` §D. Pendiente declarado: el campo `proof` todavía no son bytes de proof server |
 | H-3 | `secretPersonal` global reusado en todas las denuncias → un solo reveal desanonimiza retroactivamente todas | **Arreglado en §3.2** (secret por denuncia) |
 | H-4 | El emisor generaba `credencialSecret` → podía recomputar el nullifier de cualquier empleado y desanonimizarlo | **Arreglado en §3.1** (el cliente genera, manda solo la hoja) |
 | H-5 | La raíz de Merkle revelada es un contador de sincronización → acota el conjunto de anonimato | Regla de witness, abajo |
 | M-1 | `emitirCredencial` no liga `orgId` a la hoja: se forjó una credencial para una org no registrada | ✅ **ARREGLADO** — la hoja se construye en circuito con el `orgId` recién validado; nuevo `credCommitmentDe` con tag de dominio |
 
-**Suite de regresión adversarial: `npm test --workspace=contracts` → 47/47**, contra
+**Suite de regresión adversarial: `npm test --workspace=contracts` → 65/65**, contra
 el contrato compilado real en el simulador (sin red, sin proof server, sin mocks
 — el mecanismo de §3.3). Los tests assertean el comportamiento *correcto*, así
 que si alguien reintroduce un hallazgo, fallan. Verde también desde clone limpio.

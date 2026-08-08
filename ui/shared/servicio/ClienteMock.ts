@@ -279,20 +279,29 @@ export class ClienteMock implements TestigoClient {
   /**
    * 100 % off-chain: verifica la prueba de autoría.
    *
-   * En modo mock la proof = autoriaHash, así que verificar es chequear
-   * consistencia entre proof y autoriaHash + pertenencia al ledger.
-   * En producción (Preview) la proof es la proof ZK real del proof server
-   * y se verifica con la verifier key del circuito `proveAuthorship`.
+   * `verificadorPk` es la clave DE QUIEN VERIFICA, y es un parámetro aparte a
+   * propósito: el material trae la clave a la que el denunciante designó la
+   * prueba, y la pregunta que hay que contestar es si esas dos coinciden. Si se
+   * dejara que quien verifica escriba `p.fiscalPk`, cualquiera que intercepte
+   * el material se auto-designaría y la prueba diría que sí.
+   *
+   * En modo mock la proof = autoriaHash, así que verificar es: consistencia
+   * proof/autoriaHash + designación a esta clave + pertenencia al ledger. En
+   * producción (Preview) la proof es la proof ZK real del proof server y se
+   * verifica con la verifier key del circuito `proveAuthorship`, que ata la
+   * clave del verificador adentro del circuito.
    */
-  async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
+  async verificarAutoria(
+    p: ExportLlaveAutoria,
+    verificadorPk: Hex32,
+  ): Promise<{ ok: boolean; enLedger: boolean }> {
     if (p.version !== 2) {
       return { ok: false, enLedger: false };
     }
-    // Mock mode: proof == autoriaHash proves the denunciante knows the secret
-    // (in production, the ZK proof replaces this check).
-    const ok = p.proof === p.autoriaHash;
+    const consistente = p.proof === p.autoriaHash;
+    const designadaAEstaClave = p.fiscalPk === verificadorPk;
     const enLedger = this.ledger.autorias.includes(p.autoriaHash);
-    return { ok, enLedger };
+    return { ok: consistente && designadaAEstaClave, enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

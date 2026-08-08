@@ -2,13 +2,16 @@
  * B3.6 + B3.8 — Authorship verification and key export. 100% off-chain.
  *
  * Nothing in this module needs a wallet, a seed, a proof server or tDUST.
- * The verification is four hashes with the contract's exported `pure
- * circuit`s, plus one indexer read. That is what lets a prosecutor verify an
- * authorship with a URL and a JSON file, and it is — literally — the video
- * moment: the same proof, the prosecutor's key ✅, the employer's ❌.
+ * The verification is a hash comparison, a key comparison and one indexer
+ * read. That is what lets a prosecutor verify an authorship with a URL and a
+ * JSON file, and it is — literally — the video moment: the same package, the
+ * prosecutor's key ✅, the employer's ❌.
  *
- * That it comes for free is a consequence of exporting `reportIdOf`,
- * `authorshipOf`, etc. as `export pure circuit` (docs/03 §2.4).
+ * The package no longer carries the `reportSecret` (v2, `proveAuthorship`
+ * §4.4). The consequence for THIS module is that verification can no longer
+ * recompute the hashes from the secret: it compares what the package declares
+ * against what the ledger holds, and against the key of whoever is asking.
+ * See `AuthorshipKeyExport` for what that does and does not prove.
  */
 import {
   type Hex32,
@@ -46,14 +49,17 @@ export class InvalidExportError extends TestigoError {
 /**
  * B3.8 — Builds the package the whistleblower hands to the prosecutor.
  *
- * Reads the `reportSecret` from the local store (`secrets/denunciante.json`)
- * and recomputes `authorshipHash` for THAT prosecutor. It is 100% local: it
- * does not touch the network.
+ * Reads the `reportSecret` from the local store (`secrets/denunciante.json`),
+ * derives `authorshipHash` for THAT prosecutor — and leaves the secret
+ * behind. It is 100% local: it does not touch the network.
  *
- * ⚠️ The result is sensitive material — see the `AuthorshipKeyExport` note.
- * One export per prosecutor: the `authorshipHash` depends on `prosecutorPk`,
- * so the package for prosecutor A does not verify against prosecutor B's
- * record.
+ * The secret is read here and used here, and that is the whole point: the
+ * returned object is what goes into a file and out the door, and there is no
+ * field in it that could carry the secret. Anyone reviewing this function
+ * only has to check the returned literal.
+ *
+ * One export per prosecutor: `authorshipHash` depends on `prosecutorPk`, so
+ * the package for prosecutor A does not verify against prosecutor B's record.
  */
 export const exportKey = (
   reportId: Bytes32Input,
@@ -69,14 +75,18 @@ export const exportKey = (
     throw new MissingReportSecretsError(idHex);
   }
   const secretBytes = asBytes32(record.reportSecret, 'reportSecret');
+  const authorshipHash = toHex(pureCircuits.authorshipOf(secretBytes, idBytes, pkBytes));
 
   return {
     version: 2,
     reportId: idHex,
     evidenceHash: record.evidenceHash,
-    reportSecret: record.reportSecret,
     prosecutorPk: toHex(pkBytes),
-    authorshipHash: toHex(pureCircuits.authorshipOf(secretBytes, idBytes, pkBytes)),
+    authorshipHash,
+    // Demo build: `proveAuthorship` returns exactly this hash, so the
+    // stand-in is the hash itself. Production replaces it with the proof
+    // bytes from the proof server — the shape of the package does not change.
+    proof: authorshipHash,
   };
 };
 
@@ -95,43 +105,60 @@ export const parseKeyExport = (raw: unknown): AuthorshipKeyExport => {
   const o = raw as Record<string, unknown>;
   if (o['version'] !== 2) {
     throw new InvalidExportError(
-      `version ${String(o['version'])}, expected 2. The v1 format carried a ` +
-        'global secret (insecure per H-3, docs/03 §3.4) and is not migrated.',
+      `version ${String(o['version'])}, expected 2. The v1 format carried the ` +
+        'reportSecret in the file (docs/03 §3.4) and is not migrated: a v1 ' +
+        'package should be treated as a leaked secret, not as an input.',
     );
   }
-  const fields = ['reportId', 'evidenceHash', 'reportSecret', 'prosecutorPk', 'authorshipHash'] as const;
+  const fields = ['reportId', 'evidenceHash', 'prosecutorPk', 'authorshipHash', 'proof'] as const;
   for (const field of fields) {
     if (!isHex32(o[field])) {
       throw new InvalidExportError(`"${field}" is not a 64-char lowercase hex string`);
     }
   }
+  // A v2 file has no business carrying a secret. If one shows up, the sender
+  // is running an old build and has just leaked it — say so instead of
+  // silently dropping the field.
+  if (o['reportSecret'] !== undefined) {
+    throw new InvalidExportError(
+      'the package declares version 2 but still carries a "reportSecret" field. ' +
+        'That secret is now compromised: whoever produced this file must treat ' +
+        'the report as burned and stop using that build.',
+    );
+  }
   return {
     version: 2,
     reportId: o['reportId'] as Hex32,
     evidenceHash: o['evidenceHash'] as Hex32,
-    reportSecret: o['reportSecret'] as Hex32,
     prosecutorPk: o['prosecutorPk'] as Hex32,
     authorshipHash: o['authorshipHash'] as Hex32,
+    proof: o['proof'] as Hex32,
   };
 };
 
 /**
  * B3.6 — `verifyAuthorship`.
  *
+ * `verifierPk` is the key of whoever is running the verification, and it is a
+ * SEPARATE argument from the package on purpose. The package declares who it
+ * was addressed to; the question to answer is whether that matches the person
+ * asking. Reading the recipient out of the file — the shape this function had
+ * while the secret travelled with it — lets anyone who intercepts the file
+ * designate themselves, and the answer comes back ✅.
+ *
  * Two independent questions (see `VerificationResult`):
  *
- *  1. `ok`       — does the arithmetic close? `reportIdOf` and
- *                  `authorshipOf` are recomputed with the pure circuits. It
- *                  is the same C1 condition the `revealAuthorship` circuit
- *                  checks, run off-chain.
- *  2. `onLedger` — is that `authorshipHash` published on-chain?
+ *  1. `ok`       — the `proof` matches the declared `authorshipHash`, and the
+ *                  package is addressed to `verifierPk`. 100% local.
+ *  2. `onLedger` — are the declared `reportId` and `authorshipHash` on-chain?
  *
- * The ledger lookups use the RECOMPUTED values, not the ones declared in the
- * file. If someone copies a real `reportId` and `authorshipHash` from the
- * chain but invents the `reportSecret`, the recomputed values match nothing
- * and they get `ok: false, onLedger: false`. Trusting the declared fields
- * for the lookup would turn the "verifier" into a repeater of whatever the
- * file says.
+ * The lookups use the DECLARED values, because without the secret there is
+ * nothing to recompute them from. The ledger is what keeps that from being a
+ * repeater: an invented `authorshipHash` is not published, and a real one is
+ * only published for the recipient the author actually chose. What this does
+ * NOT catch is a replay — someone copying a genuine on-chain pair that was
+ * addressed to them. Only the real ZK proof closes that; see
+ * `AuthorshipKeyExport`.
  *
  * Without a `reader`, it queries the active network's indexer against the
  * `deployment.json` address. The simulator passes its own and exercises the
@@ -139,61 +166,58 @@ export const parseKeyExport = (raw: unknown): AuthorshipKeyExport => {
  */
 export const verifyAuthorship = async (
   exported: AuthorshipKeyExport,
+  verifierPk: Bytes32Input,
   reader?: LedgerReader,
 ): Promise<VerificationResult> => {
   const pkg = parseKeyExport(exported);
 
-  const evBytes = asBytes32(pkg.evidenceHash, 'evidenceHash');
-  const secBytes = asBytes32(pkg.reportSecret, 'reportSecret');
   const declaredId = asBytes32(pkg.reportId, 'reportId');
-  const pkBytes = asBytes32(pkg.prosecutorPk, 'prosecutorPk');
+  const declaredAuthorship = asBytes32(pkg.authorshipHash, 'authorshipHash');
 
-  // Off-chain C1: does this secret + this evidence produce that report?
-  const recomputedId = pureCircuits.reportIdOf(evBytes, secBytes);
-  const reportIdMatches = toHex(recomputedId) === pkg.reportId;
+  // Demo build: `proveAuthorship` returns the authorship hash, so consistency
+  // is an equality. Production: verify the proof bytes against the verifier
+  // key of the circuit — same boolean, real cryptography behind it.
+  const proofConsistent = pkg.proof === pkg.authorshipHash;
 
-  // The authorship is bound to THIS prosecutor's pk. Another pk, another hash.
-  const recomputedAuthorship = pureCircuits.authorshipOf(secBytes, declaredId, pkBytes);
-  const authorshipHashMatches = toHex(recomputedAuthorship) === pkg.authorshipHash;
+  // Addressed to me, or to somebody else? This is the EMPLOYER ❌ of the video.
+  const designatedToVerifier = toHex(asBytes32(verifierPk, 'verifierPk')) === pkg.prosecutorPk;
 
-  const ok = reportIdMatches && authorshipHashMatches;
+  const ok = proofConsistent && designatedToVerifier;
 
   const source = reader ?? (await createReadOnlyReader());
   const ledger = await source.readLedger();
-  const reportOnLedger = ledger.reports.member(recomputedId);
-  const authorshipOnLedger = ledger.authorships.member(recomputedAuthorship);
+  const reportOnLedger = ledger.reports.member(declaredId);
+  const authorshipOnLedger = ledger.authorships.member(declaredAuthorship);
   const onLedger = reportOnLedger && authorshipOnLedger;
 
-  return {
-    ok,
-    onLedger,
-    detail: describe({ ok, reportIdMatches, authorshipHashMatches, reportOnLedger, authorshipOnLedger }),
-    checks: { reportIdMatches, authorshipHashMatches, reportOnLedger, authorshipOnLedger },
-  };
+  const checks = { proofConsistent, designatedToVerifier, reportOnLedger, authorshipOnLedger };
+  return { ok, onLedger, detail: describe(checks), checks };
 };
 
 /** Human-readable message. It is what `verify-authorship.ts` (B4.5) prints. */
 const describe = (r: {
-  ok: boolean;
-  reportIdMatches: boolean;
-  authorshipHashMatches: boolean;
+  proofConsistent: boolean;
+  designatedToVerifier: boolean;
   reportOnLedger: boolean;
   authorshipOnLedger: boolean;
 }): string => {
-  if (!r.reportIdMatches) {
-    return 'the package\'s reportSecret does NOT reconstruct that reportId: whoever built it is not the author';
+  if (!r.proofConsistent) {
+    return 'the authorship proof does not match the declared authorshipHash: tampered package';
   }
-  if (!r.authorshipHashMatches) {
-    return 'the declared authorshipHash does not match the one derived from (secret, reportId, prosecutorPk): tampered package';
+  if (!r.designatedToVerifier) {
+    return (
+      'this package was addressed to ANOTHER key. The authorship may well be genuine — ' +
+      'it was simply not revealed to you, and nothing here proves anything to you'
+    );
   }
   if (!r.reportOnLedger) {
-    return 'the arithmetic closes, but that report is not sealed on the ledger';
+    return 'the package is consistent and addressed to you, but that report is not sealed on the ledger';
   }
   if (!r.authorshipOnLedger) {
     return (
-      'the arithmetic closes and the report exists, but the authorship is NOT published ' +
-      'for this prosecutorPk (the on-chain authorship is bound to another recipient\'s key)'
+      'the package is consistent and addressed to you and the report exists, but the ' +
+      'authorship was never published on-chain for your key'
     );
   }
-  return 'authorship verified: the package is consistent and the hash is published on-chain for this prosecutorPk';
+  return 'authorship verified: the package is addressed to you and the hash is published on-chain';
 };

@@ -194,7 +194,8 @@ las dos últimas las detectó una verificación posterior al brief.
 ### GA1 · P0 · El topic `midnightntwrk` sigue sin poner — **solo Gabriel puede**
 
 `gh repo view Gabosawn/phantomVerum --json repositoryTopics` devuelve vacío.
-Intentado con permisos de colaborador → **HTTP 404: requiere admin del repo.**
+Reverificado el 8/8: el `gh` de esta máquina está logueado como `gnarvaez-plusZ`
+con permiso **READ**. Hay que correrlo con la cuenta `Gabosawn`.
 
 ```bash
 gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact
@@ -203,7 +204,7 @@ gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact
 **Es causal de descalificación listada explícitamente en las reglas del evento.**
 Un minuto de trabajo. Es lo más barato y lo más caro de olvidar.
 
-### GA2 · P0 · `main` está ~15 commits atrás de `dev`
+### GA2 · P0 · `main` está **24** commits atrás de `dev` (no 15 — reverificado 8/8)
 
 **Un juez clona `main`, no `dev`.** Hoy ese clone tiene el contrato compilando,
 pero **no** los Bloques C y D, ni el workspace `shared/`, ni los 8 scripts CLI,
@@ -215,7 +216,7 @@ Merge `dev` → `main` apenas el E2E local esté verde. Si el deploy se demora,
 mergear igual antes de la entrega: es preferible un `main` completo sin deploy
 que un `main` que parece un contrato huérfano.
 
-### GA3 · P1 · El README declara una limitación que YA NO EXISTE (under-claiming)
+### GA3 · ✅ HECHO (sáb 8/8 ~22:45) — y era más grande de lo que decía este doc
 
 `contracts/README.md:142` sigue diciendo:
 
@@ -239,10 +240,43 @@ verifica sin recibir jamás el secreto.
 ⚠️ Además hay que revisar `contracts/test/sec-audit.mjs` §D, que hoy documenta ese
 ataque como *comportamiento conocido* y debería assertear que **ya no funciona**.
 
-### GA4 · P2 · Prior art sin los competidores de hoy
+**Lo que se encontró al ir a hacerlo.** El arreglo del commit `81baeed` estaba a
+medias, en dos capas distintas:
 
-No hay ninguna mención a `velo`, `midnight-mail` ni `asfalia` fuera de este doc.
-Ocho equipos publicaron hoy bajo el topic `midnightntwrk`:
+1. **`app/` nunca se migró.** `ui/shared/tipos.ts` tenía el v2 sin secret, pero
+   `app/src/api/types.ts` seguía con `reportSecret` en el paquete y `exportKey()`
+   lo leía del disco y lo metía en el JSON. Había **dos formatos "v2"
+   incompatibles** en el repo y el camino de producción todavía entregaba el
+   secret. Migrado: el export lleva `proof` y no lleva secret, y
+   `verifyAuthorship` recibe la clave del verificador como argumento aparte.
+2. **`proveAuthorship` nunca se había compilado, y no producía prueba alguna.**
+   `contracts/output/` estaba congelado en las 20:18, una hora antes del commit
+   que agregó el circuito. Al recompilar apareció el problema real: el compilador
+   decía *"Compiling 4 circuits"* y no generaba `proveAuthorship.prover` ni
+   `.verifier`. Verificado con un contrato mínimo aparte: **un `export circuit`
+   que no toca el ledger se compila sin ZKIR y sin par de claves.** Sin clave no
+   hay nada con qué probar ni contra qué verificar — la "prueba ZK exportable"
+   era un hash local con buen nombre. Se le agregó el mismo C2 que ya tenía
+   `revealAuthorship` (`assert(reports.member(reportId))`, una lectura alcanza) y
+   ahora compila **5 circuitos** con sus claves.
+
+Estado: contrato, `app/`, `contracts/README.md`, `README.md`, §D de `sec-audit`
+y la fila H-2 de `docs/03` actualizados. `npm test` verde en todo el monorepo
+(contracts 65, app 166, ui 66, tests 48).
+
+**Queda declarado, no arreglado:** el campo `proof` del paquete todavía es el
+`autoriaHash`, no bytes del proof server. Falta cablear `/prove` y `/check`. Está
+escrito como limitación en `contracts/README.md` — el formato ya es secret-free,
+así que cerrarlo no pide cambiar ni el circuito ni el formato.
+
+### GA3-original · el texto stale que motivó todo esto
+
+### GA4 · ✅ HECHO (sáb 8/8 ~22:45) — sección "Prior art" en `README.md`
+
+Tabla con los tres, arriba de "Quick start". Falta llevarlo a la slide (T2 de
+German, que además necesita crear `deck/`).
+
+Ocho equipos publicaron bajo el topic `midnightntwrk`:
 
 - **velo** es el más cercano — atestación ZK de veredictos forenses. Nombrarlo con
   precisión: *velo prueba que un veredicto es legítimo; no hace autoría diferida.*

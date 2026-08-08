@@ -338,9 +338,14 @@ export class TestigoApi {
 
   // ── B3.6 / B3.7 / B3.8 ────────────────────────────────────────────────
 
-  /** B3.6 — off-chain verification against the ledger this executor sees. */
-  verifyAuthorship(p: AuthorshipKeyExport): Promise<VerificationResult> {
-    return verifyAuthorship(p, this.executor);
+  /**
+   * B3.6 — off-chain verification against the ledger this executor sees.
+   *
+   * `verifierPk` is the caller's own key, not the one inside the package:
+   * the check is whether those two agree.
+   */
+  verifyAuthorship(p: AuthorshipKeyExport, verifierPk: Bytes32Input): Promise<VerificationResult> {
+    return verifyAuthorship(p, verifierPk, this.executor);
   }
 
   /** B3.7 — public state of the contract, in the §3.1 shape. */

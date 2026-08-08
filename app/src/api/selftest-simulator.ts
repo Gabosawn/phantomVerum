@@ -23,7 +23,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { check, checkRejectsAsync, summary } from '../witnesses/check.js';
+import { check, checkRejects, checkRejectsAsync, summary } from '../witnesses/check.js';
 import { epochOfSeconds } from '../witnesses/epoch.js';
 import { hashEvidenceBytes } from '../witnesses/evidence.js';
 import { toBytes32, toHex, randomBytes32 } from '../witnesses/hex.js';
@@ -42,6 +42,7 @@ import {
   mapCircuitError,
 } from './errors.js';
 import { TestigoApi, connectSimulator } from './testigo.js';
+import { parseKeyExport } from './verify.js';
 import type { LedgerState, AuthorshipKeyExport } from './types.js';
 
 // Same fixed instant as the other selftests: 2026-08-07T00:00:00Z, in
@@ -316,55 +317,69 @@ check(
   'carries the 5 fields of the §3.2 format',
   prosecutorKey.reportId.length === 64 &&
     prosecutorKey.evidenceHash.length === 64 &&
-    prosecutorKey.reportSecret.length === 64 &&
     prosecutorKey.prosecutorPk.length === 64 &&
-    prosecutorKey.authorshipHash.length === 64,
+    prosecutorKey.authorshipHash.length === 64 &&
+    prosecutorKey.proof.length === 64,
+);
+// The claim the README makes. Asserted over the serialized bytes, not over
+// the type: the type can be right while an extra property rides along.
+const serialized = JSON.stringify(prosecutorKey);
+check(
+  'THE SECRET NEVER LEAVES THE MACHINE: it is not in the package',
+  !('reportSecret' in prosecutorKey) && !serialized.includes(report1.reportSecret),
 );
 check('its authorshipHash is the one published on-chain', prosecutorKey.authorshipHash === reveal.authorshipHash);
+checkRejects(
+  'a v2 file that still carries a reportSecret is rejected, not sanitized',
+  () => parseKeyExport({ ...prosecutorKey, reportSecret: toHex(randomBytes32()) }),
+  'still carries a "reportSecret"',
+);
 
 console.log('\n--- The 4 cases of the README table ---');
 
-// (1) Real author, right prosecutor.
-const v1 = await api.verifyAuthorship(prosecutorKey);
+// (1) The package reaches the prosecutor it was addressed to.
+const v1 = await api.verifyAuthorship(prosecutorKey, prosecutorPk);
 check('REAL AUTHOR       -> ok && onLedger', v1.ok && v1.onLedger, v1.detail);
 
-// (2) Someone else's secret: the arithmetic does not close.
-const v2 = await api.verifyAuthorship({
-  ...prosecutorKey,
-  reportSecret: toHex(randomBytes32()),
-});
-check('FOREIGN SECRET    -> !ok', !v2.ok, v2.detail);
-check('                     and not on the ledger either', !v2.onLedger);
-check('                     the failing check is the reportId', !v2.checks.reportIdMatches);
+// (2) Tampered package: the proof no longer matches what it claims to prove.
+const v2 = await api.verifyAuthorship(
+  { ...prosecutorKey, proof: toHex(randomBytes32()) },
+  prosecutorPk,
+);
+check('TAMPERED PROOF    -> !ok', !v2.ok, v2.detail);
+check('                     the failing check is the proof', !v2.checks.proofConsistent);
+check('                     but the report itself IS still on the ledger', v2.checks.reportOnLedger);
 
 // (3) A report that was never sealed: the package is self-consistent but
-//     there is nothing on-chain.
-const ghostSecret = randomBytes32();
-const ghostEv = randomBytes32();
-const ghostId = pureCircuits.reportIdOf(ghostEv, ghostSecret);
+//     there is nothing on-chain to back it.
+const ghostHash = toHex(randomBytes32());
 const ghostKey: AuthorshipKeyExport = {
   version: 2,
-  reportId: toHex(ghostId),
-  evidenceHash: toHex(ghostEv),
-  reportSecret: toHex(ghostSecret),
+  reportId: toHex(randomBytes32()),
+  evidenceHash: toHex(randomBytes32()),
   prosecutorPk: toHex(prosecutorPk),
-  authorshipHash: toHex(pureCircuits.authorshipOf(ghostSecret, ghostId, prosecutorPk)),
+  authorshipHash: ghostHash,
+  proof: ghostHash,
 };
-const v3 = await api.verifyAuthorship(ghostKey);
+const v3 = await api.verifyAuthorship(ghostKey, prosecutorPk);
 check('NONEXISTENT REPORT -> ok but !onLedger', v3.ok && !v3.onLedger, v3.detail);
 check('                     the report is not sealed', !v3.checks.reportOnLedger);
 
-// (4) THE VIDEO MOMENT: same author, same report, ANOTHER recipient.
-const employerKey = api.exportKey(report1.reportId, employerPk);
-const v4 = await api.verifyAuthorship(employerKey);
+// (4) THE VIDEO MOMENT: the SAME package, intercepted, read with another key.
+//     Nothing about the file changes — only who is asking.
+const v4 = await api.verifyAuthorship(prosecutorKey, employerPk);
+check('INTERCEPTED       -> !ok: it was addressed to another key', !v4.ok, v4.detail);
+check('                     the failing check is the designation', !v4.checks.designatedToVerifier);
 check(
-  'OTHER PROSECUTOR  -> the authorshipHash is DIFFERENT',
-  employerKey.authorshipHash !== prosecutorKey.authorshipHash,
+  '                     and the authorship IS on-chain — it just is not theirs',
+  v4.checks.authorshipOnLedger,
 );
-check('                     the arithmetic still closes (ok)', v4.ok);
-check('                     but it is NOT published for that pk', !v4.onLedger, v4.detail);
+check(
+  '                     an export addressed to the employer has ANOTHER hash',
+  api.exportKey(report1.reportId, employerPk).authorshipHash !== prosecutorKey.authorshipHash,
+);
 
-console.log('\n--- PROSECUTOR ✅ / EMPLOYER ❌ over the SAME report ---');
+console.log('\n--- PROSECUTOR ✅ / EMPLOYER ❌ over the SAME bytes ---');
 check('PROSECUTOR -> AUTHORSHIP VERIFIED', v1.ok && v1.onLedger);
 check('EMPLOYER   -> DOES NOT VERIFY', !(v4.ok && v4.onLedger));
 

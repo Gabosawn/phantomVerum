@@ -64,13 +64,23 @@ export interface LedgerState {
 /**
  * Package the whistleblower hands to the prosecutor (§3.2, v2 format).
  *
- * ⚠️ DECLARED LIMITATION (H-2, docs/03 §3.4): whoever holds this package can
- * verify the authorship **and also act as the author** — republish the
- * authorship towards another `prosecutorPk` and burn the slot. The
- * PER-REPORT secret bounds the damage to this single report (in v1, one
- * export compromised all of them). The real mitigation — a ZK proof to the
- * prosecutor instead of the package — is roadmap, and it is declared as such
- * in the deck. It is not presented as non-transferable.
+ * **The `reportSecret` is NOT in here.** It never leaves the whistleblower's
+ * machine. What travels instead is `proof`: the output of the
+ * `proveAuthorship` circuit (`contracts/src/testigo.compact` §4.4), which
+ * demonstrates knowledge of a secret satisfying
+ * `reportIdOf(evidenceHash, secret) == reportId` without revealing it.
+ *
+ * That is what makes the package non-usable as an authorship credential:
+ * holding it does not let you run `revealAuthorship`, because that circuit
+ * needs the secret as a witness and the secret is not in the file.
+ *
+ * ⚠️ Residual limitation, declared: in the demo build `proof` is the
+ * `authorshipHash` itself, not proof bytes from the proof server. That is
+ * enough for the video scene (an intercepted package does not verify against
+ * the interceptor's key) but it does NOT bind the bearer to the author: a
+ * copier who saw the pair on-chain can replay it. Closing that requires
+ * `/prove` and `/check` against the `proveAuthorship` verifier key. The
+ * secret-free format is the part that is real today; the ZK binding is not.
  */
 export interface AuthorshipKeyExport {
   readonly version: 2;
@@ -78,29 +88,31 @@ export interface AuthorshipKeyExport {
   readonly reportId: Hex32;
   /** sha-256 of the evidence. The file itself never leaves the machine. */
   readonly evidenceHash: Hex32;
-  /** Secret of THIS report. It is the sensitive part of the package. */
-  readonly reportSecret: Hex32;
-  /** Public key of the target prosecutor. */
+  /** Public key of the target prosecutor — who this package is FOR. */
   readonly prosecutorPk: Hex32;
   /** `authorshipOf(reportSecret, reportId, prosecutorPk)`, precomputed. */
   readonly authorshipHash: Hex32;
+  /**
+   * `proveAuthorship` output. Demo build: the `authorshipHash`. Production:
+   * proof bytes from the proof server, checked against the verifier key.
+   */
+  readonly proof: Hex32;
 }
 
 /**
  * Result of `verifyAuthorship` (§3.1).
  *
- * The two fields are independent on purpose:
+ * The two headline fields are independent on purpose:
  *
- * - `ok`       — the arithmetic closes: the package's `reportSecret`
- *                reconstructs the declared `reportId` AND `authorshipHash`.
- *                100% local.
+ * - `ok`       — the package is internally consistent AND designated to the
+ *                key of whoever is verifying. 100% local.
  * - `onLedger` — that `authorshipHash` is actually published on-chain.
  *
- * A package can be `ok: true, onLedger: false` (valid arithmetic but the
- * authorship was never published, or was published for ANOTHER prosecutor).
- * It is exactly the EMPLOYER ❌ case of the video: the hash produced with
- * their pk is not on the ledger. Collapsing them into a single boolean would
- * erase that distinction.
+ * A package can be `ok: true, onLedger: false` (consistent and addressed to
+ * me, but the authorship was never published) and — the video's EMPLOYER ❌ —
+ * `ok: false, onLedger: true`: the authorship IS on the chain, it is simply
+ * not addressed to the employer's key. Collapsing them into a single boolean
+ * would erase that distinction, which is the whole point of the scene.
  */
 export interface VerificationResult {
   readonly ok: boolean;
@@ -109,10 +121,10 @@ export interface VerificationResult {
   readonly detail: string;
   /** Individual checks, for the UI panel. */
   readonly checks: {
-    /** `reportIdOf(evidenceHash, reportSecret) == reportId` */
-    readonly reportIdMatches: boolean;
-    /** `authorshipOf(reportSecret, reportId, prosecutorPk) == authorshipHash` */
-    readonly authorshipHashMatches: boolean;
+    /** The `proof` matches the declared `authorshipHash`. */
+    readonly proofConsistent: boolean;
+    /** `prosecutorPk` is the key of whoever is running the verification. */
+    readonly designatedToVerifier: boolean;
     /** The `reportId` is sealed on the ledger. */
     readonly reportOnLedger: boolean;
     /** The `authorshipHash` is published on the ledger. */
