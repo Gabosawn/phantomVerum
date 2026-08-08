@@ -184,7 +184,13 @@ and NOT `orgId` → one credential = one report per epoch, however many
 organizations it is enrolled in.
 Correct and defensible.
 
-**Option B — zero-risk fallback (only if A doesn't compile in time):**
+**Option B — ⚠️ NO LONGER A FALLBACK (see `contracts/src/fallback/testigo-b.compact`).**
+It was one while its arities matched A's. It deliberately did not follow the
+2026-08-08 v2 fixes, so it still carries what they closed: `orgId` in the
+nullifier over a *free* `Bytes<32>` period (unbounded reports per credential),
+and `personalSecret` inside the authorship hash (the prosecutor must be handed
+the secret — finding H-2). Switching to it would undo the audit. Kept because
+it compiles and records the design that was considered. Described as designed:
 the organization publishes `anchor = H(orgSecret)` and delivers the same
 `orgSecret` to all employees (mock). The circuit verifies `H(orgSecret) ==
 anchor`. Perfect anonymity within the org; **stated weakness:** whoever has the

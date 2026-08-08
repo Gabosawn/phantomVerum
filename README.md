@@ -462,9 +462,10 @@ compiled `testigo.compact`.
    semantics.
 2. **`app/` API** — the 4 CLI script functions, with TS signatures
    agreed upon before starting C.
-3. **Credential** — try Option A (Merkle); if it doesn't work, fallback to
-   Option B. The decision doesn't block B/C/D: the `report` circuit
-   interface is the same in both.
+3. **Credential** — Option A (Merkle). *Resolved: A shipped.* Option B was the
+   escape hatch and is no longer one — it did not take the v2 audit fixes, so
+   reaching for it now would reintroduce them. See the warning at the top of
+   `contracts/src/fallback/testigo-b.compact`.
 
 ## Documentation
 

@@ -82,6 +82,23 @@ witness evidenceHash(): Bytes<32>; // hash of the file, computed locally
 //
 // Do not reach for these as "the same" hashes. Option A's are in
 // `../testigo.compact` and mirrored in `shared/src/crypto.ts`.
+//
+// 🔴 AND READ THIS BEFORE SWITCHING TO IT UNDER PRESSURE. Because this file
+// did not follow the v2 fixes, it still CONTAINS the vulnerabilities that
+// audit closed — it is not a safety net any more, it is a regression:
+//
+//   · `orgId` is back in the nullifier, and here `period` is not even
+//     blockTime-bound: it is a free `Bytes<32>` label. Anti-spam is worth
+//     nothing — the same credential buys unlimited reports by varying either.
+//   · `authorshipOf` keeps `personalSecret` in the preimage, so verification
+//     requires handing the secret to the prosecutor, who can then republish
+//     the authorship or burn the slot (finding H-2).
+//   · `registerOrganization` has no access control, same as Option A had.
+//
+// It is kept because it compiles and documents the design that was considered
+// and rejected. Shipping it would undo the audit. If Option A ever genuinely
+// breaks, port the v2 fixes here FIRST — the diff is small and the tests in
+// `../test/sec-audit.mjs` and `receipt-authorship.mjs` say what to aim for.
 circuit domAnchor(): Bytes<32> {
   return pad(32, "phantomtrace:anchor:v1");
 }
