@@ -5,7 +5,9 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    # Feature branches too, not just the trunks. A gate whose first run is the
+    # merge into `main` is a gate you find out about too late.
+    branches: [main, dev, 'feat/**', 'fix/**', 'worktree-**']
   pull_request:
   workflow_dispatch:
 
