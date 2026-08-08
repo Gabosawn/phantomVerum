@@ -17,11 +17,12 @@ import { StateBoundedMerkleTree } from "@midnight-ntwrk/compact-runtime";
 
 import { ASSERTS, EPOCH_DURATION, MERKLE_DEPTH } from "./contract-surface.js";
 import {
-  authorshipOf,
+  anchorOf,
   credCommitmentOf,
   leafHashOf,
   leafOf,
   nullifierOf,
+  receiptOf,
   reportIdOf,
 } from "./crypto.js";
 import { AssertError, GENESIS_BLOCK_TIME } from "./types.js";
@@ -85,6 +86,12 @@ export class ModelHarness implements TestigoHarness {
    */
   issueCredential(orgId: Hex32, credCommitment: Hex32): void {
     assert(this.organizations.has(orgId), ASSERTS.orgNotRegistered);
+    // The anchor stops being decoration: only whoever holds the secret behind
+    // it can fill the tree, which is a finite and unrecoverable resource.
+    assert(
+      this.organizations.get(orgId) === anchorOf(this.privateState().issuerSecret),
+      ASSERTS.notTheIssuer,
+    );
     const leaf = leafOf(orgId, credCommitment);
     this.credentials = this.credentials.update(this.nextLeaf, leafHashOf(leaf)).rehash();
     this.nextLeaf += 1n;
@@ -123,9 +130,11 @@ export class ModelHarness implements TestigoHarness {
     const siblingsExist = this.credentials.findPathForLeaf(leafHashOf(witnessLeaf)) !== undefined;
     assert(siblingsExist && witnessLeaf === circuitLeaf, ASSERTS.credentialNotInOrg);
 
-    // C2 — one report per (credential, org, epoch). Keyed on the CREDENTIAL secret, so a
-    // reporter cannot mint extra nullifiers by picking a new personal secret.
-    const nullifier = nullifierOf(state.credentialSecret, orgId, period);
+    // C2 — one report per (credential, epoch). Keyed on the CREDENTIAL secret, so a reporter
+    // cannot mint extra nullifiers by picking a new personal secret — and NOT keyed on orgId,
+    // which is caller-chosen: with free org registration that bought one extra report per
+    // phantom org per epoch, and the guard was decorative.
+    const nullifier = nullifierOf(state.credentialSecret, period);
     assert(!this.nullifiers.has(nullifier), ASSERTS.alreadyReportedThisPeriod);
 
     // Idempotency guard: `Set.insert` is idempotent, so without this assert a resubmission of
@@ -140,7 +149,7 @@ export class ModelHarness implements TestigoHarness {
 
   // ── revealAuthorship — the differentiator ─────────────────────────────────────────────
 
-  revealAuthorship(reportId: Hex32, prosecutorPk: Hex32): void {
+  revealAuthorship(reportId: Hex32): void {
     const state = this.privateState();
 
     // C1 — only the author knows the preimage of reportId.
@@ -151,10 +160,12 @@ export class ModelHarness implements TestigoHarness {
     // C2 — the report exists.
     assert(this.reports.has(reportId), ASSERTS.reportDoesNotExist);
 
-    const authorship = authorshipOf(state.personalSecret, reportId, prosecutorPk);
-    assert(!this.authorships.has(authorship), ASSERTS.authorshipAlreadyRevealed);
+    // No secret in the preimage: the proof above is what establishes authorship,
+    // so the prosecutor needs nothing secret to recompute this and look it up.
+    const receipt = receiptOf(reportId, state.prosecutorNonce);
+    assert(!this.authorships.has(receipt), ASSERTS.authorshipAlreadyRevealed);
 
-    this.authorships.add(authorship);
+    this.authorships.add(receipt);
   }
 
   // ── the only thing the world gets to see ──────────────────────────────────────────────

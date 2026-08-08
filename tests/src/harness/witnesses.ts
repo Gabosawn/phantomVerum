@@ -19,6 +19,8 @@ export interface TestigoPrivateState {
   readonly credentialSecret: Uint8Array;
   readonly personalSecret: Uint8Array;
   readonly evidenceHash: Uint8Array;
+  readonly issuerSecret: Uint8Array;
+  readonly prosecutorNonce: Uint8Array;
   /** Hex form of `orgId`, so `credentialPath` can derive its leaf without re-encoding. */
   readonly orgIdHex: Hex32;
   readonly credentialSecretHex: Hex32;
@@ -73,6 +75,21 @@ export const witnesses = {
     ctx.privateState.evidenceHash,
   ],
 
+  issuerSecret: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
+    ctx.privateState,
+    ctx.privateState.issuerSecret,
+  ],
+
+  /**
+   * The nonce this reveal is addressed to. A witness rather than a public argument: a public
+   * nonce would land in the transcript, and anyone scraping (reportId, nonce) could recompute
+   * the receipt and pass themselves off as its addressee.
+   */
+  prosecutorNonce: (ctx: WitnessCtx): [TestigoPrivateState, Uint8Array] => [
+    ctx.privateState,
+    ctx.privateState.prosecutorNonce,
+  ],
+
   /**
    * Returns ONLY the siblings — the circuit derives the leaf itself from the public `orgId`,
    * so the witness cannot choose which leaf gets proven.
@@ -95,6 +112,8 @@ export function privateStateFor(a: Actor): TestigoPrivateState {
     credentialSecret: hexToBytes(a.credentialSecret),
     personalSecret: hexToBytes(a.personalSecret),
     evidenceHash: hexToBytes(a.evidenceHash),
+    issuerSecret: hexToBytes(a.issuerSecret),
+    prosecutorNonce: hexToBytes(a.prosecutorNonce),
     orgIdHex: a.orgId,
     credentialSecretHex: a.credentialSecret,
   };

@@ -12,15 +12,15 @@
  */
 
 import { ASSERTS } from "../harness/contract-surface.js";
-import { authorshipOf, credCommitmentOf, leafOf, reportIdOf } from "../harness/crypto.js";
+import { credCommitmentOf, leafOf, receiptOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
   ACME_ANCHOR,
   AUGUST,
   EMPLOYEE_A,
   EMPLOYEE_B,
-  EMPLOYER_PK,
-  PROSECUTOR_PK,
+  EMPLOYER_NONCE,
+  PROSECUTOR_NONCE,
 } from "../harness/fixtures.js";
 import { backendBanner, backends } from "../harness/index.js";
 import { AssertError } from "../harness/types.js";
@@ -81,26 +81,28 @@ function expectRejection(fn: () => void): string | null {
 // ── The export the reporter hands to the prosecutor, off-chain ───────────────────
 
 interface AuthorshipKeyExport {
-  readonly version: 1;
+  readonly version: 3;
   readonly reportId: Hex32;
-  readonly evidenceHash: Hex32;
-  readonly secret: Hex32;
-  readonly prosecutorPk: Hex32;
-  readonly authorshipHash: Hex32;
+  readonly receipt: Hex32;
 }
 
 /**
  * `verifyAuthorship` — 100 % off-chain: recompute with the pure circuits and read the
- * ledger. No proof server, no transaction. `verifierPk` is the key of whoever is looking.
+ * ledger. No proof server, no transaction.
+ *
+ * `verifierNonce` is the nonce the caller generated and sent to the whistleblower, and it is
+ * deliberately NOT in the package. That is the whole design: the verdict is a RECOMPUTATION
+ * against a value on the ledger, not a comparison between two fields of a file the holder
+ * controls. No secret is involved on either side.
  */
 function verifyAuthorship(
   claim: AuthorshipKeyExport,
-  verifierPk: Hex32,
+  verifierNonce: Hex32,
   l: LedgerSnapshot,
 ): { ok: boolean; onLedger: boolean; recomputed: Hex32 } {
-  const recomputed = authorshipOf(claim.secret, claim.reportId, verifierPk);
+  const recomputed = receiptOf(claim.reportId, verifierNonce);
   const onLedger = l.authorships.has(recomputed);
-  return { ok: onLedger && recomputed === claim.authorshipHash, onLedger, recomputed };
+  return { ok: onLedger && recomputed === claim.receipt, onLedger, recomputed };
 }
 
 // ── the demo ────────────────────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ function runDemo(h: TestigoHarness): void {
     // built from it in-circuit. The issuer never sees `credentialSecret` at all.
     const commitment = credCommitmentOf(employee.credentialSecret);
     const leaf = leafOf(ACME, commitment);
-    h.issueCredential(ACME, commitment);
+    h.as(employee).issueCredential(ACME, commitment);
     step(`issueCredential(ACME) → ${employee.name}: leaf ${short(leaf)}`);
   }
   console.log("     the mock issuer only ever receives H(credSecret) — never the secret itself");
@@ -174,17 +176,14 @@ function runDemo(h: TestigoHarness): void {
   // ── T4 ────────────────────────────────────────────────────────────────────────────────
   act(4, "Months later: proving authorship", "Only the author. Only to the verifier they choose.");
 
-  h.as(EMPLOYEE_A).revealAuthorship(reportId, PROSECUTOR_PK);
-  const authorshipHash = authorshipOf(EMPLOYEE_A.personalSecret, reportId, PROSECUTOR_PK);
-  step(`revealAuthorship(reportId, prosecutorPk) — authorship ${short(authorshipHash)}`);
+  h.as(EMPLOYEE_A).revealAuthorship(reportId);
+  const receipt = receiptOf(reportId, PROSECUTOR_NONCE);
+  step(`revealAuthorship(reportId) — receipt ${short(receipt)}`);
   showLedger(h.ledger());
 
   step("someone else tries to claim the same report:");
   const stolen = expectRejection(() =>
-    h.as({ ...EMPLOYEE_A, personalSecret: EMPLOYEE_B.personalSecret }).revealAuthorship(
-      reportId,
-      PROSECUTOR_PK,
-    ),
+    h.as({ ...EMPLOYEE_A, personalSecret: EMPLOYEE_B.personalSecret }).revealAuthorship(reportId),
   );
   verdict(false, `rejected — "${stolen}"  (only the author knows the preimage)`);
   require(stolen === ASSERTS.notTheAuthor, "a foreign secret must not prove authorship");
@@ -192,27 +191,25 @@ function runDemo(h: TestigoHarness): void {
   // The climax (Block E): one proof, two verifiers, two outcomes.
   console.log("\n  ── the same claim, read by two different people ──────────────────────");
 
+  // Note what is NOT in here: the nonce, and any secret. An interceptor holding
+  // this file has nothing to designate themselves with.
   const claim: AuthorshipKeyExport = {
-    version: 1,
+    version: 3,
     reportId,
-    evidenceHash: EMPLOYEE_A.evidenceHash,
-    secret: EMPLOYEE_A.personalSecret,
-    prosecutorPk: PROSECUTOR_PK,
-    authorshipHash,
+    receipt,
   };
 
   const l4 = h.ledger();
-  const asProsecutor = verifyAuthorship(claim, PROSECUTOR_PK, l4);
-  const asEmployer = verifyAuthorship(claim, EMPLOYER_PK, l4);
+  const asProsecutor = verifyAuthorship(claim, PROSECUTOR_NONCE, l4);
+  const asEmployer = verifyAuthorship(claim, EMPLOYER_NONCE, l4);
 
   console.log(`     PROSECUTOR  recomputes ${short(asProsecutor.recomputed)}`);
   verdict(asProsecutor.ok, `on chain: ${asProsecutor.onLedger} → authorship PROVEN`);
   console.log(`     EMPLOYER    recomputes ${short(asEmployer.recomputed)}`);
-  verdict(asEmployer.ok, `on chain: ${asEmployer.onLedger} → no such record`);
-  console.log("     Same author, same report, different verifier ⇒ different record.");
-  console.log("     The employer's key looks up a value that was never published.");
-  console.log("     (Per-recipient separation — NOT a designated-verifier scheme: the");
-  console.log("      proof verifies publicly, so a prosecutor can forward it.)");
+  verdict(asEmployer.ok, `on chain: ${asEmployer.onLedger} → not revealed to them`);
+  console.log("     Same author, same report, different nonce ⇒ different receipt.");
+  console.log("     The binding is one per nonce. The prosecutor cannot mint a receipt for");
+  console.log("     a nonce of their own choosing either: that needs the report secret.");
 
   require(asProsecutor.ok, "the designated prosecutor must verify");
   require(!asEmployer.ok, "the employer must not be able to reuse the proof");

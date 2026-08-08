@@ -13,11 +13,12 @@ import { describe, expect, it } from "vitest";
 
 import { ASSERTS, DOMAIN_TAGS, EPOCH_DURATION } from "../harness/contract-surface.js";
 import {
-  authorshipOf,
+  anchorOf,
   bytesToHex,
   hexToBytes,
   leafOf,
   nullifierOf,
+  receiptOf,
   pad32,
   padHex32,
   periodHex32,
@@ -71,28 +72,20 @@ describe("hardening — domain separation", () => {
   const PERIOD = 0x8070605040302010n;
   const PERIOD_HEX = periodHex32(PERIOD);
 
-  it("makes the nullifier/authorship cross-collision impossible", () => {
-    // The attack, reproduced as far as the Uint<64> epoch index lets it go.
-    //
-    // `nullifierOf` and `authorshipOf` share their shape — H(sec, X, Y) — with a secret in
-    // position 0. An attacker registers an organization whose `orgId` equals a victim's
-    // `reportId`, then aims to make the remaining operands collide too. The `period` operand
-    // is where the epoch-index semantics bite back: it is only 8 bytes little-endian, and C0
-    // pins it to the CURRENT epoch at report time, so the full 32-byte prosecutor key is out
-    // of reach. The tightest overlap the attacker can still arrange is `period` = the
-    // prosecutor key's low 8 bytes — reproduced here. Without the position-0 domain tags, the
-    // digests still differ for trivial reasons; with them, the collision is impossible even if
-    // every operand were to align.
-    const reportId = reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret);
-    const collidingOrgId = reportId;
+  it("makes the nullifier/receipt cross-collision impossible", () => {
+    // `nullifierOf` and `receiptOf` share their shape — H(_, X, Y) over Bytes<32> — so the
+    // position-0 domain tag is the ONLY thing separating them. Line them up as far as the
+    // types allow: the nullifier's second operand is a little-endian Uint<64> epoch index, so
+    // feed the receipt that exact encoding as its nonce and the two hashes take identical
+    // operands in identical positions.
     const collidingPeriod = 0xf1f1f1f1f1f1f1f1n;
 
-    const nullifier = nullifierOf(secret, collidingOrgId, collidingPeriod);
-    const authorship = authorshipOf(secret, reportId, PROSECUTOR_PK);
+    const nullifier = nullifierOf(secret, collidingPeriod);
+    const receipt = receiptOf(secret, periodHex32(collidingPeriod));
 
     // Identical arguments in identical positions, yet different digests — only the position-0
     // domain tag separates them.
-    expect(nullifier).not.toBe(authorship);
+    expect(nullifier).not.toBe(receipt);
   });
 
   it("separates the two same-arity hash pairs", () => {
@@ -103,7 +96,8 @@ describe("hardening — domain separation", () => {
     // digest whatever the tags are. Only same-arity pairs isolate the tag. The fourth operand
     // is the SAME 32 bytes in both: the nullifier's LE-encoded period vs a bytes-32 value.
     expect(leafOf(a, b)).not.toBe(reportIdOf(a, b)); // both Vector<3>
-    expect(nullifierOf(a, b, PERIOD)).not.toBe(authorshipOf(a, b, PERIOD_HEX)); // both Vector<4>
+    expect(nullifierOf(a, PERIOD)).not.toBe(receiptOf(a, PERIOD_HEX)); // both Vector<3>
+    expect(receiptOf(a, b)).not.toBe(leafOf(a, b)); // and against the third Vector<3>
   });
 
   it("binds each hash to its own domain tag", () => {
@@ -120,24 +114,18 @@ describe("hardening — domain separation", () => {
       bytesToHex(
         persistentHash(new CompactTypeVector(3, bytes32), [pad32(tag), hexToBytes(x), hexToBytes(y)]),
       );
-    const h4 = (tag: string, x: Hex32, y: Hex32, z: Hex32) =>
-      bytesToHex(
-        persistentHash(new CompactTypeVector(4, bytes32), [
-          pad32(tag),
-          hexToBytes(x),
-          hexToBytes(y),
-          hexToBytes(z),
-        ]),
-      );
+    const h2 = (tag: string, x: Hex32) =>
+      bytesToHex(persistentHash(new CompactTypeVector(2, bytes32), [pad32(tag), hexToBytes(x)]));
 
     expect(leafOf(a, b)).toBe(h3(DOMAIN_TAGS.cred, a, b));
     expect(reportIdOf(a, b)).toBe(h3(DOMAIN_TAGS.report, a, b));
-    expect(nullifierOf(a, b, PERIOD)).toBe(h4(DOMAIN_TAGS.nullifier, a, b, PERIOD_HEX));
-    expect(authorshipOf(a, b, c)).toBe(h4(DOMAIN_TAGS.authorship, a, b, c));
+    expect(nullifierOf(a, PERIOD)).toBe(h3(DOMAIN_TAGS.nullifier, a, PERIOD_HEX));
+    expect(receiptOf(b, c)).toBe(h3(DOMAIN_TAGS.receipt, b, c));
+    expect(anchorOf(a)).toBe(h2(DOMAIN_TAGS.issuer, a));
   });
 
   it("matches the golden vectors taken from the compiled contract", () => {
-    // These four values were produced by `pureCircuits.*` of the compiled `testigo.compact`,
+    // These values were produced by `pureCircuits.*` of the compiled `testigo.compact`,
     // not by the code under test, so they are an independent anchor. `contract-agreement.test.ts`
     // re-derives the same comparison live whenever the contract is present; these constants keep
     // the check alive even when it is not.
@@ -147,13 +135,14 @@ describe("hardening — domain separation", () => {
 
     expect(leafOf(x, y)).toBe("108f71cf14e9149651ff2ba395874832e39f97440fe5ddb838ad6b5c009c3cbf");
     expect(reportIdOf(x, y)).toBe("84b493185a7e947e4d029884956d406c51817dd38ca17c83513eaac71cd578d9");
-    expect(nullifierOf(x, y, PERIOD)).toBe(
-      "23bcdb3b770bf53d78766860525f5031a8adef8e0e3ae91661987e38c5b12cf8",
+    expect(nullifierOf(x, PERIOD)).toBe(
+      "c18498ac2af83e25383615ee3e9ad6d227e8ca518359d8f22d3d36c3ceabc0c0",
     );
-    expect(authorshipOf(x, y, z)).toBe("6ee2153fc7c435a0be2487e05e430d5db35dba15bb2743ce74491d6e72752a7d");
+    expect(receiptOf(y, z)).toBe("1131c0b15492ee163ffb716b9fb93ebc2f054f687e036363361733a88f3b55d4");
+    expect(anchorOf(x)).toBe("ab80032726118a0e822fcc8437b0378da0cc22f672f0ce61fdf744c0fa327272");
   });
 
-  it("keeps the four domain tags distinct and inside 32 bytes", () => {
+  it("keeps every domain tag distinct and inside 32 bytes", () => {
     const tags = Object.values(DOMAIN_TAGS);
     expect(new Set(tags).size).toBe(tags.length);
 
@@ -167,15 +156,15 @@ describe("hardening — domain separation", () => {
   it("makes the period part of the nullifier, not decoration", () => {
     // If `period` did not reach the digest, every period would share one nullifier and the
     // "different period passes" case would be a false positive.
-    expect(nullifierOf(secret, ACME, AUGUST)).not.toBe(nullifierOf(secret, ACME, SEPTEMBER));
+    expect(nullifierOf(secret, AUGUST)).not.toBe(nullifierOf(secret, SEPTEMBER));
   });
 
   it("keeps the nullifier off the personal secret", () => {
     // The nullifier is keyed on the CREDENTIAL secret. If it used the personal secret instead,
     // a reporter could mint a fresh nullifier per report by picking a new personal secret,
     // defeating anti-spam. Changing the personal secret must not move the nullifier.
-    const withOtherPersonal = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST);
-    expect(withOtherPersonal).toBe(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST));
-    expect(withOtherPersonal).not.toBe(nullifierOf(EMPLOYEE_A.personalSecret, ACME, AUGUST));
+    const withOtherPersonal = nullifierOf(EMPLOYEE_A.credentialSecret, AUGUST);
+    expect(withOtherPersonal).toBe(nullifierOf(EMPLOYEE_A.credentialSecret, AUGUST));
+    expect(withOtherPersonal).not.toBe(nullifierOf(EMPLOYEE_A.personalSecret, AUGUST));
   });
 });

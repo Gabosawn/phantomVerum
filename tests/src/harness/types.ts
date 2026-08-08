@@ -41,6 +41,10 @@ export interface Actor {
   readonly credentialSecret: Hex32;
   readonly personalSecret: Hex32;
   readonly evidenceHash: Hex32;
+  /** The secret behind the org's published anchor. Only an ISSUER needs a real one. */
+  readonly issuerSecret: Hex32;
+  /** The nonce the prosecutor sent for the pending reveal. Never on-chain. */
+  readonly prosecutorNonce: Hex32;
 }
 
 /**
@@ -105,7 +109,7 @@ export interface TestigoHarness {
   issueCredential(orgId: Hex32, credCommitment: Hex32): void;
   /** `period` is the epoch index (`Uint<64>` → `bigint`), forced by C0 to be the current one. */
   report(orgId: Hex32, period: bigint): void;
-  revealAuthorship(reportId: Hex32, prosecutorPk: Hex32): void;
+  revealAuthorship(reportId: Hex32): void;
 
   ledger(): LedgerSnapshot;
 }

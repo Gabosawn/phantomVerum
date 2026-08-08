@@ -43,8 +43,9 @@ export interface GeneratedModule {
     credCommitmentOf(credSecret: Uint8Array): Uint8Array;
     leafOf(orgId: Uint8Array, credCommitment: Uint8Array): Uint8Array;
     reportIdOf(ev: Uint8Array, sec: Uint8Array): Uint8Array;
-    nullifierOf(sec: Uint8Array, orgId: Uint8Array, period: bigint): Uint8Array;
-    authorshipOf(sec: Uint8Array, reportId: Uint8Array, prosecutorPk: Uint8Array): Uint8Array;
+    nullifierOf(sec: Uint8Array, period: bigint): Uint8Array;
+    receiptOf(reportId: Uint8Array, prosecutorNonce: Uint8Array): Uint8Array;
+    anchorOf(issuerSecret: Uint8Array): Uint8Array;
   };
 }
 
@@ -89,6 +90,8 @@ const EMPTY_PRIVATE_STATE: PS = {
   credentialSecret: new Uint8Array(32),
   personalSecret: new Uint8Array(32),
   evidenceHash: new Uint8Array(32),
+  issuerSecret: new Uint8Array(32),
+  prosecutorNonce: new Uint8Array(32),
   orgIdHex: "00".repeat(32),
   credentialSecretHex: "00".repeat(32),
 };
@@ -189,8 +192,8 @@ export class SimulatorHarness implements TestigoHarness {
     this.call("report", hexToBytes(orgId), period);
   }
 
-  revealAuthorship(reportId: Hex32, prosecutorPk: Hex32): void {
-    this.call("revealAuthorship", hexToBytes(reportId), hexToBytes(prosecutorPk));
+  revealAuthorship(reportId: Hex32): void {
+    this.call("revealAuthorship", hexToBytes(reportId));
   }
 
   ledger(): LedgerSnapshot {

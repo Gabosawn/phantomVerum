@@ -36,7 +36,7 @@ T2. An employee discovers fraud. Opens PhantomTrace, loads the evidence.
     The app calls report via the LOCAL proof server:
       - verifies the credential PRIVATELY against ACME's anchor
       - publishes: reportId = H(evidence ‖ secret)  ← the seal
-                   nullifier  = H(secret ‖ orgId ‖ period)  ← anti-spam
+                   nullifier  = H(dom ‖ credentialSecret ‖ period)  ← anti-spam
     ACME looks at the ledger: sees there IS a report. Cannot know who made it.
 
 T3. ACME tries to alter the evidence. Cannot: the hash is sealed
@@ -44,13 +44,13 @@ T3. ACME tries to alter the evidence. Cannot: the hash is sealed
 
 --- months later: the employee wants legal protection / reward ---
 
-T4. The whistleblower calls revealAuthorship(reportId, prosecutorPk):
-    proves they know the preimage of reportId (only the author knows it)
-    and binds the ON-CHAIN RECORD to the prosecutor's key — looked up with
-    another key, that record is not on the ledger. Verification happens
-    off-chain with a package the whistleblower hands to the prosecutor;
-    whoever holds that package can verify, which is exactly why it goes
-    only to the chosen prosecutor — and why forwarding it works too.
+T4. The prosecutor sends a fresh nonce off-chain. The whistleblower calls
+    revealAuthorship(reportId): proves they know the preimage of reportId
+    (only the author knows it) and writes a receipt bound to THAT nonce.
+    Nothing secret is handed over, and the prosecutor cannot mint a receipt
+    for a nonce of their own. Verification happens off-chain with a
+    package the whistleblower hands to the prosecutor; whoever holds that
+    package can verify, so it goes only to the chosen prosecutor.
 ```
 
 ## 3. Ledger state (public)
@@ -95,7 +95,7 @@ C2. assert(!nullifiers.member(nullifier))                // one report per epoch
 
 ```
 reportId   = H(dom ‖ evidenceHash ‖ personalSecret)        // the seal; only the author knows the preimage
-nullifier  = H(dom ‖ credentialSecret ‖ period)             // one report per (credential, epoch)
+nullifier  = H(dom ‖ credentialSecret ‖ period)            // one report per (credential, epoch)
 ```
 
 The split of secrets is deliberate: the **nullifier** uses
@@ -113,40 +113,50 @@ nullifiers.insert(disclose(nullifier))
 The nullifier prevents someone from drowning the channel with a thousand fake
 reports, without identifying anyone: different periods → unlinkable nullifiers.
 
-### 4.3 `revealAuthorship(reportId, prosecutorPk)` — the differentiator
+### 4.3 `revealAuthorship(reportId)` — the differentiator
 
-**Public inputs:** `reportId`, `prosecutorPk`.
-**Witnesses:** `evidenceHash`, `secret` — the same ones from the report.
+**Public inputs:** `reportId`.
+**Witnesses:** `evidenceHash`, `secret` — the same ones from the report —
+plus `prosecutorNonce`, the value the prosecutor generated and sent over.
+It is a witness and not a public argument on purpose: a public nonce would
+land in the transaction transcript, and anyone who scraped the pair
+`(reportId, nonce)` could recompute the receipt and pass themselves off as
+its addressee.
 
 ```
 C1. assert(H(evidenceHash ‖ secret) == reportId)   // only the author can
 C2. assert(reports.member(reportId))               // the report exists
 
-authorships.insert(disclose(H(secret ‖ reportId ‖ prosecutorPk)))
+authorships.insert(disclose(H(dom ‖ reportId ‖ prosecutorNonce)))
 ```
 
-**Why one record per prosecutor:** the authorship *record* is tied to *that*
-prosecutor's key, so the value published for the prosecutor is not the value
-the employer's key would look up — verify with the wrong key and the record is
-simply not on the ledger.
+**Why the secret is not in the preimage (audit 2026-08-08):** the ZK proof
+above is what establishes authorship — the chain checks it. The hash only has
+to be recomputable by the prosecutor and by nobody else, so putting `secret`
+inside it bought nothing and cost everything: it was the sole reason the
+whistleblower had to hand the secret over, which handed over the ability to
+republish the authorship to anyone. With `H(dom ‖ reportId ‖ prosecutorNonce)`
+the prosecutor recomputes from the public `reportId` and their own nonce, and
+**cannot** mint a receipt under a different nonce: that needs C1, and C1 needs
+the secret. Verified by execution in `contracts/test/receipt-authorship.mjs`.
 
-⚠️ **This is NOT a designated-verifier scheme** (corrected after the
-2026-08-08 audit; the name was doing more work than the construction). A real
+⚠️ **This is still NOT a designated-verifier scheme** (the name this carried
+until the 2026-08-08 audit was doing more work than the construction). A real
 one requires the designated party to be able to simulate an indistinguishable
-proof with their own key, so that a forwarded proof convinces nobody. Here
-`prosecutorPk` is just another public input and the proof verifies against the
-public verifier key — `proveAuthorship.zkir` contains no `member` opcode. The
-proof is therefore publicly verifiable and **transferable once handed over**.
-What the binding buys is per-recipient separation, not control over who ends
-up convinced.
+proof with their own nonce, so a forwarded proof convinces nobody. Here the
+receipt verifies against public data — `proveAuthorship.zkir` contains no
+`member` opcode — so it is publicly verifiable and **transferable once the
+nonce is shared**. What the binding buys is per-recipient separation, not
+control over who ends up convinced.
 
-**Honest scope (audit 2026-08-07):** the *conviction* comes from the off-chain
-package, and the package itself is transferable — a prosecutor who forwards
-`(evidenceHash, secret)` transfers the ability to verify. What the
-`prosecutorPk` binding buys is that the on-chain artifact names no one and
-cannot be re-bound. Cryptographic non-transferability (a designated-verifier
-tag the prosecutor could have simulated, e.g. Diffie–Hellman over the
-whistleblower's published point and the prosecutor's private key) is roadmap.
+**Honest scope:** the binding is one per nonce, and the receipt is publicly
+verifiable by anyone the prosecutor forwards the nonce to — so it is
+transferable once handed over. What the design guarantees is narrower and
+real: nothing secret ever travels, the on-chain artifact names no one, and a
+holder of the exported package cannot designate themselves (the nonce is not
+in it). Cryptographic non-transferability — a designated-verifier tag the
+prosecutor could have simulated, e.g. Diffie–Hellman over the whistleblower's
+published point and the prosecutor's private key — is roadmap.
 
 ## 5. The credential — two options, in order of preference
 
@@ -160,12 +170,18 @@ leaves; `anchor` is issuer metadata. The employee generates
 `credentialSecret` locally and hands the issuer only its **commitment**
 (`H(dom ‖ credentialSecret)`); `issueCredential(orgId, commitment)` builds
 the leaf `H(dom ‖ orgId ‖ commitment)` **in-circuit** from the orgId it just
-validated, so a leaf cannot be smuggled in for an unregistered org.
+validated, so a leaf cannot be smuggled in for an unregistered org. It also
+asserts `organizations.lookup(orgId) == H(dom ‖ issuerSecret)` — the `anchor`,
+which used to be metadata no circuit read, is now the credential channel's
+access control.
 `report` rebuilds the leaf in-circuit from the public `orgId` and the
 `credentialSecret` witness, and verifies membership with the
 `credentialPath` witness (siblings only — the witness cannot choose which
-leaf gets proven). Depth 16 = 65 536 credentials (depth 8 was a permanent kill switch: 256 junk insertions bricked issuance forever). The
-nullifier uses `credentialSecret` → one credential = one report per epoch.
+leaf gets proven). Depth is 16 (65 536 credentials): depth 8 was a permanent
+kill switch, since `issueCredential` fills a finite tree on an immutable
+contract — hence the issuer check below. The nullifier uses `credentialSecret`
+and NOT `orgId` → one credential = one report per epoch, however many
+organizations it is enrolled in.
 Correct and defensible.
 
 **Option B — zero-risk fallback (only if A doesn't compile in time):**
@@ -186,9 +202,8 @@ time, freeze B and move A to roadmap.
 | The company identifies the whistleblower on-chain | ZK membership + Midnight's senderless tx (no `msg.sender`, shielded fees) | ✅ |
 | The company alters or repudiates the evidence | `reportId` sealed on-chain; altering the evidence breaks the hash | ✅ |
 | A third party claims the report (steals the reward) | Only the author knows `(evidenceHash, secret)` — preimage of `reportId` | ✅ |
-| The employer looks up the authorship with their own key | One record per prosecutor: authorship is tied to `prosecutorPk`, so the employer's key finds nothing | ✅ |
-| The employer replays a proof that was handed to a prosecutor | **None.** The proof is publicly verifiable, so it is transferable once delivered — not a designated-verifier scheme | ❌ declared |
-| Spam / drowning the channel with fake reports | Nullifier `H(dom ‖ credentialSecret ‖ orgId ‖ epoch)`, epoch bound to blockTime | ✅ (weak in Option B — declared) |
+| The employer reuses/replays the authorship proof | The receipt is bound to the prosecutor's nonce, which is not in the package | ⚠️ partial — transferable once the nonce is forwarded, declared |
+| Spam / drowning the channel with fake reports | Nullifier `H(dom ‖ credentialSecret ‖ epoch)`, epoch bound to blockTime, org-independent | ✅ (weak in Option B — declared) |
 | Report with false content | **None.** We don't prove veracity — stated upfront | ❌ declared |
 | Off-chain metadata (indexer sees viewing key/IP) | Local proof server + Tor/own node; fee-sponsor roadmap | ⚠️ mitigated, declared |
 | Timing correlation (report at 3 AM, only Juan was online) | Out of scope; coarse periods help | ⚠️ declared |
@@ -257,13 +272,13 @@ export circuit report(orgId: Bytes<32>, period: Bytes<32>): [] {
   nullifiers.insert(disclose(nul));
 }
 
-export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [] {
+export circuit revealAuthorship(reportId: Bytes<32>): [] {
   const sec = personalSecret();
   const ev  = evidenceHash();
 
   assert(persistentHash<...>([ev, sec]) == reportId, "not the author");
   assert(reports.member(reportId), "report does not exist");
 
-  authorships.insert(disclose(persistentHash<...>([sec, reportId, prosecutorPk])));
+  authorships.insert(disclose(persistentHash<...>([domReceipt(), reportId, nonce])));
 }
 ```

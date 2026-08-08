@@ -64,8 +64,24 @@ witness personalSecret(): Bytes<32>; // the whistleblower's persistent secret
 witness evidenceHash(): Bytes<32>; // hash of the file, computed locally
 
 // ---- Domain separation (plan §2.2) ----
-// `phantomtrace:anchor:v1` is Option B's own tag; the other three match
-// Option A so the shared pure circuits stay domain-compatible.
+// `phantomtrace:anchor:v1` is Option B's own tag.
+//
+// ⚠️ This file is a FROZEN alternative, kept compiling as a fallback. It was
+// written when its tags and arities matched Option A operand for operand; the
+// contract v2 audit fixes moved Option A and this file deliberately did NOT
+// follow, so the two are no longer digest-compatible:
+//
+//   · `reportIdOf`   — still identical.
+//   · `nullifierOf`  — Option A dropped `orgId` (a caller-chosen public operand
+//                      that made the anti-spam guard evadable) and is now
+//                      Vector<3>; this one is still Vector<4>.
+//   · `authorshipOf` — gone from Option A entirely, replaced by
+//                      `receiptOf(reportId, prosecutorNonce)` under the tag
+//                      `phantomtrace:receipt:v1`, which takes the personal
+//                      secret out of the hash preimage.
+//
+// Do not reach for these as "the same" hashes. Option A's are in
+// `../testigo.compact` and mirrored in `shared/src/crypto.ts`.
 circuit domAnchor(): Bytes<32> {
   return pad(32, "phantomtrace:anchor:v1");
 }

@@ -8,14 +8,14 @@
 import { describe, expect, it } from "vitest";
 
 import { ASSERTS } from "../harness/contract-surface.js";
-import { authorshipOf, reportIdOf } from "../harness/crypto.js";
+import { receiptOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
   AUGUST,
   EMPLOYEE_A,
   EMPLOYEE_B,
-  EMPLOYER_PK,
-  PROSECUTOR_PK,
+  EMPLOYER_NONCE,
+  PROSECUTOR_NONCE,
   baseScenario,
   withPersonalSecret,
 } from "../harness/fixtures.js";
@@ -33,14 +33,14 @@ describe.each(BACKENDS)("[$name] revealAuthorship", ({ fresh }) => {
     return h;
   };
 
-  it("lets the real author prove authorship, bound to the prosecutor's key", () => {
+  it("lets the real author prove authorship, bound to the prosecutor's nonce", () => {
     const h = reported();
-    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A, PROSECUTOR_PK);
+    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A);
 
     const l = h.ledger();
-    expect(l.authorships).toContain(
-      authorshipOf(EMPLOYEE_A.personalSecret, REPORT_A, PROSECUTOR_PK),
-    );
+    // Note what the prosecutor needs to recompute this: the public reportId and
+    // the nonce they generated themselves. No secret is handed over.
+    expect(l.authorships).toContain(receiptOf(REPORT_A, PROSECUTOR_NONCE));
     expect(l.authorships.size).toBe(1);
 
     // Revealing authorship must not disturb the seal itself.
@@ -54,12 +54,12 @@ describe.each(BACKENDS)("[$name] revealAuthorship", ({ fresh }) => {
     // The thief copied reportId off the public ledger and has the evidence, but the preimage
     // needs the personal secret too. This is what stops a reward grab.
     const thief = withPersonalSecret(EMPLOYEE_A, EMPLOYEE_B.personalSecret);
-    expect(() => h.as(thief).revealAuthorship(REPORT_A, PROSECUTOR_PK)).toThrow(
+    expect(() => h.as(thief).revealAuthorship(REPORT_A)).toThrow(
       ASSERTS.notTheAuthor,
     );
 
     // A completely unrelated colleague fares no better.
-    expect(() => h.as(EMPLOYEE_B).revealAuthorship(REPORT_A, PROSECUTOR_PK)).toThrow(
+    expect(() => h.as(EMPLOYEE_B).revealAuthorship(REPORT_A)).toThrow(
       ASSERTS.notTheAuthor,
     );
 
@@ -72,20 +72,20 @@ describe.each(BACKENDS)("[$name] revealAuthorship", ({ fresh }) => {
     // EMPLOYEE_B never reported. They are the genuine author of this reportId (C1 passes), but
     // it is not on chain, so C2 must reject it.
     const nonexistent = reportIdOf(EMPLOYEE_B.evidenceHash, EMPLOYEE_B.personalSecret);
-    expect(() => h.as(EMPLOYEE_B).revealAuthorship(nonexistent, PROSECUTOR_PK)).toThrow(
+    expect(() => h.as(EMPLOYEE_B).revealAuthorship(nonexistent)).toThrow(
       ASSERTS.reportDoesNotExist,
     );
 
     expect(h.ledger().authorships.size).toBe(0);
   });
 
-  it("produces a different hash per prosecutor — the designated-verifier property", () => {
+  it("produces a different receipt per nonce — one binding per verifier", () => {
     const h = reported();
-    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A, PROSECUTOR_PK);
-    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A, EMPLOYER_PK);
+    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A);
+    h.as({ ...EMPLOYEE_A, prosecutorNonce: EMPLOYER_NONCE }).revealAuthorship(REPORT_A);
 
-    const forProsecutor = authorshipOf(EMPLOYEE_A.personalSecret, REPORT_A, PROSECUTOR_PK);
-    const forEmployer = authorshipOf(EMPLOYEE_A.personalSecret, REPORT_A, EMPLOYER_PK);
+    const forProsecutor = receiptOf(REPORT_A, PROSECUTOR_NONCE);
+    const forEmployer = receiptOf(REPORT_A, EMPLOYER_NONCE);
 
     // Same author, same report, different verifier ⇒ different record. This is why the employer
     // cannot replay the prosecutor's proof: the entry it would need to point at is not the one
@@ -100,11 +100,11 @@ describe.each(BACKENDS)("[$name] revealAuthorship", ({ fresh }) => {
 
   it("rejects revealing the same authorship twice to the same prosecutor", () => {
     const h = reported();
-    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A, PROSECUTOR_PK);
+    h.as(EMPLOYEE_A).revealAuthorship(REPORT_A);
 
     // Without the guard, Set.insert would silently no-op and the caller would believe a second,
     // distinct revelation had been recorded.
-    expect(() => h.as(EMPLOYEE_A).revealAuthorship(REPORT_A, PROSECUTOR_PK)).toThrow(
+    expect(() => h.as(EMPLOYEE_A).revealAuthorship(REPORT_A)).toThrow(
       ASSERTS.authorshipAlreadyRevealed,
     );
 
