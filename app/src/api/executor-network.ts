@@ -107,8 +107,16 @@ export interface NetworkOptions {
   readonly logger?: WalletLogger;
   readonly zkConfigPath?: string;
   /**
-   * `start(true)` requests tDUST from the faucet and BLOCKS until funded;
-   * the default here is `false` because only the first deploy needs it.
+   * `start(true)` runs testkit's `waitForFunds`, which does three things:
+   * syncs the wallet, requests NIGHT from the faucet if there is none, and —
+   * the part that matters for every call, not just the first — REGISTERS the
+   * NIGHT UTXOs for DUST generation and waits for the dust state to sync.
+   *
+   * Defaults to `true`. It used to default to `false` on the reasoning that
+   * "only the first deploy needs funds", which holds for NIGHT and fails for
+   * DUST: fees are paid in DUST, and `start(false)` returns before the dust
+   * state has synced, so balancing dies with `Insufficient Funds: could not
+   * balance dust` even when the wallet is demonstrably funded.
    */
   readonly waitForFunds?: boolean;
 }
@@ -149,7 +157,7 @@ export class NetworkExecutor implements TestigoExecutor {
       ...(options.logger === undefined ? {} : { logger: options.logger }),
       ...(options.zkConfigPath === undefined ? {} : { zkConfigPath: options.zkConfigPath }),
     });
-    await walletProvider.start(options.waitForFunds ?? false);
+    await walletProvider.start(options.waitForFunds ?? true);
     return { providers, walletProvider, network, compiled: compileContract(zkConfigPath) };
   }
 

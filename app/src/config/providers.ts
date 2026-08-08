@@ -35,7 +35,13 @@ import type {
   ProofProvider,
   PublicDataProvider,
 } from '@midnight-ntwrk/midnight-js-types';
-import { MidnightWalletProvider, logger as defaultLogger } from '@midnight-ntwrk/testkit-js';
+import { DustSecretKey, ZswapSecretKeys } from '@midnight-ntwrk/midnight-js-protocol/ledger';
+import {
+  DEFAULT_DUST_OPTIONS,
+  FluentWalletBuilder,
+  MidnightWalletProvider,
+  logger as defaultLogger,
+} from '@midnight-ntwrk/testkit-js';
 import type { NetworkId } from '@midnight-ntwrk/wallet-sdk';
 
 import { currentNetwork } from './init.js';
@@ -409,6 +415,26 @@ export const buildPrivateStateProvider = <
  * and BLOCKS until funded. For anything but the first deploy you want
  * `start(false)`.
  */
+/**
+ * Extra DUST spent on every transaction, on top of the computed fee.
+ *
+ * Without it, contract calls are rejected by the node with
+ * `1010: Invalid Transaction: Custom error: 117` (`NotNormalized`).
+ *
+ * The wallet computes a fee as `feesWithMargin(ledgerParams, feeBlocksMargin)
+ * + additionalFeeOverhead`. On a quiet chain — a fresh devnet, and Preview in
+ * practice — `feesWithMargin` evaluates to 0, so with the SDK's default
+ * overhead of 0n the whole fee is 0. A zero fee gives the balancer no
+ * imbalance to cover, so it builds an EMPTY `DustActions`, and
+ * `DustActions::well_formed` rejects that. The deploy goes through and the
+ * first contract call is the one that dies, which makes it look like a
+ * contract problem rather than a fee problem.
+ *
+ * Any positive amount the wallet can cover works. This value matches the one
+ * the Midnight tutorials and the compact-cli template use.
+ */
+export const ADDITIONAL_FEE_OVERHEAD = 300_000_000_000_000n;
+
 export const buildWalletProvider = async (
   network: NetworkConfig = currentNetwork(),
   options: {
@@ -417,7 +443,27 @@ export const buildWalletProvider = async (
   } = {},
 ): Promise<MidnightWalletProvider> => {
   const seed = options.seed ?? readDeploySeed();
-  return MidnightWalletProvider.build(options.logger ?? scriptLogger(), network, seed);
+  const logger = options.logger ?? scriptLogger();
+
+  // `MidnightWalletProvider.build()` would be shorter, but it hardcodes the
+  // default dust options and gives no way to set the overhead above. Building
+  // through the fluent builder is the only route to `withDustOptions`.
+  const { wallet, seeds, keystore } = await FluentWalletBuilder.forEnvironment(network)
+    .withSeed(seed)
+    .withDustOptions({
+      ...DEFAULT_DUST_OPTIONS,
+      additionalFeeOverhead: ADDITIONAL_FEE_OVERHEAD,
+    })
+    .buildWithoutStarting();
+
+  return MidnightWalletProvider.withWallet(
+    logger,
+    network,
+    wallet,
+    ZswapSecretKeys.fromSeed(seeds.shielded),
+    DustSecretKey.fromSeed(seeds.dust),
+    keystore,
+  );
 };
 
 // ---------------------------------------------------------------------------

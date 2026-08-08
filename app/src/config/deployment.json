@@ -1,7 +1,7 @@
 {
-  "network": null,
-  "contractAddress": null,
-  "deployTxId": null,
-  "deployedAt": null,
-  "compilerVersion": null
+  "network": "preview",
+  "contractAddress": "00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978",
+  "deployTxId": "00bc487c7cf787729e27325666d7aadd9700689e774d62641aadae49b0aea4d187",
+  "deployedAt": "2026-08-08T03:37:09.986Z",
+  "compilerVersion": "0.31.1"
 }
