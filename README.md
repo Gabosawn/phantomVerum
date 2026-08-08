@@ -61,16 +61,19 @@ read.
    unlinkable to the credential.
 3. **The evidence is immutable** — the hash is sealed on-chain. Any
    alteration won't match.
-4. **Months later, they reveal authorship** — `revealAuthorship` proves they know
-   the hash preimage and leaves an on-chain record bound to *that* prosecutor's
-   key. The record alone is useless to anyone else. The package handed to the
-   prosecutor **does not contain the report secret**: it carries the output of
-   `proveAuthorship`, a circuit that writes nothing on-chain. Holding the whole
-   package does not let you act as the author — `revealAuthorship` needs the
-   secret as a witness, and the circuit answers `not the author`. What is still
-   roadmap is narrower than it sounds: shipping real proof-server bytes in that
-   package, so it also proves the *bearer* is the author and not merely that the
-   author designated this key.
+4. **Months later, they reveal authorship** — the prosecutor sends a fresh
+   nonce off-chain; `revealAuthorship` proves in ZK that the caller knows the
+   `reportId` preimage and writes a receipt bound to *that* nonce. The
+   prosecutor then verifies by **recomputing** `receiptOf(reportId, theirNonce)`
+   and finding it on the ledger.
+
+   Two things follow, and they are the whole point. **Nothing secret is ever
+   handed over** — the package is two public fields — so the prosecutor cannot
+   resell or republish the authorship. And the verdict is not a comparison
+   between fields of a file its bearer controls: the employer recomputes with
+   their own nonce, gets a different receipt, and that one was never published.
+   Only someone who satisfied the circuit's authorship assert could have put
+   the real one there.
 
 Full detail: [`docs/00-idea.md`](docs/00-idea.md) and
 [`docs/01-arquitectura.md`](docs/01-arquitectura.md).
@@ -200,7 +203,7 @@ proof server and that integration is not done. The header reads "local".
 | The four derivations, an exact mirror of `contracts/src/testigo.compact` (same domain tags, same arity) | The Client's "✓ synced" indicator |
 | The circuit asserts: someone else's credential, a double report in the same period and a secret that is not the author's genuinely fail, before emitting anything | Proving times |
 | The Explorer's ledger reads, and the contract they come from | — the chain itself is real, and you can `curl` it |
-| The ❌ verdict: a real lookup that finds no record. The ⚠️ is real too — see Known limitations #4 | — |
+| Both verdicts: ✅ is a recomputation found on the ledger, ❌ is one that is not there. Neither is an `if` branch | — |
 
 The mocked part lives in exactly one file — `ui/shared/servicio/ClienteMock.ts`
 — behind the `TestigoClient` interface. No view knows about it, which is what
@@ -218,7 +221,7 @@ which hashes the evidence file — the same thing `app/`'s witnesses do.
 
 ```bash
 npm run compile:fast --workspace=contracts   # compiles the contract (no proving keys needed)
-npm test                                     # all four suites, 352 checks
+npm test                                     # all four suites, 375 checks
 npm run simulate                             # the four acts, printing the ledger at each step
 ```
 
@@ -227,9 +230,9 @@ the `tests/` one — the differential suite — which is 48 of them:
 
 | Workspace | Checks | What it runs against |
 |---|---|---|
-| `contracts` | 65 | the compiled contract, via `@midnight-ntwrk/compact-runtime` |
-| `app` | 173 | witnesses + the §3.1 API, against the simulator |
-| `ui` | 66 | the service layer and the shared crypto |
+| `contracts` | 87 | the compiled contract, via `@midnight-ntwrk/compact-runtime` |
+| `app` | 172 | witnesses + the §3.1 API, against the simulator |
+| `ui` | 68 | the service layer and the shared crypto |
 | `tests` | 48 | every case twice — hand-written model **and** compiled contract |
 
 ```
@@ -303,40 +306,13 @@ survives.
 ## Known limitations
 
 Found by an adversarial pass over our own contract on 2026-08-08, each one
-reproduced rather than theorised. They are listed with the fix we would apply,
-because "we did not notice" and "we found it, reproduced it, and know the
-patch" are different positions and only one of them is true here.
+reproduced rather than theorised. Four of the six were fixed the same night and
+are listed under [Fixed in v2](#fixed-in-v2) below; the two that remain are
+here, with the fix we would apply. "We did not notice" and "we found it,
+reproduced it, and know the patch" are different positions, and only the second
+one is true here.
 
-The first is enforced by the test suite: `contracts/test/sec-audit.mjs` prints
-a `GAP` line for it, and that check is written to **fail if the gap ever
-closes**, so nobody can quietly fix the contract and leave a stale excuse in
-this file.
-
-**1. The nullifier can be sidestepped through `orgId`** *(high)*
-
-`nullifierOf(sec, orgId, period)` mixes in `orgId`, and unlike `period` — which
-the circuit pins to `blockTime` — nothing constrains it. Since
-`registerOrganization` and `issueCredential` have no access control, the same
-credential secret can be enrolled into a phantom org and used to report again
-in the same epoch. Reproduced: nullifiers 1 → 2 within one epoch, no secrets
-required.
-**Fix:** drop `orgId` from `nullifierOf`. One report per credential per epoch,
-whatever it is enrolled in. ~1 h including the four suites that mirror the
-signature, plus a redeploy.
-
-**2. 256 unauthenticated calls brick the contract permanently** *(critical)*
-
-`credentials` is a `HistoricMerkleTree<8>` — 256 leaves — and `issueCredential`
-takes any `Bytes<32>` from anyone, with no quota and no revocation. At 256
-insertions every legitimate issuance fails forever with `exceeded structure
-bounds`. The contract is immutable, so there is no recovery; the depth is a
-type parameter, so the fix is a redeploy. Cost of the attack: 256 transactions.
-**Fix:** raise the depth, and tie issuance to the org's anchor —
-`assert(organizations.lookup(orgId) == anchorOf(issuerSecret()))`. Today the
-anchor is written and never read, so this also gives it a purpose, and closes
-`orgId` squatting at the same time. ~3 h.
-
-**3. The same author produces the same `reportId` on two deployments** *(medium)*
+**1. The same author produces the same `reportId` on two deployments** *(medium)*
 
 Neither `reportIdOf` nor `nullifierOf` mixes in the contract address, and the
 domain tags are constants (`phantomtrace:*`) across every deployment. The same
@@ -348,25 +324,16 @@ production verifier key.
 argument rather than `kernel.self()`, or the circuits stop being `pure` and the
 100% off-chain verification goes with them. Changes the export format. ~2 h.
 
-**4. Authorship cannot be positively verified in this build** *(declared)*
+**2. The receipt is transferable once the nonce is shared** *(declared)*
 
-`verifyAuthorship` is fail-closed and returns `verified` for nothing at all —
-see `app/src/api/verify.ts`. The export's `proof` field is a stand-in equal to
-`authorshipHash`, so a prosecutor holding a genuine package gets
-`unavailable`, not ✅. This is deliberate: the alternative had every input to
-the verdict supplied by whoever handed over the file, which let an employer
-mint their own ✅ from two values read off the public ledger.
-**Fix:** verify the real `proveAuthorship` proof against the circuit's verifier
-key. The circuit and its key already exist and ship in `contracts/output/keys/`.
+Per-recipient binding is real: the employer recomputes with their own nonce,
+gets a different receipt, and that one is on no ledger. But this is not a
+designated-verifier scheme — a real one lets the recipient simulate an
+indistinguishable proof, so a forwarded one convinces nobody. Here the receipt
+verifies against public data, so a prosecutor who shares the nonce transfers
+the ability to verify. See the threat model in `docs/01-arquitectura.md`.
 
-**5. The proof is transferable once handed over** *(declared)*
-
-Per-recipient binding is real — the employer's key finds no record on the
-ledger — but this is not a designated-verifier scheme, and a prosecutor who
-receives the package can forward it. See the threat model in
-`docs/01-arquitectura.md`.
-
-**6. Network-level anonymity is not addressed** *(declared, and the largest)*
+**3. Network-level anonymity is not addressed** *(declared, and the largest)*
 
 Measured against Preview: 87% of blocks are empty and the whole network carries
 ~1.4 transactions per minute, so a report is very likely the only transaction
@@ -375,6 +342,25 @@ matters more than any of the above. The contract's privacy holds; correlating
 by timing does not need to break it. Mitigations (submission delay, decoy
 traffic, Tor) are documented in `docs/05-mejoras_ES.md` §7-bis and not
 implemented.
+
+### Fixed in v2
+
+Same audit, fixed the same night. Kept here because the fixes are the
+interesting part, and because the tests that prove them are the artefact:
+`contracts/test/sec-audit.mjs` and `receipt-authorship.mjs` execute each attack
+and watch it fail.
+
+| Was | Now |
+|---|---|
+| **The prosecutor had to be handed the report secret.** `authorshipOf` mixed it into the hash, so recomputing required it — and whoever held it could republish the authorship, or burn the slot. | `receiptOf(reportId, prosecutorNonce)` drops the secret from the preimage. The prosecutor picks a nonce, sends it off-chain, and recomputes from public data. **Nothing secret is handed over, ever.** The ZK proof is what establishes authorship; the hash only has to be recomputable. |
+| **The verdict was forgeable from public data.** `ok` compared two fields both supplied by whoever brought the file, and was computed before reading the ledger. An employer could scrape a `reportId` and a hash off the chain and mint their own ✅. | Verification RECOMPUTES `receiptOf(reportId, myNonce)` and looks **that** value up. The scraping attack and the splice attack (one report's id with another's receipt) are both executed as tests and both fail. |
+| **`nullifierOf` mixed in `orgId`**, a caller-chosen operand nothing constrained — so a free phantom org bought the same credential another report per epoch. Anti-spam was decorative. | `nullifierOf(sec, period)`. One report per credential per epoch, whatever it is enrolled in. |
+| **256 unauthenticated calls bricked the contract forever.** Depth-8 tree, `issueCredential` open to anyone, no revocation, immutable contract. | Depth 16, and issuance is authenticated against the org's anchor — which until now was written by `registerOrganization` and read by no circuit. Also kills `orgId` squatting: a squatter can only issue under their own anchor. |
+
+Measured, v1 → v2: `report.prover` **9 982 969 → 9 981 157 B** — the eight extra
+Merkle levels are paid for by the operand `nullifierOf` gave up, so a 256× bigger
+anonymity set came out free on the hot path. `issueCredential` went
+2 823 958 → 5 205 679 B, and the full ZK compile 17.0 → 17.8 s.
 
 ## Development plan — 4 independent blocks
 
