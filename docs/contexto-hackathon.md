@@ -13,10 +13,9 @@
 > cuatro en Midnight mismo — hacen el anonimato **permanente**. Testigo lo
 > hace **reversible**: solo por el denunciante, solo ante la autoridad que él
 > elija, solo cuando le convenga. Que es exactamente lo que la protección
-> legal de denunciantes exige en la práctica: para cobrar la recompensa de la
-> SEC — 10 a 30 % de la multa — tenés que probar que fuiste **el primero** en
-> reportar. Hoy eso significa quemar tu anonimato ante todo el mundo. Con
-> Testigo, no."
+> legal de denunciantes exige en la práctica: para cobrar cualquier recompensa
+> o reclamar protección hay que poder **probar que fuiste vos**, y hoy eso
+> significa quemar tu anonimato desde el día uno. Con Testigo, no."
 >
 > "El buzón anónimo es plomería. La autoría diferida es el producto — está en
 > papers desde 2023 y nadie la había shippeado. Nosotros sí."
@@ -53,13 +52,32 @@ terceros para reclamar "fui el primero"; y la prueba de pertenencia se
 verifica sin que ningún servidor vea la credencial.
 
 **"¿La prueba de autoría no la puede usar el empleador si la intercepta?"**
-No — designated verifier: `H(secret ‖ denunciaId ‖ fiscalPk)`. Con otra clave
-no verifica nada.
+No, y la razón es más fuerte que la que ensayamos al principio. El recibo que
+queda en la cadena es `receiptOf(denunciaId, nonceDelFiscal)` — **sin el secret
+adentro**. El fiscal genera un nonce, se lo manda al denunciante fuera de la
+cadena, y después verifica **recomputando** ese hash y buscándolo en el ledger.
+El empleador recomputa con su propio nonce, le da otro valor, y ese valor no
+está publicado en ninguna parte. Nadie le entrega un secreto a nadie.
+
+⚠️ **No decir "designated verifier".** Lo decíamos y era incorrecto: un esquema
+designated-verifier real exige que el destinatario pueda *simular* una prueba
+indistinguible con su clave, de modo que reenviarla no convenza a nadie. Acá el
+recibo se verifica contra datos públicos, así que **es transferible una vez que
+el fiscal comparte el nonce**. Lo que sí tenemos es separación por
+destinatario. Un jurado técnico que lea `proveAuthorship.zkir` verá que no hay
+ningún opcode `member` y va a pinchar la afirmación grande.
 
 **"¿Qué evita el spam?"**
-El nullifier: `H(secret ‖ org ‖ período)`. Una denuncia por persona, org y
-período, sin identificar a nadie (nullifiers de períodos distintos no son
-linkeables).
+El nullifier: `H(dom ‖ credencialSecret ‖ período)`. Una denuncia por
+credencial y por época, sin identificar a nadie (nullifiers de épocas distintas
+no son linkeables).
+
+⚠️ **`org` YA NO va adentro** — lo sacamos en la auditoría del 8/8, y si lo
+mencionás abrís un flanco. Mientras estuvo, el `orgId` era un argumento público
+que elegía quien llamaba y que nada restringía: como registrar una org es
+gratis, la misma credencial compraba otra denuncia por época registrando una
+org fantasma. Está reproducido en `contracts/test/sec-audit.mjs` bloque B.2.
+El `período`, en cambio, sí está atado al `blockTime` por el circuito.
 
 **"¿Timing correlation / side channels físicos?"**
 Límite real y declarado. Mitigación parcial: períodos gruesos y el denunciante
@@ -73,6 +91,32 @@ empleados), fiscalías, sindicatos, periodismo de investigación.
 **"¿Qué harían con más tiempo?"**
 Emisor real, evidencia cifrada E2E al fiscal, fee-sponsor, auditoría del
 circuito.
+
+### ⚠️ Tres afirmaciones que NO hay que hacer (verificadas como falsas, 8/8)
+
+1. **"10–30 % de la multa" y "el primero en reportar".** 15 U.S.C. §78u-6(b)(1)
+   dice *"of what has been **collected**"*, no de la multa, y es **agregado
+   entre todos los denunciantes**. El criterio no es llegar primero sino
+   *"original information … that led to the successful enforcement"*, con
+   umbral de sanciones > USD 1.000.000. Y 17 CFR §240.21F-7(b) exige abogado
+   para denunciar anónimo y **revelar identidad antes de cobrar**: una denuncia
+   en blockchain no es una submission válida ante la SEC. Somos un sello de
+   evidencia *previo* al Form TCR.
+2. **"Designated verifier".** Ver el Q&A de arriba.
+3. **"El `orgId` no es público"**. Sí lo es: es un argumento del circuito, y
+   los argumentos son public inputs de la prueba (`num_inputs: 3` en
+   `report.zkir`). El árbol es global, así que la raíz no distingue orgs — pero
+   el `orgId` sí.
+
+**Gancho legal que SÍ se sostiene, y es mejor:** la Directiva UE 2019/1937.
+Art. 6(3) — quien denunció de forma anónima y después es identificado y sufre
+represalias **conserva la protección**; eso es exactamente lo que hace
+coherente denunciar anónimo hoy y reclamar mañana. Y Art. 21(5) — **inversión
+de la carga de la prueba**: si acreditás que denunciaste y sufriste un
+perjuicio, se presume represalia. Hoy esa prueba la custodia quien te va a
+despedir; nosotros se la damos al denunciante en un registro que el empleador
+no controla. España (Ley 2/2023) es el mejor mercado: obliga a aceptar
+denuncias anónimas y multa hasta 1.000.000 €.
 
 ## Estructura de deck sugerida
 
