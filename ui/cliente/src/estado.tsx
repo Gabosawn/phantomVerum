@@ -36,12 +36,7 @@ import {
 import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
-import {
-  type ClientePreview,
-  type WalletSession,
-  conectarWallet,
-  conectarClientePreview,
-} from "@shared/servicio/ClientePreview";
+import { type WalletSession, conectarWallet } from "@shared/servicio/ClientePreview";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "./demoPrivado";
@@ -159,20 +154,25 @@ function useEstado() {
   const [demoPausada, setDemoPausada] = useState(false);
   const [demoEscena, setDemoEscena] = useState(0);
 
-  // ── Preview / Wallet detection ──────────────────────────────────────────
-  const [modo, setModo] = useState<"mock" | "preview">("mock");
+  // ── Wallet detection ────────────────────────────────────────────────────
+  //
+  // El Cliente corre SIEMPRE contra `ClienteMock`, y por eso acá no hay ningún
+  // `modo`. Había uno: se llamaba a `conectarClientePreview()`, se tiraba el
+  // cliente que devolvía y solo se prendía un badge "preview" — de modo que el
+  // encabezado podía decir "preview" mientras cada operación seguía corriendo
+  // contra el mock. (En la práctica nunca llegaba a prenderse: la llamada iba
+  // sin dirección de contrato y `conectarClientePreview` devuelve `null` sin
+  // ella, así que el badge era inalcanzable además de mentiroso.)
+  //
+  // Escribir de verdad contra Preview desde el browser no es cablear esto: es
+  // la integración de `callTx` que `ClientePreview.ts` declara pendiente. El
+  // Explorer sí lee la cadena real — ver `previewConfig.ts`.
   const [walletSession, setWalletSession] = useState<WalletSession | null>(null);
 
-  // Try to connect to a Midnight wallet on mount. Mock is the fallback.
+  // Detect the wallet for the header indicator. This one is honest: it says
+  // whether a wallet is present, and claims nothing about where the circuits run.
   useEffect(() => {
     let cancelado = false;
-    conectarClientePreview().then((cp) => {
-      if (cancelado || !cp) return;
-      setModo("preview");
-    }).catch(() => {
-      // No wallet or Preview not available — stay in mock mode.
-    });
-    // Also detect wallet for the header indicator.
     conectarWallet().then((s) => {
       if (cancelado || !s) return;
       setWalletSession(s);
@@ -841,7 +841,6 @@ function useEstado() {
 
     reiniciar,
     nuevaIdentidad,
-    modo,
     walletSession,
   };
 }

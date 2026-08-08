@@ -6,6 +6,10 @@
  * talks to it via HTTP, just like the Node CLI does.
  */
 
+// The deployed address, straight from the file the deploy script writes. Data,
+// not code: no Node API rides along with it. See PREVIEW_CONTRACT_ADDRESS.
+import deployment from "../../../app/src/config/deployment.json";
+
 /** Midnight Preview endpoints (verified against testkit-js 4.1.1). */
 export const PREVIEW_ENDPOINTS = {
   /** GraphQL indexer — HTTP queries (no wallet needed). */
@@ -28,10 +32,19 @@ export const PREVIEW_NETWORK_ID = "preview";
 /**
  * Contract address deployed on Preview.
  *
- * Populated by B5 (deploy). Until then the Explorer falls back to
- * `ClienteMock` with fixture data; the Cliente keeps using `ClienteMock`
- * as its proving backend (the real contract calls go through Lace + the
- * local proof server, and that path needs `deployment.json` to be
- * complete).
+ * Read from `app/src/config/deployment.json`, which the deploy script writes
+ * and which is the SINGLE source of the address. It used to be a hand-kept
+ * `null` here, so the deploy landed and the browser never saw it — the file
+ * said one thing and this constant another. Importing the JSON is what keeps
+ * a redeploy from needing two edits.
+ *
+ * Still `null` before the first deploy: `deployment.json` ships with every
+ * field null, which is a valid "we have not deployed yet" state. In that case
+ * the Explorer falls back to `ClienteMock` with fixture data.
+ *
+ * Note this is only the READ path. The Cliente keeps `ClienteMock` as its
+ * proving backend regardless: writing to the contract from the browser needs
+ * Lace plus the local proof server, which is a separate integration.
  */
-export const PREVIEW_CONTRACT_ADDRESS: string | null = null;
+export const PREVIEW_CONTRACT_ADDRESS: string | null =
+  deployment.network === PREVIEW_NETWORK_ID ? deployment.contractAddress : null;

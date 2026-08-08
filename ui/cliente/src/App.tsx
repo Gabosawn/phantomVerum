@@ -35,7 +35,8 @@ export function App() {
       )}
 
       <Cabecera
-        etiqueta={["Cliente", e.modo === "preview" ? "preview" : "local"]}
+        // "local" y punto: los circuitos del Cliente corren siempre acá.
+        etiqueta={["Cliente", "local"]}
         pestanas={
           <>
             <PestanaPaso ruta="emitir" n={1} titulo="Emitir credenciales" sub="lo hace la empresa" />
@@ -50,7 +51,7 @@ export function App() {
               width: 7,
               height: 7,
               borderRadius: "50%",
-              background: e.modo === "preview" ? "var(--pv-pos)" : "var(--pv-pos)",
+              background: "var(--pv-pos)",
               flex: "none",
               boxShadow: "0 0 0 3px rgba(95, 208, 180, .16)",
             }}
@@ -59,11 +60,17 @@ export function App() {
             <span style={{ color: "var(--pv-muted)" }}>local :6300</span>
           </DatoHeader>
         </div>
+        {/*
+          Dice si hay una wallet presente, y nada más. Antes leía `modo`, que
+          se prendía al DETECTAR Preview aunque las operaciones siguieran
+          corriendo contra el mock — un indicador que hablaba de otra cosa que
+          la que mostraba.
+        */}
         <DatoHeader titulo="wallet">
-          {e.modo === "preview" ? (
-            <span style={{ color: "var(--pv-pos)" }}>conectado ✓</span>
+          {e.walletSession ? (
+            <span style={{ color: "var(--pv-pos)" }}>detectada ✓</span>
           ) : (
-            <span style={{ color: "var(--pv-muted)" }}>mock</span>
+            <span style={{ color: "var(--pv-muted)" }}>sin wallet</span>
           )}
         </DatoHeader>
         <a
