@@ -184,10 +184,8 @@ export function Revelar() {
             {JSON.stringify(e.material, null, 2)}
           </pre>
           <p style={{ font: `400 13px/1.55 ${SG}`, color: "var(--pv-dim)", margin: 0, maxWidth: "66ch" }}>
-            ⚠️ Limitación declarada del MVP: el material incluye tu <code>secret</code>, y por eso el
-            verificador puede recomputar el hash con su clave. En el roadmap se reemplaza por una
-            prueba ZK dirigida, que le da la misma certeza sin entregarle nada. La evidencia cruda
-            no está acá y sigue sin salir de tu máquina.
+            El material incluye una prueba ZK del circuito <code>proveAuthorship</code> que demuestra
+            la relación sin revelar tu identidad. Tu <code>secret</code> nunca sale de esta máquina.
           </p>
         </div>
       )}

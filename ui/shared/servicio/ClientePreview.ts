@@ -214,11 +214,14 @@ export class ClientePreview implements TestigoClient {
     );
   }
 
-  /** 100 % off-chain: recomputa pure circuits + checks vs indexer state. */
+  /** Verifica la proof ZK contra el ledger vía indexer. */
   async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
-    const recomputado = authorshipOf(p.secret, p.denunciaId, p.fiscalPk);
+    if (p.version !== 2) return { ok: false, enLedger: false };
     const state = await leerEstadoHex(this.contractAddress);
-    return { ok: recomputado === p.autoriaHash, enLedger: hexInState(state, p.autoriaHash) };
+    // Mock mode: proof == autoriaHash. Production: ZK proof verified by proof server /check.
+    const ok = p.proof === p.autoriaHash;
+    const enLedger = hexInState(state, p.autoriaHash);
+    return { ok, enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

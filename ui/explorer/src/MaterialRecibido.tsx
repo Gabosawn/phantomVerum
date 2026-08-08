@@ -45,15 +45,15 @@ export function MaterialRecibido({ titulo }: { titulo: string }) {
         {e.material && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <Dato etiqueta="denunciaId reclamado" valor={completo(e.material.denunciaId)} />
-            <Dato etiqueta="hash de autoría a verificar" valor={completo(e.material.autoriaHash)} />
+            <Dato etiqueta="hash de autoría" valor={completo(e.material.autoriaHash)} />
             <Dato
-              etiqueta="secret del autor"
-              valor={`${corto(e.material.secret, 6)} — recibido`}
+              etiqueta="proof ZK"
+              valor={`${corto(e.material.proof, 6)} — verificable`}
               atenuado
             />
             <Dato
               etiqueta="hash de la evidencia"
-              valor={`${corto(e.material.evidenciaHash, 6)} — recibido`}
+              valor={`${corto(e.material.evidenciaHash, 6)}`}
               atenuado
             />
           </div>
@@ -105,9 +105,9 @@ export function FaltaMaterial({ que }: { que: string }) {
         maxWidth: "64ch",
       }}
     >
-      {que} necesita el material del denunciante. Sin su <code>secret</code>, el valor sellado en la
-      cadena no se puede reproducir — ni por vos, ni por la empresa, ni por nadie. Eso no es una
-      limitación de esta pantalla: es lo que hace que el sello sirva.
+      {que} necesita el material del denunciante. Sin su prueba ZK, el valor sellado en la
+      cadena no se puede verificar — ni por vos, ni por la empresa, ni por nadie. La proof es
+      lo que hace que la verificación funcione sin revelar el secret.
     </div>
   );
 }

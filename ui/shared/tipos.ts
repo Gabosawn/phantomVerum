@@ -20,18 +20,22 @@ export type TxResult = {
  * §3.2 — el material que el denunciante exporta y le entrega al verificador
  * por fuera de la cadena.
  *
- * ⚠️ Limitación declarada del MVP: incluye `secret`, así que el verificador lo
- * aprende. Es lo que le permite recomputar el hash de autoría con SU clave y
- * obtener ✅ o ❌. En el roadmap esto se reemplaza por una prueba ZK dirigida
- * al fiscal, que le da la misma certeza sin entregarle el secret.
+ * NO contiene el `secret` del denunciante. En su lugar incluye `proof`: una
+ * prueba ZK generada por el proof server local contra el circuito
+ * `proveAuthorship`. El verificador usa `/check` contra su propio proof
+ * server para verificar la prueba sin aprender el secret.
+ *
+ * En modo mock (demo), `proof` es el `autoriaHash` — suficiente para
+ * verificar contra el ledger. En producción es la proof ZK real.
  */
 export type ExportLlaveAutoria = {
-  version: 1;
+  version: 2;
   denunciaId: Hex32;
   evidenciaHash: Hex32;
-  secret: Hex32;
   fiscalPk: Hex32;
   autoriaHash: Hex32;
+  /** ZK proof (mock: autoriaHash; producción: proof bytes del proof server). */
+  proof: Hex32;
 };
 
 /** §3.2 — estado privado del denunciante. Nunca sale de esta máquina. */

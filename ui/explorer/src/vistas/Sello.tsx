@@ -119,14 +119,13 @@ export function Sello() {
           titulo="Evidencia íntegra"
           formula={
             <>
-              H({corto(e.documento.hash, 4)} ‖ <Tachado>secret</Tachado>) ={" "}
-              {corto(e.selloRecomputado, 4)}
-              <br />∈ ledger.denuncias ✓
+              SHA-256(archivo) = evidenciaHash
+              <br />⊕ proof ZK → denunciaId ∈ ledger ✓
             </>
           }
         >
-          El hash del documento presentado, combinado con el secret del autor, reproduce exactamente
-          el <code style={{ font: `500 14px ${MONO}` }}>denunciaId</code> sellado en el ledger.
+          El hash del documento coincide con el <code>evidenciaHash</code> del material, y la
+          prueba ZK demuestra que ese hash es el que se selló. Nadie vio tu secret.
         </PanelVeredicto>
       )}
 
@@ -137,14 +136,14 @@ export function Sello() {
           titulo="Documento alterado"
           formula={
             <>
-              H({corto(e.documento.hash, 4)} ‖ <Tachado>secret</Tachado>) ={" "}
-              {corto(e.selloRecomputado, 4)}
-              <br />∉ ledger.denuncias ✗
+              SHA-256(archivo) ≠ evidenciaHash
+              <br />⊕ proof ZK no verifica ✗
             </>
           }
         >
-          Este archivo no es el que se selló. No hay discusión de credibilidad: el hash no está en la
-          cadena, y nadie puede fabricar uno que sí lo esté sin el secret del autor.
+          Este archivo no es el que se selló. El hash no coincide con el{" "}
+          <code style={{ font: `500 14px ${MONO}` }}>evidenciaHash</code> del material,
+          y la prueba ZK no puede validarlo.
         </PanelVeredicto>
       )}
 

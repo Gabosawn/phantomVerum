@@ -146,9 +146,7 @@ function useEstado() {
   } | null>(null);
 
   const [llaveGuardada, setLlaveGuardada] = useState(false);
-  const [llave, setLlave] = useState<Omit<ExportLlaveAutoria, "fiscalPk" | "autoriaHash"> | null>(
-    null,
-  );
+  const [llave, setLlave] = useState<ExportLlaveAutoria | null>(null);
 
   const [verificadorId, setVerificadorId] = useState(VERIFICADORES[0].id);
   const [faseRevelar, setFaseRevelar] = useState<Fase>("idle");
@@ -324,10 +322,12 @@ function useEstado() {
         bloque: r.tx.blockHeight,
       });
       setLlave({
-        version: 1,
+        version: 2,
         denunciaId: r.denunciaId,
         evidenciaHash: cliente.obtenerWitnesses()?.evidenciaHash ?? "",
-        secret: identidad.secretPersonal,
+        fiscalPk: "",
+        autoriaHash: "",
+        proof: "", // filled at reveal time
       });
       setHayDenuncias(true);
       setFaseDenuncia("listo");
@@ -342,7 +342,15 @@ function useEstado() {
 
   const guardarLlave = useCallback(() => {
     if (!llave) return;
-    const blob = new Blob([JSON.stringify(llave, null, 2)], { type: "application/json" });
+    const exportable: ExportLlaveAutoria = {
+      version: 2,
+      denunciaId: llave.denunciaId,
+      evidenciaHash: llave.evidenciaHash,
+      fiscalPk: llave.fiscalPk,
+      autoriaHash: llave.autoriaHash,
+      proof: llave.proof,
+    };
+    const blob = new Blob([JSON.stringify(exportable, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -350,7 +358,7 @@ function useEstado() {
     a.click();
     URL.revokeObjectURL(url);
     setLlaveGuardada(true);
-    log("phantom-trace-autoria.key escrita en disco · secret + evidenciaHash");
+    log("phantom-trace-autoria.key escrita en disco · proof ZK (mock: autoriaHash)");
   }, [llave, log]);
 
   /**
@@ -368,18 +376,19 @@ function useEstado() {
       setError(null);
       try {
         const datos = JSON.parse(await f.text()) as ExportLlaveAutoria;
-        if (datos.version !== 1 || !datos.denunciaId || !datos.secret || !datos.evidenciaHash) {
-          throw new Error("el archivo no es una llave de autoría válida");
+        if (datos.version !== 2 || !datos.denunciaId || !datos.evidenciaHash || !datos.proof) {
+          throw new Error("el archivo no es una llave de autoría válida (v2)");
         }
         setLlave({
-          version: 1,
+          version: 2,
           denunciaId: datos.denunciaId,
           evidenciaHash: datos.evidenciaHash,
-          secret: datos.secret,
+          fiscalPk: "",
+          autoriaHash: "",
+          proof: datos.proof,
         });
-        setIdentidad((previa) => ({ ...previa, secretPersonal: datos.secret }));
         cliente.establecerWitnesses({
-          secretPersonal: datos.secret,
+          secretPersonal: identidad.secretPersonal,
           credencialSecret: identidad.credencialSecret,
           orgId: ORG_ID,
           hojaIndex: 0,
@@ -387,12 +396,12 @@ function useEstado() {
         });
         setFaseRevelar("idle");
         setAutoria(null);
-        log("phantom-trace-autoria.key leída · witnesses restaurados en memoria local");
+        log("phantom-trace-autoria.key leída · proof ZK cargada, sin secret");
       } catch (e) {
         fallar(e);
       }
     },
-    [cliente, fallar, identidad.credencialSecret, log],
+    [cliente, fallar, identidad.credencialSecret, identidad.secretPersonal, log],
   );
 
   // ── T4 ───────────────────────────────────────────────────────────────────
@@ -424,10 +433,17 @@ function useEstado() {
     }
   }, [cliente, faseRevelar, fallar, llave, log, verificador.pk]);
 
-  /** El puente con el Explorer: el material viaja por fuera de la cadena. */
+  /** El puente con el Explorer: proof ZK, sin secret. */
   const material = useMemo<ExportLlaveAutoria | null>(() => {
     if (!llave || !autoria) return null;
-    return { ...llave, fiscalPk: verificador.pk, autoriaHash: autoria.autoriaHash };
+    return {
+      version: 2,
+      denunciaId: llave.denunciaId,
+      evidenciaHash: llave.evidenciaHash,
+      fiscalPk: verificador.pk,
+      autoriaHash: autoria.autoriaHash,
+      proof: autoria.autoriaHash, // mock: proof == autoriaHash; producción: proof ZK real
+    };
   }, [autoria, llave, verificador.pk]);
 
   const copiarMaterial = useCallback(async () => {
@@ -435,7 +451,7 @@ function useEstado() {
     try {
       await navigator.clipboard.writeText(JSON.stringify(material, null, 2));
       setCopiado(true);
-      log("material exportado al portapapeles · denunciaId + secret + fiscalPk + autoriaHash");
+      log("material exportado · proof ZK (sin secret) + denunciaId + fiscalPk");
     } catch {
       setError("el browser bloqueó el portapapeles — copiá el JSON a mano");
     }

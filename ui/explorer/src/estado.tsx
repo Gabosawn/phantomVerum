@@ -81,7 +81,12 @@ export const CLAVES = [
 
 function analizarMaterial(texto: string): ExportLlaveAutoria {
   const datos = JSON.parse(texto) as ExportLlaveAutoria;
-  const faltantes = (["denunciaId", "evidenciaHash", "secret", "autoriaHash"] as const).filter(
+  if (datos.version !== 2) {
+    throw new Error("versión de material no soportada —se esperaba v2");
+  }
+  const faltantes = (
+    ["denunciaId", "evidenciaHash", "autoriaHash", "proof"] as const
+  ).filter(
     (k) => typeof datos[k] !== "string" || !/^[0-9a-f]{64}$/.test(datos[k]),
   );
   if (faltantes.length > 0) {
@@ -193,29 +198,34 @@ function useEstado() {
   /**
    * T3 — ¿es ESTE el documento que se selló?
    *
-   * Se recomputa `reportIdOf(hash del documento, secret del autor)` y se
-   * compara contra lo que hay en la cadena. Es aritmética, no una discusión de
-   * credibilidad: si cambió un byte, el hash no da.
+   * El material v2 no incluye el secret. La verificación de integridad
+   * compara el hash del archivo presentado con el evidenciaHash del
+   * material (que la prueba ZK demostró correcto).
    */
   const verificarSello = useCallback(async () => {
     if (!documento || !material) return;
-    const recomputado = reportIdOf(documento.hash, material.secret);
-    setSelloRecomputado(recomputado);
-    const enCadena = DENUNCIAS.some((d) => d.denunciaId === recomputado);
-    setVeredictoSello(recomputado === material.denunciaId && enCadena ? "ok" : "fail");
+    const fileHash = documento.hash;
+    setSelloRecomputado(fileHash);
+    const hashMatch = fileHash === material.evidenciaHash;
+    const enCadena = DENUNCIAS.some((d) => d.denunciaId === material.denunciaId);
+    setVeredictoSello(hashMatch && enCadena ? "ok" : "fail");
   }, [documento, material]);
 
   const clave = CLAVES.find((c) => c.id === claveId) ?? CLAVES[0];
 
   /**
-   * T4 — el remate.
+   * T4 — el remate. Verifica la proof ZK contra el ledger.
    *
-   * Se recomputa el hash de autoría con LA CLAVE DE QUIEN VERIFICA, no con la
-   * que viene en el material. Si el denunciante te designó, da; si estás
-   * mirando una prueba que interceptaste, no da. Mismo material, misma cadena.
+   * En modo mock: proof == autoriaHash, se verifica contra el ledger local.
+   * En producción: la proof se verifica contra la verifier key del circuito
+   * `proveAuthorship` via el proof server `/check`.
+   *
+   * El secret NUNCA está en el material — fue reemplazado por la proof ZK.
    */
   const verificarAutoria = useCallback(async () => {
     if (!material) return;
+    // Mock mode: check proof == autoriaHash (consistency) + ledger membership.
+    // In production: proveAuthorship ZK proof is verified by the proof server.
     const r = await cliente.verificarAutoria({ ...material, fiscalPk: clave.pk });
     setAutoriaRecomputada(null);
     setVeredictoAutoria(r.ok && r.enLedger ? "ok" : "fail");

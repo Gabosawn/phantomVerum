@@ -277,16 +277,22 @@ export class ClienteMock implements TestigoClient {
   }
 
   /**
-   * 100 % off-chain y sin proof server: se recomputa el hash de autoría con la
-   * clave del verificador y se compara. Éste es el corazón del designated
-   * verifier — con otra clave da otro hash, y no hay nada que hacer al respecto.
+   * 100 % off-chain: verifica la prueba de autoría.
+   *
+   * En modo mock la proof = autoriaHash, así que verificar es chequear
+   * consistencia entre proof y autoriaHash + pertenencia al ledger.
+   * En producción (Preview) la proof es la proof ZK real del proof server
+   * y se verifica con la verifier key del circuito `proveAuthorship`.
    */
   async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
-    const recomputado = authorshipOf(p.secret, p.denunciaId, p.fiscalPk);
-    return {
-      ok: recomputado === p.autoriaHash,
-      enLedger: this.ledger.autorias.includes(p.autoriaHash),
-    };
+    if (p.version !== 2) {
+      return { ok: false, enLedger: false };
+    }
+    // Mock mode: proof == autoriaHash proves the denunciante knows the secret
+    // (in production, the ZK proof replaces this check).
+    const ok = p.proof === p.autoriaHash;
+    const enLedger = this.ledger.autorias.includes(p.autoriaHash);
+    return { ok, enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

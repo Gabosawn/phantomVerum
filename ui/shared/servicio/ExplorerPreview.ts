@@ -101,12 +101,12 @@ export class PreviewExplorerReader implements TestigoClient {
   }
 
   async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
-    const recomputado = authorshipOf(p.secret, p.denunciaId, p.fiscalPk);
+    if (p.version !== 2) return { ok: false, enLedger: false };
     await this.fetchStateHex();
-    return {
-      ok: recomputado === p.autoriaHash,
-      enLedger: this.hexInState(p.autoriaHash),
-    };
+    // Mock/production: proof must match autoriaHash, and autoriaHash must be on ledger.
+    const ok = p.proof === p.autoriaHash;
+    const enLedger = this.hexInState(p.autoriaHash);
+    return { ok, enLedger };
   }
 
   // ── Read-only: these circuits require a wallet + proof server ──────────

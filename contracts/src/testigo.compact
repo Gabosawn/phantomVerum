@@ -233,3 +233,29 @@ export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [
   assert(!authorships.member(disclose(authorship)), "authorship already revealed to this prosecutor");
   authorships.insert(disclose(authorship));
 }
+
+// ---- 4.4 proveAuthorship — exportable ZK proof (spec §4.4) ----
+// Public: reportId, evidenciaHash, prosecutorPk.
+// Private: personalSecret (the same one used in `report`).
+//
+// NO ledger writes: this circuit exists to generate a portable ZK proof
+// that the whitleblower gives to the verifier. The verifier checks the
+// proof against the circuit's verifier key — the secret never leaves the
+// whistleblower's machine.
+//
+// Returns `authorshipHash` so the verifier can cross-check it against
+// `ledger.authorships` (which `revealAuthorship` wrote).
+export circuit proveAuthorship(
+  reportId: Bytes<32>,
+  evidenciaHash: Bytes<32>,
+  prosecutorPk: Bytes<32>,
+): Bytes<32> {
+  const sec = personalSecret();
+
+  // The only assert: the secret must be the preimage of reportId.
+  assert(reportIdOf(evidenciaHash, sec) == reportId, "not the author");
+
+  // The authorship hash is disclosed so the verifier can confirm
+  // it matches the one on-chain.
+  return disclose(authorshipOf(sec, reportId, prosecutorPk));
+}

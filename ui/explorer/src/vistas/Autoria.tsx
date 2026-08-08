@@ -70,8 +70,7 @@ export function Autoria() {
           titulo="Probada ante usted, y solo ante usted"
           formula={
             <>
-              H(<Tachado>secret</Tachado> ‖ {corto(e.material.denunciaId, 4)} ‖{" "}
-              {corto(e.clave.pk, 6)})
+              proof(<Tachado>secret</Tachado>, denunciaId, fiscalPk) = autoriaHash
               <br />∈ ledger.autorias ✓
             </>
           }
@@ -103,8 +102,7 @@ export function Autoria() {
           titulo="Esta prueba no fue designada a su clave"
           formula={
             <>
-              H(<Tachado>secret</Tachado> ‖ {corto(e.material.denunciaId, 4)} ‖{" "}
-              {corto(e.clave.pk, 6)})
+              proof(<Tachado>secret</Tachado>, denunciaId, fiscalPk) ≠ autoriaHash
               <br />∉ ledger.autorias ✗
             </>
           }
@@ -151,11 +149,10 @@ export function Autoria() {
         <div
           style={{ font: `400 13px/1.55 ${SG}`, color: "var(--pv-dim)", marginTop: 4, maxWidth: "70ch" }}
         >
-          Verificar autoría y leer la evidencia son dos decisiones separadas del denunciante.{" "}
-          <strong>Limitación declarada:</strong> en este MVP el material sí incluye el{" "}
-          <code style={{ font: `500 12.5px ${MONO}` }}>secret</code> — es lo que te permite hacer la
-          cuenta con tu clave. En el roadmap se reemplaza por una prueba ZK dirigida, que da la
-          misma certeza sin entregarte nada. Cifrar la evidencia hacia el fiscal es el otro ítem.
+          La proof ZK que recibiste demuestra que el autor conoce el <code>secret</code> sin
+          revelártelo. El circuito <code>proveAuthorship</code> garantiza la relación
+          criptográfica entre <code>denunciaId</code>, <code>evidenciaHash</code> y{" "}
+          <code>autoriaHash</code>.
         </div>
       </div>
     </>

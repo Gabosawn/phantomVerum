@@ -313,19 +313,24 @@ describe("T4 · revelar y verificar autoría", () => {
     const { autoriaHash } = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
 
     const material = {
-      version: 1 as const,
+      version: 2 as const,
       denunciaId,
       evidenciaHash: w.evidenciaHash!,
-      secret: w.secretPersonal,
       fiscalPk: PK_PIA,
       autoriaHash,
+      proof: autoriaHash, // mock: proof == autoriaHash
     };
 
     const comoFiscal = await c.verificarAutoria(material);
     expect(comoFiscal).toEqual({ ok: true, enLedger: true });
 
-    // Mismo material, misma cadena, otra clave.
-    const comoEmpleador = await c.verificarAutoria({ ...material, fiscalPk: PK_ACME });
+    // Mismo material, misma cadena, otra clave — proof != autoriaHash esperado.
+    const otroHash = "ee" + "00".repeat(31) as Hex32;
+    const comoEmpleador = await c.verificarAutoria({
+      ...material,
+      fiscalPk: PK_ACME,
+      proof: otroHash,
+    });
     expect(comoEmpleador.ok).toBe(false);
   });
 });

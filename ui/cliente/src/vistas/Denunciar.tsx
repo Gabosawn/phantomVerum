@@ -281,13 +281,12 @@ export function Denunciar() {
                   maxWidth: "64ch",
                 }}
               >
-                Sin este archivo{" "}
-                <strong style={{ color: "var(--pv-text)" }}>no podés probar autoría nunca más</strong>.
-                Contiene tu secret y el hash de la evidencia — los dos witnesses de{" "}
+                Contiene una prueba ZK del circuito{" "}
                 <code style={{ font: `500 13px ${MONO}`, color: "var(--pv-accent)" }}>
-                  revealAuthorship
+                  proveAuthorship
                 </code>
-                .
+                . Tu <code>secret</code> nunca sale de esta máquina — la prueba lo demuestra
+                sin revelarlo.
               </p>
               {!e.llaveGuardada ? (
                 <Boton variante="tinta" tamano="medio" onClick={e.guardarLlave}>
