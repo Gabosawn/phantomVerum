@@ -186,6 +186,75 @@ hacelas y no te quedes trabado en ellas si podés ayudar con el deploy.
 
 ---
 
+## 🔴 Para Gabriel — cuatro cosas verificadas el sáb 8/8 ~21:30
+
+Ninguna está cubierta por las tareas de arriba. Las dos primeras son de él por rol;
+las dos últimas las detectó una verificación posterior al brief.
+
+### GA1 · P0 · El topic `midnightntwrk` sigue sin poner — **solo Gabriel puede**
+
+`gh repo view Gabosawn/phantomVerum --json repositoryTopics` devuelve vacío.
+Intentado con permisos de colaborador → **HTTP 404: requiere admin del repo.**
+
+```bash
+gh repo edit Gabosawn/phantomVerum --add-topic midnightntwrk --add-topic compact
+```
+
+**Es causal de descalificación listada explícitamente en las reglas del evento.**
+Un minuto de trabajo. Es lo más barato y lo más caro de olvidar.
+
+### GA2 · P0 · `main` está ~15 commits atrás de `dev`
+
+**Un juez clona `main`, no `dev`.** Hoy ese clone tiene el contrato compilando,
+pero **no** los Bloques C y D, ni el workspace `shared/`, ni los 8 scripts CLI,
+ni `deploy.ts`. Es decir: ve un contrato suelto, no un proyecto.
+
+Verificado: `git rev-list --count origin/main..origin/dev` → 15.
+
+Merge `dev` → `main` apenas el E2E local esté verde. Si el deploy se demora,
+mergear igual antes de la entrega: es preferible un `main` completo sin deploy
+que un `main` que parece un contrato huérfano.
+
+### GA3 · P1 · El README declara una limitación que YA NO EXISTE (under-claiming)
+
+`contracts/README.md:142` sigue diciendo:
+
+> *"The authorship key export hands the `secret` to the prosecutor … Whoever
+> holds it can republish the authorship to another key and burn the real
+> author's `(report, prosecutor)` slot."*
+
+**Eso está arreglado.** El commit `81baeed` ("ZK proof export — secret nunca sale
+de la maquina") agregó el circuito `proveAuthorship`
+(`contracts/src/testigo.compact:248`) y migró `ExportLlaveAutoria` a v2, donde el
+campo `secret` fue reemplazado por `proof`.
+
+**Estamos declarando una debilidad que ya no tenemos.** Un juez que lee el README
+ve un agujero inexistente y baja la nota por algo que resolvimos.
+
+Hay que reescribir esa limitación como **propiedad conseguida**. Y es material
+fuerte para el deck: convierte el clímax del video (FISCAL ✅ / EMPLEADOR ❌) de
+"suposición de confianza declarada" a **propiedad criptográfica** — el fiscal
+verifica sin recibir jamás el secreto.
+
+⚠️ Además hay que revisar `contracts/test/sec-audit.mjs` §D, que hoy documenta ese
+ataque como *comportamiento conocido* y debería assertear que **ya no funciona**.
+
+### GA4 · P2 · Prior art sin los competidores de hoy
+
+No hay ninguna mención a `velo`, `midnight-mail` ni `asfalia` fuera de este doc.
+Ocho equipos publicaron hoy bajo el topic `midnightntwrk`:
+
+- **velo** es el más cercano — atestación ZK de veredictos forenses. Nombrarlo con
+  precisión: *velo prueba que un veredicto es legítimo; no hace autoría diferida.*
+  Citar bien a un competidor es lo que vuelve creíble el claim propio.
+- **asfalia** vende como titular *"prueba de solvencia que expira"* — que es
+  exactamente la propiedad `blockTime` que nosotros ya tenemos y ahora sí
+  reclamamos (`README.md:232`).
+- **`midnight-mail` ya deployó a Preprod** con dirección de contrato y números de
+  bloque reales. **Es el único eje donde estamos atrás, y es el que pesa 40 %.**
+
+---
+
 ## Contexto por si nunca tocaste esta parte del repo
 
 - **Dónde está el contrato:** `contracts/src/testigo.compact`. Los cuatro circuitos
