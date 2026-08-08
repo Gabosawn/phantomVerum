@@ -13,10 +13,7 @@
  * wired, a single dynamic import of `@contracts/contract/index.js`
  * replaces the hex checks below.
  */
-import {
-  authorshipOf,
-  type Hex32,
-} from "../cripto";
+import type { Hex32 } from "../cripto";
 import type {
   EstadoLedger,
   ExportLlaveAutoria,
@@ -100,13 +97,27 @@ export class PreviewExplorerReader implements TestigoClient {
     };
   }
 
-  async verificarAutoria(p: ExportLlaveAutoria): Promise<{ ok: boolean; enLedger: boolean }> {
+  /**
+   * `verificadorPk` is the key of WHOEVER IS VERIFYING and is a separate
+   * parameter on purpose: the material carries the key the reporter designated
+   * the proof to, and the question to answer is whether the two match. Dropping
+   * this parameter — as this reader used to — lets anyone who intercepts the
+   * material self-designate, and the intruder verifies green.
+   *
+   * Only the proof check is a mock: in production the ZK proof is verified
+   * against the `proveAuthorship` verifier key, which binds the verifier's key
+   * inside the circuit.
+   */
+  async verificarAutoria(
+    p: ExportLlaveAutoria,
+    verificadorPk: Hex32,
+  ): Promise<{ ok: boolean; enLedger: boolean }> {
     if (p.version !== 2) return { ok: false, enLedger: false };
     await this.fetchStateHex();
-    // Mock/production: proof must match autoriaHash, and autoriaHash must be on ledger.
-    const ok = p.proof === p.autoriaHash;
+    const consistente = p.proof === p.autoriaHash;
+    const designadaAEstaClave = p.fiscalPk === verificadorPk;
     const enLedger = this.hexInState(p.autoriaHash);
-    return { ok, enLedger };
+    return { ok: consistente && designadaAEstaClave, enLedger };
   }
 
   // ── Read-only: these circuits require a wallet + proof server ──────────

@@ -2,9 +2,27 @@ import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import topLevelAwait from "vite-plugin-top-level-await";
 import wasm from "vite-plugin-wasm";
-import type { UserConfig } from "vite";
+import type { Plugin, UserConfig } from "vite";
 
 const aca = (rel: string) => fileURLToPath(new URL(rel, import.meta.url));
+
+/**
+ * Vite only watches the app root. `shared/` lives outside it and is served
+ * through `/@fs`, so it enters the module graph but NOT the file watcher: edit
+ * it and the browser keeps serving the version transformed at startup, with the
+ * change appearing only after a server restart. With nearly all of the three
+ * apps' logic living there, that is a trap — a stale `verificarAutoria` that
+ * returned green for the wrong key survived a live run this way.
+ */
+function watchShared(dir: string): Plugin {
+  return {
+    name: "phantomtrace:watch-shared",
+    apply: "serve",
+    configureServer(server) {
+      server.watcher.add(dir);
+    },
+  };
+}
 
 /**
  * Cada app tiene su propia raíz y su propio puerto a propósito.
@@ -21,7 +39,7 @@ export function appConfig(nombre: string, puerto: number): UserConfig {
     publicDir: aca("./shared/publico"),
     // compact-runtime's WASM (persistentHash) needs the wasm plugin; the
     // onchain-runtime entry it resolves to in the browser uses top-level await.
-    plugins: [react(), wasm(), topLevelAwait()],
+    plugins: [react(), wasm(), topLevelAwait(), watchShared(aca("./shared"))],
     resolve: {
       alias: {
         "@shared": aca("./shared"),
