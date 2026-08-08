@@ -22,7 +22,7 @@ export {
 /** Public ledger fields. */
 export const LEDGER = {
   organizations: "organizations",
-  /** Global `HistoricMerkleTree<8, Bytes<32>>` — orgId lives inside each leaf. */
+  /** Global `HistoricMerkleTree<16, Bytes<32>>` — orgId lives inside each leaf. */
   credentials: "credentials",
   reports: "reports",
   nullifiers: "nullifiers",
@@ -52,9 +52,12 @@ export const PURE_CIRCUITS = {
   /** `H(credTag ‖ orgId ‖ credCommitment)` — takes the COMMITMENT, not the raw secret. */
   leafOf: "leafOf",
   reportIdOf: "reportIdOf",
-  /** `H(nullifierTag ‖ sec ‖ orgId ‖ (period as Field) as Bytes<32>)` — period is `bigint`. */
+  /** `H(nullifierTag ‖ sec ‖ (period as Field) as Bytes<32>)` — period is `bigint`. */
   nullifierOf: "nullifierOf",
-  authorshipOf: "authorshipOf",
+  /** `H(receiptTag ‖ reportId ‖ prosecutorNonce)` — no secret in the preimage. */
+  receiptOf: "receiptOf",
+  /** `H(issuerTag ‖ issuerSecret)` — the org's published anchor. */
+  anchorOf: "anchorOf",
 } as const;
 
 /** Witnesses declared in Compact, implemented in TypeScript. */
@@ -64,6 +67,10 @@ export const WITNESSES = {
   credentialPath: "credentialPath",
   personalSecret: "personalSecret",
   evidenceHash: "evidenceHash",
+  /** Checked by `issueCredential` against the org's published anchor. */
+  issuerSecret: "issuerSecret",
+  /** Kept out of the transcript on purpose — see `receiptOf`. */
+  prosecutorNonce: "prosecutorNonce",
 } as const;
 
 /** `assert` messages, copied verbatim from the contract. Tests match on these. */
@@ -79,6 +86,7 @@ export const ASSERTS = {
   reportAlreadySealed: "report already sealed",
   notTheAuthor: "not the author",
   reportDoesNotExist: "report does not exist",
+  notTheIssuer: "not the issuer of this organization",
   authorshipAlreadyRevealed: "authorship already revealed to this prosecutor",
 } as const;
 
@@ -87,7 +95,7 @@ export const ASSERTS = {
  *
  * `01-arquitectura.md` contradicted itself: §4.2's pseudocode fed it `personalSecret`, §5
  * (Option A) said `credencialSecret`. Block D's model originally implemented §4.2. The
- * contract chose §5 — `report()` calls `nullifierOf(cred, orgId, period)` — so the model was
+ * contract chose §5 — `report()` calls `nullifierOf(cred, period)` — so the model was
  * changed to match.
  *
  * §5 is the better call, and the split matters:
@@ -102,7 +110,7 @@ export const ASSERTS = {
  * `issueCredential` now receives `credCommitmentOf(credSecret)` instead of anything derived
  * directly from the secret, so a well-behaved issuer never holds `credentialSecret` at all.
  * The employee generates it, hands over the commitment, and only they can ever compute
- * `nullifierOf(cred, orgId, period)` — the issuer cannot scan the ledger to see who reported.
+ * `nullifierOf(cred, period)` — the issuer cannot scan the ledger to see who reported.
  * (A MALICIOUS mock issuer could still ask for the secret out of band; that remains a declared
  * mock-issuer limitation, not a circuit property.)
  */

@@ -11,6 +11,7 @@ import { ASSERTS, EPOCH_DURATION } from "../harness/contract-surface.js";
 import { leafOf, nullifierOf, reportIdOf } from "../harness/crypto.js";
 import {
   ACME,
+  ACME_ANCHOR,
   AUGUST,
   BETA,
   EMPLOYEE_A,
@@ -34,7 +35,7 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
 
     const l = h.ledger();
     expect(l.reports).toContain(reportIdOf(EMPLOYEE_A.evidenceHash, EMPLOYEE_A.personalSecret));
-    expect(l.nullifiers).toContain(nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST));
+    expect(l.nullifiers).toContain(nullifierOf(EMPLOYEE_A.credentialSecret, AUGUST));
     expect(l.reports.size).toBe(1);
     expect(l.nullifiers.size).toBe(1);
 
@@ -89,8 +90,8 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
     expect(l.nullifiers.size).toBe(2);
 
     // Different periods produce nullifiers that cannot be linked to one another.
-    const august = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, AUGUST);
-    const september = nullifierOf(EMPLOYEE_A.credentialSecret, ACME, SEPTEMBER);
+    const august = nullifierOf(EMPLOYEE_A.credentialSecret, AUGUST);
+    const september = nullifierOf(EMPLOYEE_A.credentialSecret, SEPTEMBER);
     expect(august).not.toBe(september);
     expect(l.nullifiers).toContain(august);
     expect(l.nullifiers).toContain(september);
@@ -143,8 +144,8 @@ describe.each(BACKENDS)("[$name] report", ({ fresh }) => {
 
   it("refuses to report against an organization that was never registered", () => {
     const h = fresh();
-    h.registerOrganization(ACME, "a2".repeat(32));
-    h.issueCredential(ACME, leafOf(ACME, EMPLOYEE_A.credentialSecret));
+    h.registerOrganization(ACME, ACME_ANCHOR);
+    h.as(EMPLOYEE_A).issueCredential(ACME, leafOf(ACME, EMPLOYEE_A.credentialSecret));
 
     // BETA does not exist, and no leaf binds to it either.
     expect(() => h.as(claimingOrg(EMPLOYEE_A, BETA)).report(BETA, AUGUST)).toThrow();

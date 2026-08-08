@@ -4,7 +4,7 @@
  */
 
 import { EPOCH_DURATION } from "./contract-surface.js";
-import { credCommitmentOf, periodHex32 } from "./crypto.js";
+import { anchorOf, credCommitmentOf, periodHex32 } from "./crypto.js";
 import { GENESIS_BLOCK_TIME } from "./types.js";
 import type { Actor, Hex32, TestigoHarness } from "./types.js";
 
@@ -15,9 +15,21 @@ const byte = (n: number): Hex32 => n.toString(16).padStart(2, "0").repeat(32);
 export const ACME: Hex32 = byte(0xa1);
 export const BETA: Hex32 = byte(0xb1);
 
-/** The `anchor` argument. With the global tree it is a per-org marker, not the root. */
-export const ACME_ANCHOR: Hex32 = byte(0xa2);
-export const BETA_ANCHOR: Hex32 = byte(0xb2);
+/**
+ * The secret behind each org's published anchor. `issueCredential` asserts against it, which
+ * is what keeps the credential tree — finite, and unrecoverable once full — from being filled
+ * by anyone at all.
+ */
+export const ACME_ISSUER: Hex32 = byte(0xa1);
+export const BETA_ISSUER: Hex32 = byte(0xb1);
+
+/**
+ * The `anchor` argument: the commitment to the org's issuer secret. It used to be an inert
+ * per-org marker — written by `registerOrganization`, read by no circuit — and is now what
+ * `issueCredential` checks the caller against.
+ */
+export const ACME_ANCHOR: Hex32 = anchorOf(ACME_ISSUER);
+export const BETA_ANCHOR: Hex32 = anchorOf(BETA_ISSUER);
 
 // ── public keys ─────────────────────────────────────────────────────────────────────────
 
@@ -41,6 +53,18 @@ export const SEPTEMBER = AUGUST + 1n;
 export const AUGUST_HEX = periodHex32(AUGUST);
 export const SEPTEMBER_HEX = periodHex32(SEPTEMBER);
 
+// ── issuer secrets and verifier nonces ──────────────────────────────────────────────────
+
+/**
+ * The nonce a prosecutor generates and sends to the whistleblower off-chain. It is what the
+ * receipt is bound to, and it is deliberately NOT in the exported package: the verifier
+ * supplies their own, which is what turns the verdict into a recomputation instead of a
+ * comparison the holder of the file controls.
+ */
+export const PROSECUTOR_NONCE: Hex32 = byte(0x71);
+/** A second verifier's nonce — the EMPLOYER of the demo. */
+export const EMPLOYER_NONCE: Hex32 = byte(0x81);
+
 // ── actors ──────────────────────────────────────────────────────────────────────────────
 
 /** An ACME employee. The reporter in the demo. */
@@ -50,6 +74,8 @@ export const EMPLOYEE_A: Actor = {
   credentialSecret: byte(0x11),
   personalSecret: byte(0x12),
   evidenceHash: byte(0x13),
+  issuerSecret: ACME_ISSUER,
+  prosecutorNonce: PROSECUTOR_NONCE,
 };
 
 /** Another ACME employee. Backs "two employees of one org do not interfere". */
@@ -59,6 +85,8 @@ export const EMPLOYEE_B: Actor = {
   credentialSecret: byte(0x21),
   personalSecret: byte(0x22),
   evidenceHash: byte(0x23),
+  issuerSecret: ACME_ISSUER,
+  prosecutorNonce: PROSECUTOR_NONCE,
 };
 
 /** A BETA employee. Backs "two orgs do not interfere". */
@@ -68,6 +96,8 @@ export const EMPLOYEE_BETA: Actor = {
   credentialSecret: byte(0x31),
   personalSecret: byte(0x32),
   evidenceHash: byte(0x33),
+  issuerSecret: BETA_ISSUER,
+  prosecutorNonce: PROSECUTOR_NONCE,
 };
 
 /** Claims to be at ACME but never received a credential. Must fail C1. */
@@ -77,6 +107,8 @@ export const IMPOSTOR: Actor = {
   credentialSecret: byte(0x41),
   personalSecret: byte(0x42),
   evidenceHash: byte(0x43),
+  issuerSecret: byte(0x4f),
+  prosecutorNonce: PROSECUTOR_NONCE,
 };
 
 /** New evidence for an existing actor — used by the "different period passes" case. */
@@ -112,8 +144,8 @@ export function claimingOrg(actor: Actor, orgId: Hex32): Actor {
 export function baseScenario<T extends TestigoHarness>(h: T): T {
   h.registerOrganization(ACME, ACME_ANCHOR);
   h.registerOrganization(BETA, BETA_ANCHOR);
-  h.issueCredential(ACME, credCommitmentOf(EMPLOYEE_A.credentialSecret));
-  h.issueCredential(ACME, credCommitmentOf(EMPLOYEE_B.credentialSecret));
-  h.issueCredential(BETA, credCommitmentOf(EMPLOYEE_BETA.credentialSecret));
+  h.as(EMPLOYEE_A).issueCredential(ACME, credCommitmentOf(EMPLOYEE_A.credentialSecret));
+  h.as(EMPLOYEE_B).issueCredential(ACME, credCommitmentOf(EMPLOYEE_B.credentialSecret));
+  h.as(EMPLOYEE_BETA).issueCredential(BETA, credCommitmentOf(EMPLOYEE_BETA.credentialSecret));
   return h;
 }
