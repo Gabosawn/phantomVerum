@@ -3,14 +3,35 @@ pragma language_version >= 0.23;
 import CompactStandardLibrary;
 
 // =====================================================================
-// Testigo — OPTION B (spec docs/01-arquitectura.md §5): FROZEN FALLBACK
+// Testigo — OPTION B (spec docs/01-arquitectura.md §5): FROZEN, AND NO
+// LONGER A USABLE FALLBACK — see the red block below
 //
 // WARNING: THIS CONTRACT IS NOT COMPILED NOR DEPLOYED BY DEFAULT.
 //          The production contract is ../testigo.compact (Option A, Merkle).
 //
-// WHEN TO USE IT
-//   Only as a safety net, if Option A breaks and there is no time to fix
-//   it. Symptoms that justify it:
+// 🔴 READ THIS BEFORE REACHING FOR IT UNDER PRESSURE — IT IS NO LONGER A
+//    SAFETY NET. It was one while its arities matched Option A's. It
+//    deliberately did NOT take the 2026-08-08 v2 audit fixes, so it still
+//    CONTAINS what those closed. Shipping it would undo the audit:
+//
+//      · `orgId` is back in the nullifier, and here `period` is not even
+//        blockTime-bound — it is a free `Bytes<32>` label. Anti-spam is
+//        worth nothing: the same credential buys unlimited reports by
+//        varying either operand.
+//      · `authorshipOf` keeps `personalSecret` in the preimage, so
+//        verification requires handing the secret to the prosecutor, who
+//        can then republish the authorship or burn the slot (finding H-2).
+//      · `registerOrganization` has no access control, and neither does
+//        credential issuance — Option A now authenticates it against the
+//        org's anchor.
+//
+//    It is kept because it compiles and records a design that was
+//    considered and rejected. If Option A ever genuinely breaks, port the
+//    v2 fixes here FIRST: the diff is small, and `../test/sec-audit.mjs`
+//    and `../test/receipt-authorship.mjs` define what to aim for.
+//
+// WHEN IT *WAS* THE FALLBACK (historical — see the block above first)
+//   The symptoms that would have justified it:
 //     · the `credentialPath()` witness cannot be built off-chain
 //       (e.g. `findPathForLeaf` does not return the expected shape);
 //     · proving `report` with the Merkle tree does not close in
@@ -27,11 +48,22 @@ import CompactStandardLibrary;
 //      `anchor = anchorOf(orgSecret)` — the exported pure circuit below.
 //   4. The `credentialSecret()` witness now returns the SHARED
 //      `orgSecret`, not the employee's individual secret.
-//   `reportIdOf` and `authorshipOf` keep the exact signature and domain
-//   tags of Option A, so `verify-authorship` off-chain does not change.
-//   `nullifierOf` DIFFERS from Option A: here `period` is a free
-//   Bytes<32> label with no blockTime binding — part of the weak
-//   anti-spam declared below.
+//   ⚠️ Step 2 used to end with "and `verify-authorship` off-chain does not
+//   change, since `reportIdOf` and `authorshipOf` keep Option A's exact
+//   signature and domain tags". That was true when it was written and is
+//   FALSE now:
+//     · `reportIdOf`   — still identical. This part still holds.
+//     · `authorshipOf` — does not exist in Option A any more. It is
+//       `receiptOf(reportId, prosecutorNonce)`, a different tag
+//       (`phantomtrace:receipt:v1`), a different arity, and no secret in
+//       the preimage.
+//     · `nullifierOf`  — Option A dropped `orgId` and is Vector<3>; this
+//       one is Vector<4>, over a free `Bytes<32>` period with no
+//       blockTime binding.
+//   So activating this DOES break `verify-authorship`: the export format
+//   is v3 (`{version, reportId, receipt}`) and the verifier recomputes
+//   rather than comparing. Step 2 would need `app/` and `ui/` reverted
+//   too, not just an artifact path.
 //
 // MECHANISM
 //   The organization publishes `anchor = H(dom || orgSecret)` and hands
@@ -81,24 +113,9 @@ witness evidenceHash(): Bytes<32>; // hash of the file, computed locally
 //                      secret out of the hash preimage.
 //
 // Do not reach for these as "the same" hashes. Option A's are in
-// `../testigo.compact` and mirrored in `shared/src/crypto.ts`.
-//
-// 🔴 AND READ THIS BEFORE SWITCHING TO IT UNDER PRESSURE. Because this file
-// did not follow the v2 fixes, it still CONTAINS the vulnerabilities that
-// audit closed — it is not a safety net any more, it is a regression:
-//
-//   · `orgId` is back in the nullifier, and here `period` is not even
-//     blockTime-bound: it is a free `Bytes<32>` label. Anti-spam is worth
-//     nothing — the same credential buys unlimited reports by varying either.
-//   · `authorshipOf` keeps `personalSecret` in the preimage, so verification
-//     requires handing the secret to the prosecutor, who can then republish
-//     the authorship or burn the slot (finding H-2).
-//   · `registerOrganization` has no access control, same as Option A had.
-//
-// It is kept because it compiles and documents the design that was considered
-// and rejected. Shipping it would undo the audit. If Option A ever genuinely
-// breaks, port the v2 fixes here FIRST — the diff is small and the tests in
-// `../test/sec-audit.mjs` and `receipt-authorship.mjs` say what to aim for.
+// `../testigo.compact` and mirrored in `shared/src/crypto.ts`. What that
+// divergence COSTS — and why this file is a regression rather than a
+// fallback — is at the top, where someone in a hurry will actually see it.
 circuit domAnchor(): Bytes<32> {
   return pad(32, "phantomtrace:anchor:v1");
 }
