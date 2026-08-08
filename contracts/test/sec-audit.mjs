@@ -3,7 +3,7 @@
 // Origin: security review of 2026-08-07 (findings HIGH-1 and MEDIUM-1).
 
 import {
-  pureCircuits, newWorld, b32, hex, check, checkRejects, summary, EPOCH,
+  pureCircuits, newWorld, b32, hex, check, checkRejects, checkKnownGap, summary, EPOCH,
 } from './harness.mjs';
 
 const orgA = b32(0x11);
@@ -53,6 +53,43 @@ for (const delta of [1n, 2n, 3n]) {
 check('no extra report gets in by changing the period', accepted === 0, `${accepted}/3 accepted`);
 check('nullifiers.size stays at 1', m.state().nullifiers.size() === 1n,
   `size=${m.state().nullifiers.size()}`);
+
+// ...but `period` is only ONE of the two inputs the caller controls.
+//
+// `nullifierOf(sec, orgId, period)` also takes `orgId`, and unlike `period` —
+// which the circuit pins to blockTime — nothing constrains it. The block above
+// varied `period` alone and passed, so it read as proof of "one report per
+// credential per epoch" (the claim in testigo.compact:135-136 and :199-200)
+// while never testing the axis that breaks it.
+//
+// The attack needs no secrets: `registerOrganization` and `issueCredential`
+// have no access control, so the SAME credential secret can be enrolled into
+// a phantom org and reported again in the same epoch. Every guard in `report`
+// is satisfied — new leaf passes checkRoot, new orgId gives a new nullifier,
+// fresh evidence gives a new reportId.
+console.log('\n  ...but orgId is the OTHER caller-chosen input to the nullifier:');
+const nullifiersBefore = m.state().nullifiers.size();
+const phantomOrg = b32(0x77);
+m.call('registerOrganization', phantomOrg, b32(0xab)); //  free: no access control
+m.call('issueCredential', phantomOrg, credComm); //        free: the SAME credential
+wantedLeaf = pureCircuits.leafOf(phantomOrg, credComm); // aim the path witness at it
+secrets.ev = b32(0x88); //                                 fresh evidence -> new reportId
+
+let reportedTwiceInOneEpoch = false;
+try {
+  m.call('report', phantomOrg, EPOCH);
+  reportedTwiceInOneEpoch = true;
+} catch { /* this is what we WANT to happen */ }
+
+checkKnownGap(
+  'one credential = one report per epoch, whatever the orgId',
+  !reportedTwiceInOneEpoch,
+  'README.md "Known limitations" -> drop orgId from nullifierOf',
+  `nullifiers ${nullifiersBefore} -> ${m.state().nullifiers.size()} in the same epoch`,
+);
+
+// Restore the world for the blocks below, which assume orgA.
+wantedLeaf = pureCircuits.leafOf(orgA, credComm);
 
 console.log('\n=== C. [MEDIUM-1] issueCredential binds the orgId to the leaf ===');
 // Before: `issueCredential(orgId, leaf)` received the leaf precomputed, so

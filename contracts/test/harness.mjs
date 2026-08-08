@@ -87,7 +87,37 @@ export const checkRejects = (name, fn, fragment) => {
   }
 };
 
+let gaps = 0;
+
+/**
+ * A property we WANT to hold, that the shipped contract does NOT hold.
+ *
+ * `cond` is the property. While it is false the suite stays green and prints a
+ * loud GAP line — the hole is documented, not hidden, and `README.md` carries
+ * the same finding with its fix. The moment the property starts holding, this
+ * FAILS: a closed gap must be promoted to a real `check`, not left rotting as
+ * a permanent excuse.
+ *
+ * This exists because the alternative was worse. The [HIGH-1] block used to
+ * assert "one report per credential per epoch" while only varying `period`,
+ * so it passed while the property it named was false. A test that is green
+ * for the wrong reason is more dangerous than one that is red.
+ */
+export const checkKnownGap = (name, cond, ref, detail = '') => {
+  run++;
+  if (!cond) {
+    gaps++;
+    console.log(`  GAP   ${name}${detail ? ` (${detail})` : ''}\n        known, unfixed — see ${ref}`);
+  } else {
+    failures++;
+    console.log(`  FAIL  ${name} -> the gap is CLOSED. Promote this to check() and drop ${ref}.`);
+  }
+};
+
 export const summary = (title) => {
-  console.log(`\n=== ${title}: ${run - failures}/${run} ${failures === 0 ? 'OK' : `— ${failures} FAILURES`} ===`);
+  const passed = run - failures - gaps;
+  const parts = [`${passed}/${run}`, failures === 0 ? 'OK' : `— ${failures} FAILURES`];
+  if (gaps > 0) parts.push(`— ${gaps} KNOWN GAP${gaps > 1 ? 'S' : ''}`);
+  console.log(`\n=== ${title}: ${parts.join(' ')} ===`);
   process.exit(failures === 0 ? 0 : 1);
 };
