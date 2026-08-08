@@ -63,7 +63,7 @@ export const GUION: readonly EscenaDemo[] = [
   {
     rotulo: "Autoría",
     narracion:
-      "Meses después decide aparecer ante la Fiscalía — y solo ante ella. La prueba queda atada a esa clave pública: si otro la intercepta, no le prueba nada.",
+      "Meses después decide aparecer ante la Fiscalía — y solo ante ella. La prueba queda atada a esa clave pública: quien la intercepte y verifique con la suya no encuentra el registro.",
     accion: "revelar",
     antesMs: 3800,
     despuesMs: 3000,

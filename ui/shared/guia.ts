@@ -85,5 +85,5 @@ export const GLOSARIO: Record<string, string> = {
     "Un archivo chico que guardás vos. Sin él no podés probar nunca más que la denuncia fue tuya. Es lo único irrecuperable de todo el sistema.",
   hash: "Una huella digital de un archivo: cambia un solo byte y da un número completamente distinto. No se puede volver del número al archivo.",
   "designated verifier":
-    "La prueba de autoría queda atada a la clave pública de UNA persona. Si otro la intercepta, no le prueba nada.",
+    "La autoría se publica una vez por cada destinatario: el registro que queda en la cadena para la Fiscalía es un valor distinto del que quedaría para cualquier otro, así que quien verifique con otra clave no lo encuentra. Lo que NO hace: volverla intransferible. La prueba es públicamente verificable, así que una vez entregada, quien la recibe puede reenviarla y el que sigue la verifica igual.",
 };

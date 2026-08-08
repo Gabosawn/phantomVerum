@@ -29,8 +29,9 @@ export function Revelar() {
       >
         Decidís aparecer ante <em style={{ color: "var(--pv-text)", fontStyle: "normal" }}>una</em>{" "}
         autoridad, la que vos elijas. La prueba queda ligada a su clave pública —{" "}
-        <Termino clave="designated verifier">designated verifier</Termino> — así que si cualquier
-        otro la intercepta, no le sirve para nada.
+        <Termino clave="designated verifier">uno por destinatario</Termino> —, así que quien la
+        intercepte y verifique con su propia clave no encuentra el registro. Una vez que la
+        entregás, en cambio, quien la recibe puede reenviarla: es verificable por cualquiera.
       </Encabezado>
 
       <Tarjeta titulo="1 · Tu llave de autoría">

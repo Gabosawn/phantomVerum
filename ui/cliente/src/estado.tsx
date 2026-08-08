@@ -634,7 +634,7 @@ function useEstado() {
         tono: "pulse",
         titulo: "Elegí ante quién querés aparecer y firmá",
         detalle:
-          "La prueba queda atada a la clave de esa persona. Si cualquier otro la intercepta, no le prueba absolutamente nada.",
+          "La prueba queda atada a la clave de esa persona: quien la intercepte y verifique con la suya no encuentra el registro. Entregada, sí es reenviable.",
         accion: { texto: "Generar prueba de autoría", hacer: () => void revelar() },
       };
     if (!copiado)

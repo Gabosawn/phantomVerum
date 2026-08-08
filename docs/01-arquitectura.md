@@ -46,10 +46,11 @@ T3. ACME tries to alter the evidence. Cannot: the hash is sealed
 
 T4. The whistleblower calls revealAuthorship(reportId, prosecutorPk):
     proves they know the preimage of reportId (only the author knows it)
-    and binds the ON-CHAIN RECORD to the prosecutor's key — intercepted,
-    that record proves nothing. Verification happens off-chain with a
-    package the whistleblower hands to the prosecutor; whoever holds that
-    package can verify, so it goes only to the chosen prosecutor.
+    and binds the ON-CHAIN RECORD to the prosecutor's key — looked up with
+    another key, that record is not on the ledger. Verification happens
+    off-chain with a package the whistleblower hands to the prosecutor;
+    whoever holds that package can verify, which is exactly why it goes
+    only to the chosen prosecutor — and why forwarding it works too.
 ```
 
 ## 3. Ledger state (public)
@@ -124,12 +125,20 @@ C2. assert(reports.member(reportId))               // the report exists
 authorships.insert(disclose(H(secret ‖ reportId ‖ prosecutorPk)))
 ```
 
-**Why designated verifier:** the authorship *record* is tied to *that*
-prosecutor. The on-chain record is only interpretable by whoever has the
-context the whistleblower delivers off-chain to the prosecutor (their claim +
-the values to verify the authorship hash). Shown to the employer, the record
-proves nothing — they cannot distinguish who generated it or replay it. This is
-the small delta over the base circuit that no judge has ever seen shipped.
+**Why one record per prosecutor:** the authorship *record* is tied to *that*
+prosecutor's key, so the value published for the prosecutor is not the value
+the employer's key would look up — verify with the wrong key and the record is
+simply not on the ledger.
+
+⚠️ **This is NOT a designated-verifier scheme** (corrected after the
+2026-08-08 audit; the name was doing more work than the construction). A real
+one requires the designated party to be able to simulate an indistinguishable
+proof with their own key, so that a forwarded proof convinces nobody. Here
+`prosecutorPk` is just another public input and the proof verifies against the
+public verifier key — `proveAuthorship.zkir` contains no `member` opcode. The
+proof is therefore publicly verifiable and **transferable once handed over**.
+What the binding buys is per-recipient separation, not control over who ends
+up convinced.
 
 **Honest scope (audit 2026-08-07):** the *conviction* comes from the off-chain
 package, and the package itself is transferable — a prosecutor who forwards
@@ -177,7 +186,8 @@ time, freeze B and move A to roadmap.
 | The company identifies the whistleblower on-chain | ZK membership + Midnight's senderless tx (no `msg.sender`, shielded fees) | ✅ |
 | The company alters or repudiates the evidence | `reportId` sealed on-chain; altering the evidence breaks the hash | ✅ |
 | A third party claims the report (steals the reward) | Only the author knows `(evidenceHash, secret)` — preimage of `reportId` | ✅ |
-| The employer reuses/replays the authorship proof | Designated verifier: authorship is tied to `prosecutorPk` | ✅ |
+| The employer looks up the authorship with their own key | One record per prosecutor: authorship is tied to `prosecutorPk`, so the employer's key finds nothing | ✅ |
+| The employer replays a proof that was handed to a prosecutor | **None.** The proof is publicly verifiable, so it is transferable once delivered — not a designated-verifier scheme | ❌ declared |
 | Spam / drowning the channel with fake reports | Nullifier `H(dom ‖ credentialSecret ‖ orgId ‖ epoch)`, epoch bound to blockTime | ✅ (weak in Option B — declared) |
 | Report with false content | **None.** We don't prove veracity — stated upfront | ❌ declared |
 | Off-chain metadata (indexer sees viewing key/IP) | Local proof server + Tor/own node; fee-sponsor roadmap | ⚠️ mitigated, declared |

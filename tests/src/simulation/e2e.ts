@@ -208,9 +208,11 @@ function runDemo(h: TestigoHarness): void {
   console.log(`     PROSECUTOR  recomputes ${short(asProsecutor.recomputed)}`);
   verdict(asProsecutor.ok, `on chain: ${asProsecutor.onLedger} → authorship PROVEN`);
   console.log(`     EMPLOYER    recomputes ${short(asEmployer.recomputed)}`);
-  verdict(asEmployer.ok, `on chain: ${asEmployer.onLedger} → proves NOTHING`);
+  verdict(asEmployer.ok, `on chain: ${asEmployer.onLedger} → no such record`);
   console.log("     Same author, same report, different verifier ⇒ different record.");
-  console.log("     The employer cannot replay a proof that was never bound to its key.");
+  console.log("     The employer's key looks up a value that was never published.");
+  console.log("     (Per-recipient separation — NOT a designated-verifier scheme: the");
+  console.log("      proof verifies publicly, so a prosecutor can forward it.)");
 
   require(asProsecutor.ok, "the designated prosecutor must verify");
   require(!asEmployer.ok, "the employer must not be able to reuse the proof");

@@ -141,7 +141,9 @@ export pure circuit nullifierOf(sec: Bytes<32>, orgId: Bytes<32>, period: Uint<6
            );
 }
 
-// Designated verifier: authorship is bound to THAT prosecutor's key.
+// One value per prosecutor: authorship is bound to THAT prosecutor's key, so
+// the same author and report yield a different record for a different key.
+// See `revealAuthorship` for what this does and does not buy.
 export pure circuit authorshipOf(sec: Bytes<32>, reportId: Bytes<32>, prosecutorPk: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<4, Bytes<32>>>([domAuthorship(), sec, reportId, prosecutorPk]);
 }
@@ -227,8 +229,18 @@ export circuit revealAuthorship(reportId: Bytes<32>, prosecutorPk: Bytes<32>): [
   // C2 — the report exists on the ledger.
   assert(reports.member(disclose(reportId)), "report does not exist");
 
-  // Designated verifier: shown to another prosecutor (or the employer)
-  // this record proves nothing — the hash is bound to prosecutorPk.
+  // One record per prosecutor: the hash is bound to prosecutorPk, so the
+  // value published for THIS prosecutor is not the value another key would
+  // look up — verify with the employer's key and the record is not there.
+  //
+  // NOT a designated-verifier scheme, despite the name this once carried.
+  // That would require the recipient to be able to simulate an
+  // indistinguishable proof with their own key; here `prosecutorPk` is just
+  // another public input and the proof checks against the public verifier
+  // key. So the proof is publicly verifiable and therefore TRANSFERABLE once
+  // handed over — a prosecutor can forward it and the next holder verifies
+  // it too. What the binding buys is per-recipient separation, not
+  // unforgeability of the audience.
   const authorship = authorshipOf(sec, reportId, prosecutorPk);
   assert(!authorships.member(disclose(authorship)), "authorship already revealed to this prosecutor");
   authorships.insert(disclose(authorship));

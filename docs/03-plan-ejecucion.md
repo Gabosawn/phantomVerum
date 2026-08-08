@@ -252,10 +252,14 @@ que si alguien reintroduce un hallazgo, fallan. Verde también desde clone limpi
 4. Fallar cerrado ante `undefined`, sin distinguir "no sos empleado" de otros
    errores en mensaje ni en timing.
 
-**Sobre el impacto en el video:** el clímax FISCAL ✅ / EMPLEADOR ❌ sigue
-siendo cierto *sobre el registro on-chain* (la autoría está ligada a `fiscalPk`
-y mostrada a otro no prueba nada). Lo que NO se puede afirmar es que el
-paquete off-chain sea no-transferible. Framing honesto para el guión: *"el
+**Sobre el impacto en el video:** el ❌ del EMPLEADOR sigue siendo cierto
+*sobre el registro on-chain* — la autoría está ligada a `fiscalPk`, así que
+buscada con otra clave no hay registro que encontrar. El lado del FISCAL, en
+cambio, pasó de ✅ a ⚠️ tras la auditoría del 8/8: mientras no se verifique la
+proof ZK, todo lo que el sobre declara lo aporta quien lo entrega, y el propio
+empleador podría fabricar uno idéntico con dos valores leídos del ledger
+público (ver `app/src/api/verify.ts`). Tampoco se puede afirmar que el paquete
+off-chain sea no-transferible. Framing honesto para el guión: *"el
 registro on-chain está ligado a la clave de ESTE fiscal; el paquete de
 evidencia es una suposición de confianza declarada, y la prueba ZK al fiscal
 es roadmap"*. Un juez técnico que pincha esto encuentra la respuesta ya en la

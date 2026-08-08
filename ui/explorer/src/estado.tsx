@@ -336,7 +336,7 @@ function useEstado() {
         tono: "fin",
         titulo: "Autoría probada ante vos, y sólo ante vos",
         detalle:
-          "Ahora cambiá a la clave del Departamento Legal y verificá de nuevo: el mismo material no le prueba nada a quien no fue designado. Ese es el corazón de Phantom Trace.",
+          "Ahora cambiá a la clave del Departamento Legal y verificá de nuevo: el mismo material, buscado con otra clave, no encuentra ningún registro. La autoría se publicó una sola vez, para la clave que eligió la denunciante.",
         accion: {
           texto: "Probar con la otra clave",
           hacer: () => elegirClave(clave.intruso ? "pia" : "acme"),
@@ -346,7 +346,7 @@ function useEstado() {
       tono: "pulse",
       titulo: "No verifica — y eso es exactamente lo que tiene que pasar",
       detalle:
-        "Esta clave no es la que eligió la denunciante. Interceptar el material no alcanza: la autoría quedó atada a una sola clave pública y no es transferible.",
+        "Esta clave no es la que eligió la denunciante. Interceptar el material no alcanza: la autoría se publicó atada a una sola clave pública, y con ésta no hay registro que encontrar.",
       accion: {
         texto: "Volver a la clave designada",
         hacer: () => elegirClave("pia"),

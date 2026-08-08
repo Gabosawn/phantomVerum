@@ -91,7 +91,9 @@ export function Autoria() {
         >
           La persona que escribió esta denuncia le está probando su autoría, sin revelarle su
           identidad ni la evidencia. Si el Departamento Legal de {e.orgNombre} intercepta este mismo
-          material, no prueba nada.
+          material y verifica con su propia clave, no encuentra el registro: la autoría se publicó
+          una vez, para la clave de usted. Lo que sí puede hacer usted es reenviarlo — la prueba es
+          públicamente verificable, así que no es intransferible una vez entregada.
         </PanelVeredicto>
       )}
 
@@ -148,8 +150,8 @@ export function Autoria() {
           remate="Solo él, solo ante quien él elija."
         >
           Mismo <code style={{ font: `500 14px ${MONO}` }}>denunciaId</code>, mismo material, otra
-          clave pública: no prueba nada. La autoría quedó ligada a la clave que el denunciante
-          eligió — y no es transferible.
+          clave pública: el registro que busca no está en la cadena. La autoría se publicó una vez,
+          para la clave que el denunciante eligió, y ésta no es esa.
         </PanelVeredicto>
       )}
 

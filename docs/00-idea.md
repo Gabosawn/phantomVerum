@@ -43,10 +43,10 @@ Three Compact circuits on Midnight's dual-ledger model (detail in
    the credential that generated it.
 3. **`revealAuthorship`** — the differentiator. Months later, the whistleblower
    proves to a prosecutor that they wrote *that* report, **binding the on-chain
-   record to the prosecutor's public key**: the ledger entry, shown to anyone
-   else — the employer, for instance — proves nothing. The off-chain
-   verification package is what convinces, and whoever holds it can verify, so
-   it is delivered only to the chosen prosecutor; cryptographically
+   record to the prosecutor's public key**: the ledger entry the employer's key
+   would look up is simply not there. The off-chain verification package is
+   what convinces, and whoever holds it can verify, so it is delivered only to
+   the chosen prosecutor — and can be forwarded by them. Cryptographically
    non-transferable proofs (true designated-verifier tags) are roadmap.
 
 **Four stages:** (1) the organization registers → (2) an employee reports and
@@ -68,8 +68,9 @@ whistleblower proves authorship to the prosecutor and obtains legal protection.
 | Academic papers 2023–2025 | MDPI, PriRPT | — | ✅ only in theory |
 
 Delayed authorship disclosure exists only in papers. **Nobody has shipped it.**
-We are shipping it here, with the refinement the literature recommends
-(designated verifier).
+We are shipping it here, with per-recipient binding of the on-chain record.
+The literature's refinement on top of that — true designated-verifier tags,
+where a forwarded proof convinces nobody — is roadmap, not shipped.
 
 Second verified differentiator: **the anonymity holds up to the hard question.**
 Midnight transactions have no `msg.sender` — contract calls are authorized by

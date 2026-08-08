@@ -4,7 +4,9 @@
  *   node dist/scripts/reveal-authorship.js [reportId] [prosecutorPk] [--network]
  *
  * Publishes `authorshipOf(reportSecret, reportId, prosecutorPk)` — bound to
- * THAT prosecutor's key: shown to anyone else, the record proves nothing.
+ * THAT prosecutor's key, so looking it up with another key finds nothing on
+ * the ledger. Note this is per-recipient separation, not a designated-verifier
+ * scheme: the proof verifies publicly, so it is transferable once delivered.
  *
  * Simulator mode runs the previous acts first (register, issue, report) and
  * reveals the authorship of the just-sealed report, so the script runs with
