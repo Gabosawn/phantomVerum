@@ -193,6 +193,21 @@
     .stats, .buyers { grid-template-columns: 1fr 1fr; }
   }
   @media (prefers-reduced-motion: reduce) { .slide.on { animation: none; } * { scroll-behavior: auto; } }
+
+  /* ── Print / PDF: apila los 16 slides, uno por página 16:9 ──── */
+  @media print {
+    @page { size: 13.333in 7.5in; margin: 0; }
+    html, body { height: auto; overflow: visible; background: var(--body); }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .deck { position: static; inset: auto; }
+    .slide {
+      display: flex !important; position: relative; inset: auto;
+      width: 13.333in; height: 7.5in; overflow: hidden;
+      animation: none !important; break-after: page; page-break-after: always;
+    }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .chrome, .arrows, .hint, .progress { display: none !important; }
+  }
 </style>
 
 <!-- global arrowhead marker -->
@@ -307,7 +322,74 @@
               <text x="792" y="160" text-anchor="middle" style="fill:var(--muted)" font-size="10.5">exige revelarte</text>
             </g>
           </svg>
-          <figcaption>La SEC paga 10–30% de la multa solo a quien prueba que fue el primero. Eso hoy = quemar tu anonimato.</figcaption>
+          <figcaption>La SEC paga 10–30% de la multa —ya lleva <span class="grn">US$2,2 B</span> repartidos— solo a quien prueba que fue el primero. Eso hoy = quemar tu anonimato.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1b · MERCADO · EL SILENCIO ────────────────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead" style="max-width:34ch">
+        <p class="eyebrow">El mercado · el silencio</p>
+        <h2>El mejor sensor de fraude es alguien de adentro. Hoy está muteado.</h2>
+      </div>
+      <div class="figwrap" style="max-width:none">
+        <figure class="dg">
+          <svg viewBox="0 0 960 360" role="img" aria-label="El fraude se lleva el 5% de la facturación anual; el 43% se descubre por un dato de adentro, tres veces más que cualquier otro método; pero 8 de cada 10 testigos se callan y la mitad lo hace por miedo a represalias" style="color:var(--text2)">
+            <line x1="322" y1="26" x2="322" y2="336" stroke="currentColor" stroke-opacity="0.14"/>
+            <line x1="642" y1="26" x2="642" y2="336" stroke="currentColor" stroke-opacity="0.14"/>
+
+            <!-- PANEL 1 · costo -->
+            <text x="24" y="44" style="fill:var(--muted)" font-size="11" letter-spacing="2">EL COSTO</text>
+            <text x="20" y="150" style="fill:var(--text)" font-size="92" font-weight="600" font-family="var(--display)">5%</text>
+            <text x="24" y="192" style="fill:var(--text2)" font-size="15">de la facturación anual</text>
+            <text x="24" y="214" style="fill:var(--text2)" font-size="15">se pierde en fraude</text>
+            <text x="24" y="268" style="fill:var(--muted)" font-size="12">pérdida mediana por caso</text>
+            <text x="24" y="291" style="fill:var(--accent)" font-size="18">US$ 145.000</text>
+            <text x="24" y="330" style="fill:var(--dim)" font-size="10.5">ACFE · Report to the Nations 2024</text>
+
+            <!-- PANEL 2 · cómo se descubre -->
+            <text x="356" y="44" style="fill:var(--muted)" font-size="11" letter-spacing="2">CÓMO SE DESCUBRE</text>
+            <text x="356" y="90" style="fill:var(--accent)" font-size="13.5">dato de adentro</text>
+            <rect x="356" y="98" width="248" height="27" rx="5" fill="var(--surface)"/>
+            <rect x="356" y="98" width="248" height="27" rx="5" fill="var(--accent)" fill-opacity="0.85"/>
+            <text x="612" y="118" style="fill:var(--accent)" font-size="15" font-weight="600">43%</text>
+            <text x="356" y="158" style="fill:var(--text2)" font-size="12.5">auditoría interna</text>
+            <rect x="356" y="166" width="248" height="17" rx="4" fill="var(--surface)"/>
+            <rect x="356" y="166" width="81" height="17" rx="4" fill="var(--dim)"/>
+            <text x="612" y="180" style="fill:var(--muted)" font-size="12.5">14%</text>
+            <text x="356" y="212" style="fill:var(--text2)" font-size="12.5">revisión gerencial</text>
+            <rect x="356" y="220" width="248" height="17" rx="4" fill="var(--surface)"/>
+            <rect x="356" y="220" width="75" height="17" rx="4" fill="var(--dim)"/>
+            <text x="612" y="234" style="fill:var(--muted)" font-size="12.5">13%</text>
+            <text x="356" y="266" style="fill:var(--text2)" font-size="12.5">por casualidad</text>
+            <rect x="356" y="274" width="248" height="17" rx="4" fill="var(--surface)"/>
+            <rect x="356" y="274" width="29" height="17" rx="4" fill="var(--dim)"/>
+            <text x="612" y="288" style="fill:var(--muted)" font-size="12.5">5%</text>
+            <text x="356" y="330" style="fill:var(--dim)" font-size="10.5">3× más que cualquier otro método</text>
+
+            <!-- PANEL 3 · el silencio -->
+            <text x="668" y="44" style="fill:var(--muted)" font-size="11" letter-spacing="2">Y SIN EMBARGO</text>
+            <text x="666" y="104" style="fill:var(--text)" font-size="50" font-weight="600">8 de 10</text>
+            <text x="668" y="132" style="fill:var(--text2)" font-size="14.5">testigos se callan</text>
+            <!-- row 1 · muted -->
+            <g transform="translate(686,178)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(738,178)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(790,178)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(842,178)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(894,178)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <!-- row 2 · muted + 2 reveal -->
+            <g transform="translate(686,240)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(738,240)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(790,240)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--dim)" stroke-width="1.6"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--dim)" stroke-width="1.6"/><rect x="-13" y="-11" width="26" height="10" rx="2" fill="var(--censor)"/></g>
+            <g transform="translate(842,240)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--accent)" stroke-width="1.9"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--accent)" stroke-width="1.9"/></g>
+            <g transform="translate(894,240)"><circle cx="0" cy="-7" r="6" fill="none" stroke="var(--accent)" stroke-width="1.9"/><path d="M-11 13 C-11 0 11 0 11 13" fill="none" stroke="var(--accent)" stroke-width="1.9"/></g>
+            <text x="668" y="298" style="fill:var(--rechazo)" font-size="12.5">la mitad, por miedo a represalias</text>
+            <text x="668" y="330" style="fill:var(--dim)" font-size="10.5">encuestas al sector financiero · 2023–24</text>
+          </svg>
+          <figcaption>Un dato de adentro descubre el <span class="vio">43%</span> del fraude — 3× más que cualquier otro método. Pero 8 de cada 10 testigos se callan; la mitad, por miedo. PhantomTrace le saca el miedo al mejor sensor que existe.</figcaption>
         </figure>
       </div>
     </div>
@@ -738,6 +820,63 @@
         </div>
       </div>
       <p class="cap" style="margin-left:auto;margin-right:auto;text-align:center">Dos implementaciones que llegaron por separado coinciden en cada digest publicado y en todo el ledger.</p>
+    </div>
+  </section>
+
+  <!-- 8b · MERCADO · LA PLATA Y EL MANDATO ──────────────────── -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="shead" style="max-width:36ch">
+        <p class="eyebrow">El mercado · la plata y el mandato</p>
+        <h2>Miles de millones en recompensas. Y una ley que obliga a tener el canal.</h2>
+      </div>
+      <div class="figwrap" style="max-width:none">
+        <div class="stats">
+          <div class="stat"><div class="big">US$2,2 B</div><div class="lab">pagados por la <b>SEC</b> desde 2010</div></div>
+          <div class="stat hero"><div class="big">444</div><div class="lab">personas <b>cobraron</b> la recompensa</div></div>
+          <div class="stat"><div class="big">US$255 M</div><div class="lab">repartidos <b>solo en 2024</b></div></div>
+          <div class="stat"><div class="big">10–30%</div><div class="lab">de la multa, al <b>primero</b> en reportar</div></div>
+        </div>
+        <figure class="dg" style="margin-top:0.4rem">
+          <svg viewBox="0 0 960 250" role="img" aria-label="Las denuncias a la SEC crecen año a año hasta un récord de 24.980 en 2024; en paralelo, la Directiva de la UE obliga desde diciembre de 2023 a toda empresa de 50 o más empleados a tener un canal interno de denuncias" style="color:var(--text2)">
+            <!-- LEFT · tips growth -->
+            <text x="16" y="30" style="fill:var(--muted)" font-size="11" letter-spacing="2">DENUNCIAS A LA SEC · POR AÑO</text>
+            <line x1="34" y1="206" x2="560" y2="206" stroke="currentColor" stroke-opacity="0.2"/>
+            <!-- bars: 2020,2021,2022,2023,2024 -->
+            <rect x="60"  y="168" width="66" height="38"  rx="4" fill="var(--dim)"/>
+            <rect x="164" y="132" width="66" height="74"  rx="4" fill="var(--dim)"/>
+            <rect x="268" y="130" width="66" height="76"  rx="4" fill="var(--dim)"/>
+            <rect x="372" y="96"  width="66" height="110" rx="4" fill="var(--profundo)"/>
+            <rect x="476" y="56"  width="66" height="150" rx="4" fill="var(--accent)"/>
+            <text x="93"  y="226" text-anchor="middle" style="fill:var(--muted)" font-size="11">2020</text>
+            <text x="197" y="226" text-anchor="middle" style="fill:var(--muted)" font-size="11">2021</text>
+            <text x="301" y="226" text-anchor="middle" style="fill:var(--muted)" font-size="11">2022</text>
+            <text x="405" y="226" text-anchor="middle" style="fill:var(--text2)" font-size="11">2023</text>
+            <text x="509" y="226" text-anchor="middle" style="fill:var(--accent)" font-size="11">2024</text>
+            <text x="405" y="86"  text-anchor="middle" style="fill:var(--text2)" font-size="11.5">18.354</text>
+            <text x="509" y="46"  text-anchor="middle" style="fill:var(--accent)" font-size="14" font-weight="600">24.980</text>
+            <text x="509" y="30"  text-anchor="middle" style="fill:var(--accent)" font-size="9.5" letter-spacing="1.5">RÉCORD</text>
+
+            <!-- divider -->
+            <line x1="612" y1="20" x2="612" y2="228" stroke="currentColor" stroke-opacity="0.14"/>
+
+            <!-- RIGHT · EU mandate -->
+            <text x="648" y="30" style="fill:var(--muted)" font-size="11" letter-spacing="2">DIRECTIVA UE 2019/1937</text>
+            <g style="color:var(--accent)" transform="translate(690,96)" stroke="currentColor" stroke-width="2.2" fill="none">
+              <rect x="-30" y="-34" width="60" height="68" rx="3"/>
+              <rect x="-20" y="-24" width="12" height="12" fill="currentColor" stroke="none"/><rect x="8" y="-24" width="12" height="12" fill="currentColor" stroke="none"/>
+              <rect x="-20" y="-2" width="12" height="12" fill="currentColor" stroke="none"/><rect x="8" y="-2" width="12" height="12" fill="currentColor" stroke="none"/>
+              <rect x="-9" y="18" width="18" height="16" fill="currentColor" stroke="none"/>
+            </g>
+            <text x="742" y="78" style="fill:var(--text)" font-size="17" font-weight="600">50+ empleados</text>
+            <text x="742" y="102" style="fill:var(--text2)" font-size="13">canal interno de denuncias</text>
+            <text x="742" y="122" style="fill:var(--text2)" font-size="13"><tspan style="fill:var(--accent)">obligatorio</tspan> en toda la UE</text>
+            <text x="648" y="176" style="fill:var(--muted)" font-size="12">▪ vigente para 50+ desde <tspan style="fill:var(--text2)">dic 2023</tspan></text>
+            <text x="648" y="200" style="fill:var(--muted)" font-size="12">▪ servicios financieros: <tspan style="fill:var(--text2)">cualquier tamaño</tspan></text>
+          </svg>
+          <figcaption>La SEC ya pagó <span class="grn">US$2,2 B</span> a 444 personas por llegar primero, y la UE obliga a tener el canal. Falta lo único que hoy no existe: <span class="vio">cobrar sin revelarse</span>. Eso es PhantomTrace.</figcaption>
+        </figure>
+      </div>
     </div>
   </section>
 
