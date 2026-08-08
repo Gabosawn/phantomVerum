@@ -27,7 +27,7 @@ import { check, checkRejects, checkRejectsAsync, summary } from '../witnesses/ch
 import { epochOfSeconds } from '../witnesses/epoch.js';
 import { hashEvidenceBytes } from '../witnesses/evidence.js';
 import { toBytes32, toHex, randomBytes32 } from '../witnesses/hex.js';
-import { pureCircuits, stageStoredReport } from '../witnesses/index.js';
+import { organizationId, pureCircuits, stageStoredReport } from '../witnesses/index.js';
 import {
   addReport,
   createSecrets,
@@ -58,8 +58,10 @@ process.on('exit', () => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-const orgId = randomBytes32();
 const issuerSecret = randomBytes32();
+// H-2: the orgId is `orgIdOf(issuerSecret)`, asserted in-circuit. Drawing it
+// independently would now fail registration.
+const orgId = organizationId(issuerSecret);
 // Nonces, not keys: each verifier generates its own and sends it over.
 const prosecutorNonce = randomBytes32();
 const employerNonce = randomBytes32();
@@ -158,6 +160,28 @@ check(
 check(
   'issuedCredentials == 1 on the ledger',
   (await api.readLedgerState()).issuedCredentials === 1,
+);
+
+// H-1 — the anonymity floor. `report` refuses to run while the tree holds
+// fewer than `minAnonymitySet()` credentials: proving membership in a tree of
+// one identifies exactly one person. Check the refusal is real, then build the
+// crowd the whistleblower is going to hide in.
+const FLOOR = Number(pureCircuits.minAnonymitySet());
+await checkRejectsAsync(
+  'report is refused while the anonymity set is below the floor',
+  () => api.report({ orgId, period: EPOCH, evidence: Buffer.from('too early to hide') }),
+  'anonymity set too small',
+);
+for (let i = 1; i < FLOOR; i += 1) {
+  await api.issueCredential({
+    orgId,
+    credCommitment: toHex(randomBytes32()),
+    issuerSecret,
+  });
+}
+check(
+  `issuedCredentials == ${FLOOR} — the anonymity floor is reached`,
+  (await api.readLedgerState()).issuedCredentials === FLOOR,
 );
 
 console.log('\n=== 5. T2 — the report (B3.4) ===');
@@ -410,7 +434,7 @@ check('organizations == 1', final.organizations === 1);
 check('reports == 2', final.reports.length === 2);
 check('nullifiers == 2', final.nullifiers === 2);
 check('authorships == 1', final.authorships.length === 1);
-check('credentials issued == 1', final.issuedCredentials === 1);
+check(`credentials issued == ${FLOOR} (1 real + the anonymity crowd)`, final.issuedCredentials === FLOOR);
 check(
   'the two reports are the ones the API returned',
   final.reports.includes(report1.reportId) && final.reports.includes(report2.reportId),

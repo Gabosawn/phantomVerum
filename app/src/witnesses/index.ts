@@ -188,6 +188,18 @@ export function issuerAnchor(issuerSecret: Uint8Array | Hex32): Uint8Array {
   return pureCircuits.anchorOf(asBytes32(issuerSecret, 'issuerSecret'));
 }
 
+/**
+ * The orgId that belongs to a given issuer secret (H-2).
+ *
+ * Since the audit fix an orgId is not chosen, it is derived:
+ * `registerOrganization` asserts `orgIdOf(issuerSecret()) == orgId`, so an id
+ * nobody can derive is an id nobody can squat. Callers must build the orgId
+ * with this rather than picking one.
+ */
+export function organizationId(issuerSecret: Uint8Array | Hex32): Uint8Array {
+  return pureCircuits.orgIdOf(asBytes32(issuerSecret, 'issuerSecret'));
+}
+
 export function hasCredential(ps: TestigoPrivateState): boolean {
   return ps.credentialSecret !== null && ps.orgId !== null;
 }

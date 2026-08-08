@@ -80,6 +80,13 @@ export const DOMAIN_TAGS = {
   receipt: "phantomtrace:receipt:v1",
   /** The organization's issuer commitment, published as its `anchor`. */
   issuer: "phantomtrace:issuer:v1",
+  /**
+   * The organization's IDENTITY, derived from the same issuer secret (H-2).
+   *
+   * Distinct from `issuer` on purpose: `orgIdOf` and `anchorOf` hash the same preimage with
+   * the same arity, so sharing a tag would make an org's id and its anchor the same 32 bytes.
+   */
+  org: "phantomtrace:org:v1",
 } as const;
 
 // ── conversions ─────────────────────────────────────────────────────────────
@@ -236,4 +243,17 @@ export function anchorOf(issuerSecret: Hex32): Hex32 {
   return bytesToHex(
     persistentHash(VECTOR2, [pad32(DOMAIN_TAGS.issuer), hexToBytes(issuerSecret)]),
   );
+}
+
+/**
+ * `orgId = H(tag ‖ issuerSecret)` — an organization's id IS the fingerprint of its issuer
+ * secret (H-2).
+ *
+ * `registerOrganization` used to accept any orgId, first-come and irreversible on an immutable
+ * contract, so an attacker could take the label a real organization was about to use and deny
+ * it permanently. Deriving the id removes the race: an id nobody can derive is an id nobody
+ * can squat, and squatting your own is a no-op.
+ */
+export function orgIdOf(issuerSecret: Hex32): Hex32 {
+  return bytesToHex(persistentHash(VECTOR2, [pad32(DOMAIN_TAGS.org), hexToBytes(issuerSecret)]));
 }

@@ -123,11 +123,21 @@ export interface VerificationResult {
 // ── Parameters of the 5 methods of §3.1 ─────────────────────────────────
 
 export interface RegisterOrganizationParams {
-  readonly orgId: Bytes32Input;
   /**
-   * The org's issuer secret. The published `anchor` is `anchorOf(issuerSecret)`,
-   * derived here rather than accepted raw: registering an anchor whose secret
-   * you do not hold would produce an org that can never issue anything.
+   * OPTIONAL since the H-2 fix, and only as a cross-check.
+   *
+   * An orgId is no longer chosen: the circuit asserts
+   * `orgIdOf(issuerSecret()) == orgId`, so it is a function of the secret.
+   * Leave it out and the API derives it. Pass it and a mismatch is rejected
+   * here, with a message that says so, instead of failing inside the circuit
+   * as an opaque unsatisfied constraint.
+   */
+  readonly orgId?: Bytes32Input;
+  /**
+   * The org's issuer secret. Both public arguments — `orgId` and `anchor` —
+   * are derived from it here rather than accepted raw: registering an id or an
+   * anchor whose secret you do not hold would produce an org that can never
+   * issue anything, and used to let you deny somebody else's label forever.
    */
   readonly issuerSecret: Bytes32Input;
 }

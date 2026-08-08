@@ -37,8 +37,9 @@ const prosecutorNonce = hexArgOrRandom(args.positional[1], 'prosecutorNonce');
 let reportId = args.positional[0];
 
 if (backend.mode === 'simulator' && reportId === undefined) {
-  const orgId = hexArgOrRandom(undefined, 'orgId');
-  await bootstrapOrg(backend, orgId, bootstrapIssuerSecret(orgId));
+  // H-2: the orgId is no longer picked, it is whatever the fresh issuer secret
+  // derives — `bootstrapOrg` mints the secret and hands the id back.
+  const orgId = await bootstrapOrg(backend);
   await bootstrapCredential(backend, orgId);
   const sealed = await backend.api.report({
     orgId,

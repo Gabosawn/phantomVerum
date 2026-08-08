@@ -77,11 +77,11 @@ if (typeof fileFlag === 'string') {
   fatal('pass --file <export.json> to verify against the network ledger');
 } else {
   // Simulator self-demo: full flow, then prosecutor ✅ / employer ❌.
-  const orgId = hexArgOrRandom(undefined, 'orgId');
   const prosecutorNonce = hexArgOrRandom(undefined, 'prosecutorNonce');
   const employerNonce = hexArgOrRandom(undefined, 'employerNonce');
 
-  await bootstrapOrg(backend, orgId, bootstrapIssuerSecret(orgId));
+  // H-2: the orgId is derived from the issuer secret `bootstrapOrg` mints.
+  const orgId = await bootstrapOrg(backend);
   await bootstrapCredential(backend, orgId);
   const sealed = await backend.api.report({
     orgId,

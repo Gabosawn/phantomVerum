@@ -14,6 +14,7 @@
  */
 import '../config/init.js';
 
+import type { Hex32 } from '../witnesses/hex.js';
 import { readSecrets } from '../witnesses/secrets.js';
 
 import {
@@ -22,30 +23,38 @@ import {
   closeBackend,
   createBackend,
   fatal,
-  hexArgOrRandom,
   parseArgs,
   printMode,
   printTx,
+  requireHexArg,
 } from './common.js';
 
 const args = parseArgs();
 const backend = await createBackend(args);
 printMode(backend);
 
-// Resolve the org: --org flag > local secrets store > random (simulator).
+// Resolve the org: --org flag > local secrets store (network), or a freshly
+// minted org (simulator).
+//
+// H-2: an orgId is no longer a label the caller picks — it is `orgIdOf` of the
+// issuer secret. So the simulator can no longer claim a random one: it mints an
+// org, secret first, and takes whatever id that derives. `--org` is therefore
+// meaningless here, because this process does not hold that org's secret.
 const orgFlag = args.flags.get('org');
-let orgId = typeof orgFlag === 'string' ? orgFlag : undefined;
-if (orgId === undefined && backend.mode === 'network') {
-  orgId = readSecrets()?.orgId;
-  if (orgId === undefined) {
-    fatal('no credential in the local store — run issue-credential first, or pass --org');
-  }
-}
-orgId = hexArgOrRandom(orgId, 'orgId');
+let orgId: Hex32;
 
 if (backend.mode === 'simulator') {
-  await bootstrapOrg(backend, orgId, hexArgOrRandom(undefined, 'anchor'));
+  if (typeof orgFlag === 'string') {
+    fatal('--org does not apply on the simulator: the org is minted here, and its id is derived from the issuer secret this run generates');
+  }
+  orgId = await bootstrapOrg(backend);
   await bootstrapCredential(backend, orgId);
+} else {
+  const fromStore = typeof orgFlag === 'string' ? orgFlag : readSecrets()?.orgId;
+  if (fromStore === undefined) {
+    fatal('no credential in the local store — run issue-credential first, or pass --org');
+  }
+  orgId = requireHexArg(fromStore, 'orgId');
 }
 
 const evidenceFile = args.positional[0];

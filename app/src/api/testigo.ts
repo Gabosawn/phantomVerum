@@ -14,6 +14,7 @@ import {
   withCredential,
   withIssuerSecret,
   issuerAnchor,
+  organizationId,
   clearActiveReport,
   pureCircuits,
   stageNonce,
@@ -103,16 +104,34 @@ export class TestigoApi {
   // ── B3.2 ──────────────────────────────────────────────────────────────
 
   /**
-   * Registers an organization, publishing the anchor of its issuer secret.
+   * Registers an organization: publishes the anchor of its issuer secret under
+   * the orgId that same secret derives.
    *
-   * ⚠️ Registration itself still has no access control, declared up-front in
-   * the deck and the README (docs/03 §2.6): anyone can claim an unused orgId.
-   * What that no longer buys is anything useful — `issueCredential` checks the
-   * anchor, so a squatter can only issue under their own.
+   * Registration is PERMISSIONLESS — anyone can create their own organization —
+   * but since the H-2 fix it is no longer SQUATTABLE. Both public arguments are
+   * derived from the issuer secret and asserted in-circuit, so the id you can
+   * register is the one you hold the key for. Taking the label a real
+   * organization was about to use, and denying it permanently on an immutable
+   * contract, is no longer possible.
    */
   async registerOrganization(p: RegisterOrganizationParams): Promise<TxResult> {
-    const orgId = asBytes32(p.orgId, 'orgId');
-    const anchor = issuerAnchor(asBytes32(p.issuerSecret, 'issuerSecret'));
+    const issuerSecret = asBytes32(p.issuerSecret, 'issuerSecret');
+    const orgId = organizationId(issuerSecret);
+    const anchor = issuerAnchor(issuerSecret);
+
+    // A supplied orgId is a cross-check, not an input: rejecting it here names
+    // the problem, where the circuit would only report a failed constraint.
+    if (p.orgId !== undefined) {
+      const claimed = asBytes32(p.orgId, 'orgId');
+      if (toHex(claimed) !== toHex(orgId)) {
+        throw new Error(
+          `orgId ${toHex(claimed)} is not derived from this issuer secret ` +
+            `(expected ${toHex(orgId)}). Since the H-2 fix an orgId is not ` +
+            'chosen but derived — build it with `organizationId(issuerSecret)`.',
+        );
+      }
+    }
+
     try {
       return await this.executor.call('registerOrganization', orgId, anchor);
     } catch (error) {

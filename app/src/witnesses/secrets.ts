@@ -104,7 +104,7 @@ const DIR_MODE = 0o700;
  * this, the two would write secrets in different places and the whistleblower
  * would lose access to their own reports.
  */
-function repoRoot(): string {
+export function repoRoot(): string {
   let dir = path.dirname(fileURLToPath(import.meta.url));
   for (let i = 0; i < 12; i++) {
     const pj = path.join(dir, 'package.json');
