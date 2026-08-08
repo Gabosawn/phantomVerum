@@ -135,6 +135,17 @@ export const printTx = (tx: TxResult): void => {
  * `issue-credential` have to arrive at the SAME secret independently or the
  * anchor check rejects the issuance. A real issuer keeps this in a vault; for
  * the simulator and the demo, reproducible is exactly what is wanted.
+ *
+ * ⚠️ SECURITY (declared limitation, audit 2026-08-09): this secret is derived
+ * from `orgId`, which is PUBLIC (both `registerOrganization` and
+ * `issueCredential` disclose it on-chain). So anyone who reads the chain can
+ * recompute `sha256("phantomtrace:demo-issuer:v1:" + orgId)`, pass the contract's
+ * `anchorOf(issuerSecret()) == lookup(orgId)` check, and mint credentials under
+ * that org. The contract's issuer authentication is real; this DEMO derivation
+ * makes it public-grade. `issue-credential.ts` and `register-org.ts` use this in
+ * `--network` mode too, so orgs registered by the shipped tooling (incl. on
+ * Preview) are NOT protected. A production issuer must generate this with
+ * `randomBytes32()` and keep it secret. See README "Known limitations".
  */
 export const bootstrapIssuerSecret = (orgId: Hex32): Hex32 =>
   createHash('sha256').update(`phantomtrace:demo-issuer:v1:${orgId}`).digest('hex') as Hex32;

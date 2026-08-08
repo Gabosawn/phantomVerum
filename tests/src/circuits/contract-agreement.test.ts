@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import {
   anchorOf,
   bytesToHex,
+  credCommitmentOf,
   hexToBytes,
   leafOf,
   nullifierOf,
@@ -71,6 +72,9 @@ describe.skipIf(!compiled)("crypto.ts agrees with the contract's pure circuits",
       expect(reportIdOf(x, y)).toBe(bytesToHex(pureCircuits.reportIdOf(b(x), b(y))));
       expect(receiptOf(y, z)).toBe(bytesToHex(pureCircuits.receiptOf(b(y), b(z))));
       expect(anchorOf(x)).toBe(bytesToHex(pureCircuits.anchorOf(b(x))));
+      expect(credCommitmentOf(z)).toBe(
+        bytesToHex(pureCircuits.credCommitmentOf(b(z))),
+      );
       for (const period of PERIODS) {
         expect(nullifierOf(x, period)).toBe(
           bytesToHex(pureCircuits.nullifierOf(b(x), period)),

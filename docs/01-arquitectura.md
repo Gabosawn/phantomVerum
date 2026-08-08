@@ -75,10 +75,21 @@ witnesses. Acts as scaffolding for the rest of the contract.
 
 ### 4.2 `report` — the core
 
-**Public inputs:** `orgId`, `period` — the **epoch index**
+**Arguments:** `orgId`, `period` — the **epoch index**
 (`floor(blockTime / 86400)`, Uint<64>). The circuit rejects any period that
 is not the epoch in progress, otherwise the nullifier would be evadable by
 inventing labels.
+
+> **What is actually disclosed on-chain.** A circuit argument is *not* a public
+> input unless it crosses `disclose()` / a ledger op. `report` discloses only
+> the epoch window, the global credential-tree root, the nullifier and the
+> reportId — **not `orgId`**. `orgId` is public only via
+> `registerOrganization` / `issueCredential`, which disclose it directly.
+> (Verified against the ledger `zkir` crate: `num_inputs` is witness arity,
+> `declare_pub_input` is the sole path to a public input, and the on-chain
+> `ContractCall` carries a hiding `communication_commitment`, not the raw args.
+> A prior note claimed `orgId` was public "because `num_inputs: 3`" — that
+> conflated argument arity with public inputs.)
 **Witnesses:** `credentialSecret` + `credentialPath` (see §5),
 `personalSecret` (persistent), `evidenceHash` (the app hashes the file
 locally; the circuit receives the hash).

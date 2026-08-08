@@ -7,7 +7,7 @@
  *      the circuit's, and `contract-agreement.test.ts` asserts that against the contract's own
  *      `pureCircuits`.
  *   2. The credential tree is `StateBoundedMerkleTree`, the same structure Compact uses for
- *      `HistoricMerkleTree<8, Bytes<32>>` → real roots, real paths.
+ *      `HistoricMerkleTree<16, Bytes<32>>` → real roots, real paths.
  *
  * What it does NOT do is run the constraints inside a ZK circuit. Only the `contract` backend
  * proves the `.compact` enforces them. Running both over one suite is the point.

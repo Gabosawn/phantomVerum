@@ -76,7 +76,7 @@ Un agente escribió y compiló contratos de prueba para cada punto del spec
 
 ### 2.1 La Opción A (Merkle) VA — y ya existe compilando
 
-- `HistoricMerkleTree<8, Bytes<32>>` + `merkleTreePathRoot` + `checkRoot`
+- `HistoricMerkleTree<16, Bytes<32>>` + `merkleTreePathRoot` + `checkRoot`
   existen en 0.31.1. **El contrato completo de la Opción A compila y genera
   claves PLONK (46 s).** También la B (26 s). No hay bloqueo técnico.
 - **Variante elegida: árbol global con `orgId` dentro de la hoja**
@@ -265,12 +265,20 @@ evidencia es una suposición de confianza declarada, y la prueba ZK al fiscal
 es roadmap"*. Un juez técnico que pincha esto encuentra la respuesta ya en la
 slide de limitaciones.
 
-**No verificado — no usar:** el review sugirió reclamar que `orgId`/`periodo`
-nunca aparecen en el transcript público. Su test buscaba los valores como
-string hex, pero el transcript los codifica como arrays de bytes — el mismo
-test dice que `denunciaId` tampoco aparece, y `denunciaId` sí se inserta en el
-ledger. La sugerencia puede ser cierta, pero **hay que verificarla decodificando
-el transcript antes de afirmarla en el deck.**
+**VERIFICADO (auditoría 9/8, contra fuente + transcript decodificado):**
+`orgId` **no** aparece en el transcript público de `denunciar`. Es argumento del
+circuito, y un argumento no es public input salvo que cruce `disclose()`/una op
+de ledger; `orgId` solo alimenta la hoja de Merkle in-circuit. Confirmado en el
+crate `zkir` del ledger (`num_inputs` = aridad de witnesses; `declare_pub_input`
+= único camino a public input, y `orgId` no está) y en el `ContractCall` on-chain
+(lleva `communication_commitment` ocultante, no los args). El test antiguo daba
+un falso positivo porque leía `proofData.input` (vector local del prover), no
+`publicTranscript`; `contracts/test/transcript-privacy.mjs §4` ya está corregido
+y verifica la ausencia sobre el transcript. `periodo` **sí** es recuperable
+(se disclosa `inicio = periodo·86400`), pero no agrega información: el circuito
+lo fuerza a `floor(blockTime/86400)` y el timestamp del bloque ya es público.
+**Frase segura:** *"una denuncia no revela de qué org es; la org es pública solo
+porque se registra y emite credenciales."*
 
 ---
 

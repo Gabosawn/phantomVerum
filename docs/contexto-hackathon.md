@@ -103,10 +103,19 @@ circuito.
    en blockchain no es una submission válida ante la SEC. Somos un sello de
    evidencia *previo* al Form TCR.
 2. **"Designated verifier".** Ver el Q&A de arriba.
-3. **"El `orgId` no es público"**. Sí lo es: es un argumento del circuito, y
-   los argumentos son public inputs de la prueba (`num_inputs: 3` en
-   `report.zkir`). El árbol es global, así que la raíz no distingue orgs — pero
-   el `orgId` sí.
+3. **"Los argumentos del circuito son públicos, así que `orgId` se ve en cada
+   denuncia."** No. Un argumento **no** es public input salvo que cruce
+   `disclose()`/una op de ledger. En `report` el `orgId` solo alimenta la hoja
+   de Merkle in-circuit (que produce una raíz global, igual para todas las
+   orgs), así que **`report` no publica `orgId`**. Verificado contra el crate
+   `zkir` del ledger: `num_inputs` es la aridad de los witnesses, no la lista de
+   public inputs; `declare_pub_input` es el único camino a un public input; y el
+   `ContractCall` on-chain lleva un `communication_commitment` ocultante, no los
+   args crudos. **Dónde SÍ es público el `orgId`:** en `registerOrganization` y
+   `issueCredential`, que lo disclosan directo. Frase segura ante un juez: *"la
+   org es pública porque se registra y emite credenciales on-chain; una denuncia
+   individual no revela de qué org es."* (Una versión previa de esta hoja decía
+   lo contrario apoyándose en `num_inputs: 3` — era el error de método.)
 
 **Gancho legal que SÍ se sostiene, y es mejor:** la Directiva UE 2019/1937.
 Art. 6(3) — quien denunció de forma anónima y después es identificado y sufre

@@ -65,9 +65,10 @@ honestidad preventiva desarma al juez técnico. Esta es esa carta.
 **Texto sugerido** (adaptalo al estilo de las otras, que están en inglés):
 
 > - **The anonymity set is bounded per organization, and publicly countable.**
->   `orgId` is a public argument of both `issueCredential` and `report`, so anyone
->   can count how many credentials each organization issued. A reporter's anonymity
->   set is that number — not the 256 leaves of the global tree. An organization with
+>   `orgId` is disclosed by `issueCredential` (and `registerOrganization`), so anyone
+>   can count how many credentials each organization issued. (`report` does NOT
+>   disclose `orgId`, but the per-org issuance counts are public regardless.) A reporter's anonymity
+>   set is that number — not the 65 536 leaves of the global tree. An organization with
 >   very few registered employees leaves its reporter effectively identified, even
 >   though the Merkle proof is cryptographically sound. Roadmap: require a minimum
 >   number of issued credentials before `report` is allowed against an organization.

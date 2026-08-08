@@ -93,10 +93,14 @@ The contract in the box above is the fixed one.
 1. **The organization registers** — publishes the credential anchor on
    the ledger and issues credentials to employees (mock, off-chain).
 2. **An employee reports** — the app verifies their credential *privately* and
-   publishes the evidence hash (reportId), the `orgId`, the epoch, and an
-   anti-spam nullifier. The organization sees *which department is affected*;
-   it cannot know **which employee** reported — the nullifier is cryptographically
-   unlinkable to the credential.
+   the `report` transaction discloses the sealed evidence hash (reportId), the
+   epoch, an anti-spam nullifier, and the global credential-tree root. It does
+   **not** disclose the `orgId`: `orgId` is a circuit argument, and arguments
+   stay private unless disclosed — `report` never discloses it. The organization
+   is public only because registration and credential issuance disclose it, not
+   because the report names it. Nobody — not even the issuer — can link a report
+   to a specific employee: the nullifier is cryptographically unlinkable to the
+   credential.
 3. **The evidence is immutable** — the hash is sealed on-chain. Any
    alteration won't match.
 4. **Months later, they reveal authorship** — the prosecutor sends a fresh
@@ -343,12 +347,14 @@ survives.
 
 ## Known limitations
 
-Found by an adversarial pass over our own contract on 2026-08-08, each one
-reproduced rather than theorised. Four of the six were fixed the same night and
-are listed under [Fixed in v2](#fixed-in-v2) below; the two that remain are
-here, with the fix we would apply. "We did not notice" and "we found it,
-reproduced it, and know the patch" are different positions, and only the second
-one is true here.
+Found by adversarial passes over our own contract (2026-08-08, extended
+2026-08-09), each one reproduced rather than theorised. Four of the original six
+were fixed the same night and are listed under [Fixed in v2](#fixed-in-v2)
+below; the ones that remain are here, with the fix we would apply — including
+#3, which the 2026-08-09 pass added: the v2 issuer authentication is real in the
+contract but the demo tooling undercuts it. "We did not notice" and "we found
+it, reproduced it, and know the patch" are different positions, and only the
+second one is true here.
 
 **1. The same author produces the same `reportId` on two deployments** *(medium)*
 
@@ -371,7 +377,23 @@ indistinguishable proof, so a forwarded one convinces nobody. Here the receipt
 verifies against public data, so a prosecutor who shares the nonce transfers
 the ability to verify. See the threat model in `docs/01-arquitectura.md`.
 
-**3. Network-level anonymity is not addressed** *(declared, and the largest)*
+**3. The demo issuer secret is derivable from the public `orgId`** *(medium)*
+
+v2 made `issueCredential` authenticate against the org's on-chain anchor —
+correct in the contract. But the demo tooling derives the issuer secret as
+`sha256("phantomtrace:demo-issuer:v1:" + orgId)` so the stateless CLI scripts
+can reproduce it, and it uses that in `--network` mode too. Since `orgId` is
+public (`registerOrganization`/`issueCredential` disclose it), anyone can
+recompute the secret, pass `anchorOf(issuerSecret()) == lookup(orgId)`, and mint
+credentials under any org registered by the shipped tooling — including on
+Preview. The contract's check is real; the *demo's* secret is public-grade.
+**Fix:** a production issuer generates the secret with `randomBytes32()` and
+keeps it in a vault; the CLI should take it as an explicit arg / stored secret
+in network mode instead of deriving it. Reproduced by
+`contracts/test/security-claims.mjs` (a *random* wrong secret is rejected — the
+gap is that the demo's secret is not random). ~1 h.
+
+**4. Network-level anonymity is not addressed** *(declared, and the largest)*
 
 Measured against Preview: 87% of blocks are empty and the whole network carries
 ~1.4 transactions per minute, so a report is very likely the only transaction

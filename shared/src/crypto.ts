@@ -1,5 +1,5 @@
 /**
- * THE single TypeScript mirror of the seven `export pure circuit`s in
+ * THE single TypeScript mirror of the six `export pure circuit`s in
  * `contracts/src/testigo.compact`.
  *
  * One implementation, two consumers:
@@ -149,7 +149,7 @@ const alignedBytes32 = (b: Uint8Array): AlignedValue => ({
 /** Compact's Merkle leaf hash. What gets inserted, and what gets looked up. */
 export const leafHashOf = (leaf: Hex32): AlignedValue => leafHash(alignedBytes32(hexToBytes(leaf)));
 
-// ── the seven pure circuits ─────────────────────────────────────────────────
+// ── the six pure circuits ───────────────────────────────────────────────────
 
 /**
  * `commitment = H(tag ‖ credSecret)` — the ONLY thing the employee hands to the issuer.

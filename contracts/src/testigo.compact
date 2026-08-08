@@ -27,10 +27,13 @@ import CompactStandardLibrary;
 //   hand-rolled Merkle tree in TypeScript.
 //
 // DECLARED LIMITATIONS (deck + README, spec §5 and §7):
-//   · The credential issuer is a MOCK: `registerOrganization` and
-//     `issueCredential` have NO access control — anyone can register an
-//     org or add a leaf. That is the MVP scope, not an oversight: the
-//     real issuer (a signing corporate directory) is roadmap.
+//   · The credential issuer is a MOCK: `registerOrganization` has NO
+//     access control — anyone can register an unused orgId. Since v2,
+//     `issueCredential` IS authenticated: only the holder of the issuer
+//     secret behind the org's published anchor can add a leaf. What
+//     remains mock is the registration step and the off-chain identity
+//     of the issuer: the real issuer (a signing corporate directory)
+//     is roadmap.
 //   · The TRUTH of the reported content is not proven (spec §6).
 //   · There is no credential revocation (spec §7).
 // =====================================================================
@@ -304,8 +307,9 @@ export circuit revealAuthorship(reportId: Bytes<32>): [] {
 }
 
 // ---- 4.4 proveAuthorship — exportable ZK proof (spec §4.4) ----
-// Public: reportId, evidenciaHash, prosecutorPk.
-// Private: personalSecret (the same one used in `report`).
+// Public: reportId, evidenciaHash.
+// Private: personalSecret (the same one used in `report`) and
+// prosecutorNonce (the same witness `revealAuthorship` consumes).
 //
 // NO ledger WRITES: this circuit exists to generate a portable ZK proof
 // that the whistleblower gives to the verifier. The verifier checks the

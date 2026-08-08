@@ -53,56 +53,60 @@ Esperar 2–10 s de lag del indexer: poll, no query único.
 
 ## 1. La duda de §3.4, RESUELTA — pero NO como decía la primera versión
 
-> 🔴 **CORRECCIÓN (8/8, verificada).** La versión original de este §1 afirmaba
-> que `orgId` **no** es público en `denunciar` y lo vendía como "punto fuerte no
-> reclamado" para el deck. **Es falso, y era el error más caro del documento:**
-> un jurado técnico lo falsea en vivo leyendo el ZKIR, o corriendo un test que
-> ya está commiteado en este mismo repo.
+> 🔴 **CORRECCIÓN (8/8, RE-verificada contra la fuente).** Este §1 se dio vuelta
+> dos veces. La v1 decía que `orgId` **no** es público en `denunciar`. Una v2
+> "corrigió" eso afirmando que **sí** lo es, apoyándose en `num_inputs: 3` de
+> `report.zkir`. **La v2 era el error** — y es exactamente el patrón peligroso:
+> una afirmación revisada que quedó al revés. Verificado contra el crate `zkir`
+> del ledger de Midnight (`LFDT-Minokawa/compact` + `midnightntwrk/midnight-ledger`):
+> **`report` NO publica `orgId`.**
 
-### Qué se midió, y con qué
+### Qué se midió, y por qué la v2 se equivocó de método
 
-`contracts/output/zkir/report.zkir`, leído directo:
+`num_inputs: 3` NO es "la lista de public inputs". En el compilador
+(`compiler/zkir-passes/print-zkir.ss`) `num_inputs` es `(length index*)` sobre
+los **argumentos** del circuito — pura aridad. En el VM del ledger
+(`zkir/src/ir_vm.rs`) esos `num_inputs` valores se cargan como celdas de
+**witness privado** (`assign_many`, no instance cells). El **único** opcode que
+mete un valor en el vector de public inputs es `declare_pub_input`
+(`ir_vm.rs:343/644`, comprobado exhaustivamente: es el único arm que escribe a
+`pis`), y el compilador lo emite solo al tocar el ledger (donde compila
+`disclose()`). En `report.zkir` las vars 0,1,2 (`orgId` + `period`) **no**
+aparecen en ningún `declare_pub_input`. `orgId` solo alimenta la hoja de Merkle
+in-circuit → una raíz global que sí se disclosa, pero que es igual para todas
+las orgs.
 
-```json
-{ "num_inputs": 3,
-  "instructions": [
-    { "op": "constrain_bits", "var": 0, "bits": 8   },
-    { "op": "constrain_bits", "var": 1, "bits": 248 },
-    { "op": "constrain_bits", "var": 2, "bits": 64  },
-```
+Y el `ContractCall` on-chain (`ledger/src/structure.rs`) lleva solo un
+`communication_commitment: Fr` = `Poseidon(opening ‖ input‖output)` con el
+`opening` que **nunca** se publica — o sea, ni siquiera por ahí se recupera
+`orgId`. El input crudo vive únicamente en la struct de construcción off-chain.
 
-Esas tres vars son la firma exacta de `report(orgId: Bytes<32>, period: Uint<64>)`:
-un `Bytes<32>` entra como dos field elements (un limbo de 8 bits + uno de 248) y
-`Uint<64>` como uno de 64. Los **22** `private_input` del circuito cuadran uno a
-uno con los cuatro witnesses (`credentialSecret` 2 + `credentialPath` 8×2 +
-`personalSecret` 2 + `evidenceHash` 2 = 22), y los 8 `constrain_to_boolean` son
-los 8 `goes_left` del path. No sobra ni falta nada.
+**El error de método de la v2:** `transcript-privacy.mjs §4` reconstruía `orgId`
+desde `proofData.input`, que es el vector de argumentos del **prover local** —
+siempre contiene los args, y no dice nada de lo que llega a la cadena. El objeto
+correcto es `proofData.publicTranscript`. El test ya está corregido: ahora
+verifica que `orgId` **no** aparece en el transcript público.
 
-**Dónde estuvo el error de método:** se buscó `declare_pub_input` para los field
-elements de `orgId` y no se encontró. Pero `declare_pub_input` es el opcode que
-empuja valores del **transcript** al vector de public inputs; los **argumentos
-del circuito** no pasan por ahí — entran por `num_inputs`, arriba de todo. Buscar
-el argumento en el lugar donde viven los valores del transcript da un falso
-negativo garantizado.
-
-`contracts/test/transcript-privacy.mjs` (verde, commiteado, sección 4) ya
-afirmaba lo correcto: reconstruye `orgId` byte a byte desde `proofData.input` y
-verifica que coincide con el valor pasado.
-
-| Circuito | Publica | NO publica |
+| Circuito | Publica (disclosa on-chain) | NO publica |
 |---|---|---|
 | `registrarOrganizacion` | `orgId`, `ancla` | — |
 | `emitirCredencial` | `orgId`, repr. *hiding* de la hoja | `credCommitment`, la hoja cruda |
-| **`denunciar`** | **`orgId`**, época, raíz de Merkle, `nullifier`, `denunciaId` | `credencialSecret`, `secretPersonal`, `evidenciaHash` |
-| `revelarAutoria` | `denunciaId`, `autoriaHash` | **`fiscalPk`**, `secretPersonal`, raíz de Merkle |
+| **`denunciar`** | época, raíz de Merkle (global), `nullifier`, `denunciaId` | **`orgId`**, `credencialSecret`, `secretPersonal`, `evidenciaHash` |
+| `revelarAutoria` | `denunciaId`, `recibo` | **`fiscalNonce`**, `secretPersonal`, raíz de Merkle |
 
-### Lo que sí sobrevive de la medición original
+### Lo que se sostiene sobre la privacidad de la org
 
 - **El árbol es global**, así que la raíz de Merkle es la misma para todas las
-  organizaciones y no distingue entre ellas. Eso sigue siendo cierto — pero el
-  conjunto de anonimato **no** es "toda credencial de toda organización": lo
-  acota `orgId`, que es público. Es el conjunto de credenciales de esa org.
-- **`fiscalPk` no sale en `revelarAutoria`.** Un observador ve *que* alguien
+  organizaciones: una `denuncia` individual no revela de qué org es.
+- **La org sí es pública, pero por otro lado:** `registrarOrganizacion` y
+  `emitirCredencial` disclosan `orgId`. Así que cualquiera ve qué orgs existen y
+  cuántas credenciales emitió cada una — y ese conteo por org es la cota real del
+  conjunto de anonimato, no las 65 536 hojas del árbol.
+- **Consecuencia (la auditoría lo marca como M-1):** on-chain **no** se puede
+  atribuir una denuncia a una org. La semántica multi-org ("probar pertenencia
+  en el árbol global prueba pertenencia en ESA org") es cierta *in-circuit* pero
+  no observable/verificable por un tercero en la cadena.
+- **`fiscalNonce` no sale en `revelarAutoria`.** Un observador ve *que* alguien
   reveló autoría de la denuncia X, no ante quién.
 
 ### ❌ `periodo` SÍ aparece — pero con fuga de 0 bits
@@ -119,11 +123,11 @@ público ⇒ **publicar `periodo` no agrega información**.
 determinista del timestamp del bloque — información que la cadena ya publica.
 Cero bits de fuga sobre el denunciante."*
 
-⚠️ La versión original de esta frase cerraba con *"la organización del
-denunciante, en cambio, no aparece"*. **Sacado: es falso** (§1). Lo que sí se
-puede decir sobre la org es que el denunciante se esconde dentro del conjunto
-de credenciales emitidas por la suya — hoy, con `HistoricMerkleTree<8>`, como
-mucho 256, y en la práctica las que esa org haya emitido.
+Sobre la org: una `denuncia` individual **no** revela de qué org es (raíz global,
+§1). Pero la org es pública por `registrarOrganizacion`/`emitirCredencial`, y el
+denunciante se esconde dentro del conjunto de credenciales emitidas por la suya —
+hoy, con `HistoricMerkleTree<16>`, como mucho 65 536, y en la práctica las que
+esa org haya emitido (ese conteo por org sí es público).
 
 ### ✅ Bonus: `fiscalPk` tampoco sale
 

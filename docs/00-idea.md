@@ -35,12 +35,16 @@ Three Compact circuits on Midnight's dual-ledger model (detail in
 1. **`registerOrganization`** — the organization publishes the anchor of its
    credentials on the public ledger.
 2. **`report`** — the core. Verifies *privately* that the whistleblower has a
-   valid credential for that organization and publishes: the evidence hash
-   (sealed), the `orgId`, the epoch, and an anti-spam nullifier (one report
-   per person, per organization, per period). The `orgId` is a public circuit
-   argument (visible on-chain), but the employee's **identity, credential,
-   and evidence never touch the chain** — the nullifier is unlinkable to
-   the credential that generated it.
+   valid credential for that organization and discloses: the evidence hash
+   (sealed), the epoch, an anti-spam nullifier (one report per credential per
+   period), and the global credential-tree root. The `orgId` is a circuit
+   argument but is **not** disclosed by `report` — arguments stay private
+   unless passed through `disclose()`, and `report` never discloses `orgId`
+   (verified against the ledger `zkir` crate: the on-chain `ContractCall`
+   carries a hiding `communication_commitment`, not the raw args). The org is
+   public only from `registerOrganization`/`issueCredential`, which disclose it.
+   The employee's **identity, credential, and evidence never touch the chain**,
+   and the nullifier is unlinkable to the credential that generated it.
 3. **`revealAuthorship`** — the differentiator. Months later, the whistleblower
    proves to a prosecutor that they wrote *that* report, **binding the on-chain
    record to the prosecutor's public key**: the ledger entry the employer's key

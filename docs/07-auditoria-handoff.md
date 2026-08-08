@@ -51,11 +51,19 @@ Esto incluye afirmaciones que *fueron* ciertas y dejaron de serlo, que es el
 caso peligroso: nadie las revisa porque alguna vez se verificaron. Ya pasó tres
 veces en una sola noche:
 
-1. `docs/05` §1 afirmaba que `orgId` no es público. Falso: los argumentos de
-   circuito son public inputs (`num_inputs: 3` en `report.zkir`).
-2. Contrato, UI y docs decían "designated verifier". No lo es —
+1. Contrato, UI y docs decían "designated verifier". No lo es —
    `proveAuthorship.zkir` no contiene ningún opcode `member`.
-3. El Q&A del hackathon respondía con fórmulas del contrato v1.
+2. El Q&A del hackathon respondía con fórmulas del contrato v1.
+3. ⚠️ **Esta misma lista tenía un tercer ejemplo que estaba mal** (auditoría
+   9/8, verificada contra fuente): decía *"`docs/05` §1 afirmaba que `orgId` no
+   es público — Falso: los argumentos de circuito son public inputs
+   (`num_inputs: 3`)"*. Al revés. `num_inputs` es la **aridad de witnesses**, no
+   la lista de public inputs; el único camino a un public input es
+   `declare_pub_input`, y en `report.zkir` `orgId` no está ahí. **`report` NO
+   publica `orgId`** (verificado contra el crate `zkir` del ledger). `orgId` es
+   público solo por `registerOrganization`/`issueCredential`. La lección se
+   sostiene igual — una afirmación revisada quedó al revés — solo que el ejemplo
+   era esta corrección, no la original.
 
 **Buscá el cuarto, el quinto y el sexto.** Barré todo, no solo el README:
 

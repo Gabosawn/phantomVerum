@@ -173,12 +173,17 @@ describe("un recibo por destinatario", () => {
     expect(paraFiscal).not.toBe(paraEmpleador);
   });
 
-  it("el recibo NO depende del secret: se recomputa con datos publicos", async () => {
-    // Esta es la propiedad que hace que el fiscal pueda verificar sin que
-    // nadie le entregue nada secreto. Si `receiptOf` volviera a mezclar el
-    // secret, este test es el que lo agarra.
-    const denunciaId = reportIdOf(await hashDeArchivo(muestra("contrato-obra-4471.pdf")), SECRET);
-    expect(receiptOf(denunciaId, PK_PIA)).toBe(receiptOf(denunciaId, PK_PIA));
+  it("el recibo se recomputa solo con datos publicos y liga el denunciaId", async () => {
+    // Esta es la propiedad que deja al fiscal verificar sin que nadie le entregue
+    // nada secreto: `receiptOf(denunciaId, nonce)` no toma ningun secret. Que ligue
+    // al denunciaId —cambiarlo da otro recibo— es lo que impide empalmar el recibo
+    // de una denuncia con el id de otra. Si `receiptOf` volviera a mezclar el
+    // secret su firma cambiaria y esta llamada, que solo pasa datos publicos, no
+    // compilaria; probar `receiptOf(id,n) === receiptOf(id,n)` no agarraria eso.
+    const ev = await hashDeArchivo(muestra("contrato-obra-4471.pdf"));
+    const denunciaId = reportIdOf(ev, SECRET);
+    const otroDenunciaId = reportIdOf(ev, secretNuevo());
+    expect(receiptOf(denunciaId, PK_PIA)).not.toBe(receiptOf(otroDenunciaId, PK_PIA));
   });
 
   it("un secret ajeno no reproduce el denunciaId del autor", async () => {
