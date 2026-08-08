@@ -1,10 +1,13 @@
+import { Bienvenida } from "@shared/componentes/Bienvenida";
 import { Boton } from "@shared/componentes/Boton";
 import { BotonTema, Cabecera, DatoHeader, Pestana } from "@shared/componentes/Cabecera";
+import { Ahora, BarraPasos } from "@shared/componentes/Guia";
 import { MONO, Rotulo, SG } from "@shared/componentes/base";
 import { URL_EXPLORER } from "@shared/demo";
 import { useTema } from "@shared/useTema";
 
-import { useCliente } from "./estado";
+import { BarraDemo } from "./BarraDemo";
+import { useCliente, type Ruta } from "./estado";
 import { Denunciar } from "./vistas/Denunciar";
 import { Emitir } from "./vistas/Emitir";
 import { Revelar } from "./vistas/Revelar";
@@ -23,28 +26,21 @@ export function App() {
         flexDirection: "column",
       }}
     >
+      {!e.bienvenidaVista && (
+        <Bienvenida
+          app="cliente"
+          onCerrar={e.cerrarBienvenida}
+          onDemo={() => void e.reproducirDemo()}
+        />
+      )}
+
       <Cabecera
         etiqueta={["Cliente", "local"]}
         pestanas={
           <>
-            <Pestana
-              titulo="Denunciar"
-              sub="t2 · witness"
-              activa={e.ruta === "denunciar"}
-              onClick={() => e.setRuta("denunciar")}
-            />
-            <Pestana
-              titulo="Revelar autoría"
-              sub="t4 · designación"
-              activa={e.ruta === "revelar"}
-              onClick={() => e.setRuta("revelar")}
-            />
-            <Pestana
-              titulo="Emitir credenciales"
-              sub="t1 · issuer"
-              activa={e.ruta === "emitir"}
-              onClick={() => e.setRuta("emitir")}
-            />
+            <PestanaPaso ruta="emitir" n={1} titulo="Emitir credenciales" sub="lo hace la empresa" />
+            <PestanaPaso ruta="denunciar" n={2} titulo="Denunciar" sub="sellás la evidencia" />
+            <PestanaPaso ruta="revelar" n={4} titulo="Revelar autoría" sub="decís que fuiste vos" />
           </>
         }
       >
@@ -79,6 +75,45 @@ export function App() {
         <BotonTema etiqueta={tema.etiqueta} onClick={tema.alternar} />
       </Cabecera>
 
+      <BarraPasos
+        app="cliente"
+        actual={e.paso}
+        onIr={(ruta) => e.irA(ruta as Ruta)}
+        urlOtraApp={URL_EXPLORER}
+        bloqueoDe={(ruta) => e.bloqueos[ruta as Ruta] ?? null}
+        derecha={
+          <>
+            {!e.demoActiva && (
+              <Boton
+                variante="fantasma"
+                tamano="chico"
+                onClick={() => void e.reproducirDemo()}
+                title="Corre la historia entera sola, narrada. Reinicia el estado local."
+                style={{ borderColor: "var(--pv-pulse)", color: "var(--pv-pulse)" }}
+              >
+                ▶ VER DEMO
+              </Boton>
+            )}
+            <Boton
+              variante="fantasma"
+              tamano="chico"
+              onClick={() => {
+                // Stops the demo if it was running: otherwise it would keep
+                // advancing over state that was just wiped from under it.
+                e.salirDemo();
+                e.reiniciar();
+              }}
+              title="Vuelve al paso 1 y borra todo el estado local"
+              style={{ borderColor: "var(--pv-h20)", color: "var(--pv-dim)" }}
+            >
+              ↺ empezar de nuevo
+            </Boton>
+          </>
+        }
+      />
+
+      <BarraDemo />
+
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
           <main
@@ -87,7 +122,7 @@ export function App() {
               width: "100%",
               maxWidth: 920,
               margin: "0 auto",
-              padding: "40px 44px 56px",
+              padding: "28px 44px 56px",
               display: "flex",
               flexDirection: "column",
               gap: 26,
@@ -119,6 +154,25 @@ export function App() {
               </div>
             )}
 
+            {/* The instruction of the moment, always above everything else. */}
+            <Ahora
+              tono={e.instruccion.tono}
+              titulo={e.instruccion.titulo}
+              accion={
+                e.instruccion.accion && (
+                  <Boton
+                    variante={e.instruccion.tono === "pulse" ? "pulse" : "tinta"}
+                    tamano="medio"
+                    onClick={e.instruccion.accion.hacer}
+                  >
+                    {e.instruccion.accion.texto}
+                  </Boton>
+                )
+              }
+            >
+              {e.instruccion.detalle}
+            </Ahora>
+
             {e.ruta === "denunciar" && <Denunciar />}
             {e.ruta === "revelar" && <Revelar />}
             {e.ruta === "emitir" && <Emitir />}
@@ -128,6 +182,30 @@ export function App() {
 
       <Terminal />
     </div>
+  );
+}
+
+/** Tab numbered by its step, and locked while its turn has not come. */
+function PestanaPaso({
+  ruta,
+  n,
+  titulo,
+  sub,
+}: {
+  ruta: Ruta;
+  n: number;
+  titulo: string;
+  sub: string;
+}) {
+  const e = useCliente();
+  return (
+    <Pestana
+      titulo={`${n} · ${titulo}`}
+      sub={sub}
+      activa={e.ruta === ruta}
+      bloqueada={e.bloqueos[ruta]}
+      onClick={() => e.irA(ruta)}
+    />
   );
 }
 
@@ -199,22 +277,6 @@ function Terminal() {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-          <Rotulo color="var(--pv-dim)" style={{ fontSize: 9, marginRight: 4 }}>
-            modo demo
-          </Rotulo>
-          <Boton variante="fantasma" tamano="chico" onClick={e.demoT1}>
-            T1 emitir
-          </Boton>
-          <Boton variante="fantasma" tamano="chico" onClick={e.demoT2}>
-            T2 denunciar
-          </Boton>
-          <Boton
-            tamano="chico"
-            onClick={e.demoT4}
-            style={{ border: "1px solid var(--pv-pulse)" }}
-          >
-            T4 revelar
-          </Boton>
           <Boton
             variante="fantasma"
             tamano="chico"
@@ -223,15 +285,6 @@ function Terminal() {
             style={{ borderColor: "var(--pv-h20)", color: "var(--pv-dim)" }}
           >
             otra identidad
-          </Boton>
-          <Boton
-            variante="fantasma"
-            tamano="chico"
-            onClick={e.reiniciar}
-            title="Borra todo el estado local"
-            style={{ borderColor: "var(--pv-h20)", color: "var(--pv-dim)" }}
-          >
-            ↺
           </Boton>
           <Boton
             variante="fantasma"

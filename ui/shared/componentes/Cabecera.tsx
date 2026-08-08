@@ -90,18 +90,28 @@ export function Pestana({
   subColor = "var(--pv-muted)",
   activa,
   onClick,
+  bloqueada,
 }: {
   titulo: string;
   sub: string;
   subColor?: string;
   activa: boolean;
   onClick: () => void;
+  /**
+   * Why this tab cannot be opened yet. The walkthrough runs in order; the text
+   * shows on hover, so a lock is never left unexplained.
+   */
+  bloqueada?: string | null;
 }) {
+  const cerrada = Boolean(bloqueada);
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={cerrada ? undefined : onClick}
+      disabled={cerrada}
       aria-current={activa ? "page" : undefined}
+      aria-disabled={cerrada || undefined}
+      title={bloqueada ?? undefined}
       className="pv-nav"
       style={{
         appearance: "none",
@@ -109,25 +119,28 @@ export function Pestana({
         border: "none",
         borderRight: "1px solid var(--pv-h12)",
         padding: "15px 15px 12px",
-        cursor: "pointer",
+        cursor: cerrada ? "not-allowed" : "pointer",
         display: "flex",
         flexDirection: "column",
         gap: 5,
         alignItems: "flex-start",
         textAlign: "left",
-        color: "var(--pv-text)",
+        color: cerrada ? "var(--pv-dim)" : "var(--pv-text)",
       }}
     >
-      <span style={{ font: `500 13.5px/1 ${SG}` }}>{titulo}</span>
+      <span style={{ font: `500 13.5px/1 ${SG}`, display: "flex", alignItems: "center", gap: 6 }}>
+        {cerrada && <span aria-hidden="true">🔒</span>}
+        {titulo}
+      </span>
       <span
         style={{
           font: `500 9px/1 ${MONO}`,
           letterSpacing: ".08em",
-          color: subColor,
+          color: cerrada ? "var(--pv-dim)" : subColor,
           textTransform: "uppercase",
         }}
       >
-        {sub}
+        {cerrada ? "bloqueado" : sub}
       </span>
       <span
         style={{

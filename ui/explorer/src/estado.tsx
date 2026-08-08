@@ -18,8 +18,16 @@ import {
   type ReactNode,
 } from "react";
 
+import { crearAlmacen } from "@shared/almacenamiento";
 import { hashDeArchivo, reportIdOf, type Hex32 } from "@shared/cripto";
-import { ORG_ID, ORG_NOMBRE, PERIODO, PK_ACME_LEGAL, VERIFICADORES } from "@shared/demo";
+import {
+  ORG_ID,
+  ORG_NOMBRE,
+  PERIODO,
+  PK_ACME_LEGAL,
+  URL_CLIENTE,
+  VERIFICADORES,
+} from "@shared/demo";
 import { ClienteMock, ledgerVacio } from "@shared/servicio/ClienteMock";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
@@ -27,6 +35,20 @@ import { ALTURA_ACTUAL, AUTORIAS, DENUNCIAS } from "./ledgerFixture";
 
 export type Ruta = "ledger" | "sello" | "autoria";
 export type Veredicto = "ok" | "fail" | null;
+
+/** The instruction of the moment, same as in the Cliente. */
+export type Instruccion = {
+  tono: "pulse" | "alerta" | "fin";
+  titulo: string;
+  detalle: string;
+  accion?: { texto: string; hacer: () => void };
+};
+
+/**
+ * Stores only whether the welcome screen has been seen. None of the material
+ * anyone pastes here is persisted: it dies with the tab.
+ */
+const almacen = crearAlmacen("explorer");
 
 export type DocumentoPresentado = {
   nombre: string;
@@ -160,9 +182,119 @@ function useEstado() {
     setVeredictoAutoria(null);
   }, []);
 
+  // ── The guide ────────────────────────────────────────────────────────────
+
+  const [bienvenidaVista, setBienvenidaVista] = useState(() =>
+    almacen.leer<boolean>("bienvenidaVista", false),
+  );
+  const cerrarBienvenida = useCallback(() => {
+    almacen.escribir("bienvenidaVista", true);
+    setBienvenidaVista(true);
+  }, []);
+
+  /**
+   * The Explorer has no locks: the only gate is the box where the material gets
+   * pasted, and it lives inside the views themselves. What it does have is one
+   * instruction per screen, so nobody has to guess what to do with a chain
+   * explorer that opens empty.
+   */
+  const instruccion = ((): Instruccion => {
+    if (ruta === "ledger")
+      return {
+        tono: "pulse",
+        titulo: "Esto es todo lo que la cadena hace público",
+        detalle:
+          "Hashes, el período y la organización afectada. Ningún nombre, ningún archivo, ninguna dirección. El paso 5 es verificar que una de esas denuncias es de quien dice ser.",
+        accion: { texto: "Ir a verificar autoría →", hacer: () => setRuta("autoria") },
+      };
+
+    if (ruta === "sello") {
+      if (!material)
+        return {
+          tono: "alerta",
+          titulo: "Pegá abajo el material que te entregó la denunciante",
+          detalle:
+            "Sin su parte secreta no se puede reproducir lo que está sellado en la cadena — ni vos, ni la empresa, ni nadie. Eso no es una traba de esta pantalla: es lo que hace que el sello sirva.",
+          accion: {
+            texto: "Abrir el Cliente ↗",
+            hacer: () => window.open(URL_CLIENTE, "_blank", "noreferrer"),
+          },
+        };
+      if (!documento)
+        return {
+          tono: "pulse",
+          titulo: "Elegí qué documento presenta la empresa",
+          detalle:
+            "Probá primero con el original y después con la versión «rev-legal»: cambia un solo byte y el resultado ya no reproduce lo que está en la cadena.",
+        };
+      if (!veredictoSello)
+        return {
+          tono: "pulse",
+          titulo: "Compará contra la cadena",
+          detalle: "Es aritmética, no una discusión de credibilidad.",
+          accion: { texto: "Comparar ahora", hacer: () => void verificarSello() },
+        };
+      return {
+        tono: veredictoSello === "ok" ? "fin" : "pulse",
+        titulo:
+          veredictoSello === "ok"
+            ? "El documento es el que se selló"
+            : "Este archivo no es el que se selló — y eso es el punto",
+        detalle:
+          "Cambiá el documento de abajo y volvé a comparar: el veredicto cambia con un solo byte de diferencia.",
+      };
+    }
+
+    // ruta === "autoria" — step 5
+    if (!material)
+      return {
+        tono: "alerta",
+        titulo: "Pegá abajo el material que te entregó la denunciante",
+        detalle:
+          "Lo copió en el Cliente, en el paso 4, con el botón «Copiar material para el verificador». Va en el primer recuadro de esta pantalla: es el único puente entre las dos aplicaciones.",
+        accion: {
+          texto: "Abrir el Cliente ↗",
+          hacer: () => window.open(URL_CLIENTE, "_blank", "noreferrer"),
+        },
+      };
+    if (!veredictoAutoria)
+      return {
+        tono: "pulse",
+        titulo: "Elegí tu clave y verificá",
+        detalle:
+          "Empezá por la clave de la Fiscalía, que es a quien la denunciante designó. Después repetí con la del Departamento Legal: mismo material, misma cadena, y no verifica.",
+        accion: { texto: "Verificar ahora", hacer: () => void verificarAutoria() },
+      };
+    if (veredictoAutoria === "ok")
+      return {
+        tono: "fin",
+        titulo: "Autoría probada ante vos, y sólo ante vos",
+        detalle:
+          "Ahora cambiá a la clave del Departamento Legal y verificá de nuevo: el mismo material no le prueba nada a quien no fue designado. Ese es el corazón de Phantom Trace.",
+        accion: {
+          texto: "Probar con la otra clave",
+          hacer: () => elegirClave(clave.intruso ? "pia" : "acme"),
+        },
+      };
+    return {
+      tono: "pulse",
+      titulo: "No verifica — y eso es exactamente lo que tiene que pasar",
+      detalle:
+        "Esta clave no es la que eligió la denunciante. Interceptar el material no alcanza: la autoría quedó atada a una sola clave pública y no es transferible.",
+      accion: {
+        texto: "Volver a la clave designada",
+        hacer: () => elegirClave("pia"),
+      },
+    };
+  })();
+
   return {
     ruta,
     setRuta,
+    paso: 5 as const,
+    instruccion,
+    bienvenidaVista,
+    cerrarBienvenida,
     orgNombre: ORG_NOMBRE,
     periodo: PERIODO,
     orgId: ORG_ID,

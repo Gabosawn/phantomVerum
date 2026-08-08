@@ -12,6 +12,7 @@ import {
   Tarjeta,
 } from "@shared/componentes/base";
 import { Dropzone } from "@shared/componentes/Dropzone";
+import { Termino } from "@shared/componentes/Guia";
 import { URL_EXPLORER } from "@shared/demo";
 import { altura, completo, medio, pesoArchivo } from "@shared/formato";
 
@@ -23,13 +24,19 @@ export function Denunciar() {
   return (
     <>
       <Encabezado
-        kicker="Se ejecuta en tu computadora"
+        kicker="Paso 2 · lo hace la denunciante, en su computadora"
         derecha="t2 · private state · witness"
         titulo="Denunciar"
       >
-        Esta aplicación no tiene servidor. Habla con tu propio proof server en{" "}
-        <code style={{ font: `500 14px ${MONO}`, color: "var(--pv-accent)" }}>localhost:6300</code>,
-        y lo único que sale de acá es una transacción con dos hashes.
+        Elegís el archivo que prueba la maniobra y firmás. Nadie va a saber quién fue: lo que sale
+        de esta máquina son dos números y nada más. Esta aplicación no tiene servidor — habla con
+        tu propio{" "}
+        <Termino clave="proof server">
+          <code style={{ font: `500 14px ${MONO}`, color: "var(--pv-accent)" }}>
+            proof server
+          </code>
+        </Termino>{" "}
+        en localhost:6300.
       </Encabezado>
 
       <Tarjeta titulo="Estado privado en esta máquina" derecha="nada de esto se transmite">
@@ -155,24 +162,26 @@ export function Denunciar() {
       {e.faseDenuncia === "idle" && (
         <>
           <LineaFormula titulo="Al firmar salen de esta máquina exactamente dos valores">
-            denunciaId = H(evidenciaHash ‖ secretPersonal)
+            <Termino clave="denunciaId">denunciaId</Termino> = H(evidenciaHash ‖ secretPersonal)
             <br />
-            nullifier &nbsp;= H(credencialSecret ‖ orgId ‖ periodo)
+            <Termino clave="nullifier">nullifier</Termino> &nbsp;= H(credencialSecret ‖ orgId ‖
+            periodo)
           </LineaFormula>
-          <Boton
-            onClick={e.denunciar}
-            disabled={!e.archivo || e.hojasEmitidas === 0}
-            sub="circuit report()"
-            title={
-              e.hojasEmitidas === 0
-                ? "Primero emití las credenciales en la vista Emitir credenciales (T1)"
-                : !e.archivo
-                  ? "Cargá la evidencia"
-                  : undefined
-            }
-          >
+          <Boton onClick={e.denunciar} disabled={!e.archivo} sub="circuit report()">
             Sellar y denunciar
           </Boton>
+          {!e.archivo && (
+            <div
+              style={{
+                font: `400 13px/1.5 ${SG}`,
+                color: "var(--pv-muted)",
+                textAlign: "center",
+                marginTop: -14,
+              }}
+            >
+              El botón se enciende cuando cargás un archivo arriba.
+            </div>
+          )}
         </>
       )}
 
@@ -303,7 +312,7 @@ export function Denunciar() {
                   <Boton
                     variante="fantasma"
                     tamano="chico"
-                    onClick={() => e.setRuta("revelar")}
+                    onClick={() => e.irA("revelar")}
                     style={{ borderColor: "var(--pv-h30)", color: "var(--pv-accent)" }}
                   >
                     ir a revelar autoría →

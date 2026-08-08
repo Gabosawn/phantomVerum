@@ -1,5 +1,6 @@
 import { Boton } from "@shared/componentes/Boton";
 import { Encabezado, LineaFormula, MONO, Rotulo, SG, Tarjeta } from "@shared/componentes/base";
+import { Termino } from "@shared/componentes/Guia";
 import { URL_EXPLORER } from "@shared/demo";
 import { altura, completo, corto } from "@shared/formato";
 
@@ -11,12 +12,15 @@ export function Emitir() {
   return (
     <>
       <Encabezado
-        kicker={`Se ejecuta en la máquina de ${e.orgNombre}`}
+        kicker={`Paso 1 · lo hace ${e.orgNombre}, no la denunciante`}
         derecha="t1 · issuer"
         titulo="Emitir credenciales"
       >
-        El directorio de empleados es estado interno de la empresa y nunca se publica. Al ledger va
-        únicamente el ancla: la raíz del árbol. El emisor es{" "}
+        Antes de que exista ninguna denuncia, la empresa le da a cada empleado una{" "}
+        <Termino clave="credencial">credencial</Termino> y publica en la cadena{" "}
+        <strong style={{ color: "var(--pv-text)" }}>un solo número</strong> que los resume a todos:
+        el <Termino clave="ancla">ancla</Termino>. La lista de nombres es interna y no se publica
+        nunca. El emisor acá es{" "}
         <strong style={{ color: "var(--pv-text)" }}>mock declarado</strong> — en producción es el
         directorio corporativo que ya existe.
       </Encabezado>

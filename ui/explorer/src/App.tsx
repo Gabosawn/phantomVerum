@@ -1,10 +1,13 @@
+import { Bienvenida } from "@shared/componentes/Bienvenida";
+import { Boton } from "@shared/componentes/Boton";
 import { BotonTema, Cabecera, DatoHeader, Pestana } from "@shared/componentes/Cabecera";
+import { Ahora, BarraPasos } from "@shared/componentes/Guia";
 import { MONO, Rotulo, SG } from "@shared/componentes/base";
 import { URL_CLIENTE } from "@shared/demo";
 import { altura } from "@shared/formato";
 import { useTema } from "@shared/useTema";
 
-import { useExplorer } from "./estado";
+import { useExplorer, type Ruta } from "./estado";
 import { Autoria } from "./vistas/Autoria";
 import { Ledger } from "./vistas/Ledger";
 import { Sello } from "./vistas/Sello";
@@ -23,27 +26,29 @@ export function App() {
         flexDirection: "column",
       }}
     >
+      {!e.bienvenidaVista && <Bienvenida app="explorer" onCerrar={e.cerrarBienvenida} />}
+
       <Cabecera
         etiqueta={["Explorer", "público"]}
         pestanas={
           <>
             <Pestana
               titulo="Ledger"
-              sub="public state"
+              sub="lo que cualquiera puede ver"
               subColor="var(--pv-dim)"
               activa={e.ruta === "ledger"}
               onClick={() => e.setRuta("ledger")}
             />
             <Pestana
               titulo="Verificar sello"
-              sub="t3 · integrity"
+              sub="¿tocaron la evidencia?"
               subColor="var(--pv-dim)"
               activa={e.ruta === "sello"}
               onClick={() => e.setRuta("sello")}
             />
             <Pestana
-              titulo="Verificar autoría"
-              sub="t4 · verifier"
+              titulo="5 · Verificar autoría"
+              sub="¿es quien dice ser?"
               subColor="var(--pv-accent)"
               activa={e.ruta === "autoria"}
               onClick={() => e.setRuta("autoria")}
@@ -70,6 +75,13 @@ export function App() {
         <BotonTema etiqueta={tema.etiqueta} onClick={tema.alternar} />
       </Cabecera>
 
+      <BarraPasos
+        app="explorer"
+        actual={e.paso}
+        onIr={(ruta) => e.setRuta(ruta as Ruta)}
+        urlOtraApp={URL_CLIENTE}
+      />
+
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
         <div style={{ position: "absolute", inset: 0, overflow: "auto" }}>
           <main
@@ -78,12 +90,30 @@ export function App() {
               width: "100%",
               maxWidth: 980,
               margin: "0 auto",
-              padding: "40px 44px 40px",
+              padding: "28px 44px 40px",
               display: "flex",
               flexDirection: "column",
               gap: 26,
             }}
           >
+            <Ahora
+              tono={e.instruccion.tono}
+              titulo={e.instruccion.titulo}
+              accion={
+                e.instruccion.accion && (
+                  <Boton
+                    variante="tinta"
+                    tamano="medio"
+                    onClick={e.instruccion.accion.hacer}
+                  >
+                    {e.instruccion.accion.texto}
+                  </Boton>
+                )
+              }
+            >
+              {e.instruccion.detalle}
+            </Ahora>
+
             {e.ruta === "ledger" && <Ledger />}
             {e.ruta === "sello" && <Sello />}
             {e.ruta === "autoria" && <Autoria />}

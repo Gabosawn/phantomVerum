@@ -25,16 +25,34 @@ import {
   secretNuevo,
   type Hex32,
 } from "@shared/cripto";
-import { ANCLA, MUESTRA_ORIGINAL, ORG_ID, ORG_NOMBRE, VERIFICADORES } from "@shared/demo";
+import {
+  ANCLA,
+  MUESTRA_ORIGINAL,
+  ORG_ID,
+  ORG_NOMBRE,
+  URL_EXPLORER,
+  VERIFICADORES,
+} from "@shared/demo";
 import { epochLabel, horaLog } from "@shared/formato";
 import { crearAlmacen } from "@shared/almacenamiento";
 import { ClienteMock, ledgerVacio, type LedgerLocal } from "@shared/servicio/ClienteMock";
 import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 
 import { DIRECTORIO, EMPLEADO_DEMO, SECRET_PERSONAL_DEMO } from "./demoPrivado";
+import { GUION, type AccionDemo } from "./guionDemo";
+import { candados, pasoActual, type EstadoRecorrido } from "./recorrido";
 
 export type Ruta = "denunciar" | "revelar" | "emitir";
 export type Fase = "idle" | "probando" | "listo";
+
+/** What the "Ahora" panel shows above every view. Exactly one instruction. */
+export type Instruccion = {
+  tono: "pulse" | "alerta" | "fin";
+  titulo: string;
+  detalle: string;
+  /** The button that does exactly what the title says. */
+  accion?: { texto: string; hacer: () => void };
+};
 
 export type Archivo = {
   nombre: string;
@@ -74,10 +92,16 @@ function useEstado() {
     [],
   );
 
-  const [ruta, setRuta] = useState<Ruta>("denunciar");
+  // Starts on step 1. If an earlier session already issued credentials, the
+  // rehydration effect moves the route to whichever step applies: nobody should
+  // begin by staring at a screen whose main button is dead.
+  const [ruta, setRuta] = useState<Ruta>("emitir");
   const [logs, setLogs] = useState<Log[]>(LOGS_INICIALES);
-  const [terminalAbierta, setTerminalAbierta] = useState(true);
+  const [terminalAbierta, setTerminalAbierta] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bienvenidaVista, setBienvenidaVista] = useState(() =>
+    almacen.leer<boolean>("bienvenidaVista", false),
+  );
 
   const [identidad, setIdentidad] = useState<Identidad>(() =>
     almacen.leer<Identidad>("identidad", identidadDemo()),
@@ -86,6 +110,12 @@ function useEstado() {
   const [orgRegistrada, setOrgRegistrada] = useState(false);
   const [alturaOrg, setAlturaOrg] = useState<number | null>(null);
   const [hojasEmitidas, setHojasEmitidas] = useState(0);
+  /**
+   * If the local ledger already holds reports, step 4 stays open even when this
+   * session signed none: that is precisely the product's story — you come back
+   * months later and load your .key file — and without it, unreachable.
+   */
+  const [hayDenuncias, setHayDenuncias] = useState(false);
   // What the ISSUER sees of each employee: name, role, the COMMITMENT the
   // employee handed over, and the derived leaf. Never the credential secret.
   const [directorioConHojas, setDirectorioConHojas] = useState(
@@ -120,6 +150,11 @@ function useEstado() {
   const [autoria, setAutoria] = useState<{ autoriaHash: Hex32; bloque: number } | null>(null);
   const [copiado, setCopiado] = useState(false);
 
+  // ── Demo mode ────────────────────────────────────────────────────────────
+  const [demoActiva, setDemoActiva] = useState(false);
+  const [demoPausada, setDemoPausada] = useState(false);
+  const [demoEscena, setDemoEscena] = useState(0);
+
   const log = useCallback((m: string) => {
     setLogs((previos) => [...previos, { t: horaLog(new Date()), m }]);
   }, []);
@@ -134,12 +169,15 @@ function useEstado() {
     });
   }, []);
 
-  // Rehidrata lo que ya estaba en el ledger local de una sesión anterior.
+  // Rehydrates whatever an earlier session left in the local ledger, and parks
+  // the app on the first step that is still missing.
   useEffect(() => {
     const l = cliente.instantanea();
     setOrgRegistrada(ORG_ID in l.organizaciones);
     setAlturaOrg(ORG_ID in l.organizaciones ? l.altura : null);
     setHojasEmitidas(l.credenciales.length);
+    setHayDenuncias(l.denuncias.length > 0);
+    if (l.credenciales.length > 0) setRuta("denunciar");
   }, [cliente]);
 
   // Las hojas son públicas: son lo que el ancla resume. Se muestran para dejar
@@ -264,6 +302,7 @@ function useEstado() {
         evidenciaHash: cliente.obtenerWitnesses()?.evidenciaHash ?? "",
         secret: identidad.secretPersonal,
       });
+      setHayDenuncias(true);
       setFaseDenuncia("listo");
     } catch (e) {
       setFaseDenuncia("idle");
@@ -286,6 +325,16 @@ function useEstado() {
     setLlaveGuardada(true);
     log("phantom-trace-autoria.key escrita en disco · secret + evidenciaHash");
   }, [llave, log]);
+
+  /**
+   * Same as `guardarLlave` but without downloading the file. Demo mode only:
+   * during a recording the browser's download shelf covers half the screen and
+   * adds nothing the narration does not already say.
+   */
+  const marcarLlaveGuardada = useCallback(() => {
+    setLlaveGuardada(true);
+    log("llave de autoría guardada · (demo: se omite la descarga del archivo)");
+  }, [log]);
 
   const cargarLlave = useCallback(
     async (f: File) => {
@@ -365,45 +414,21 @@ function useEstado() {
     }
   }, [log, material]);
 
-  // ── Modo demo ────────────────────────────────────────────────────────────
-  //
-  // Cada botón deja la app parada en un tiempo del guión, encadenando lo que
-  // falte. Existen para que grabar el video no obligue a rehacer los cuatro
-  // tiempos en cada toma — y porque a las 12:30 del sábado nadie quiere estar
-  // buscando un PDF en un file picker.
-
-  const demoT1 = useCallback(async () => {
-    setRuta("emitir");
-    if (cliente.instantanea().credenciales.length === 0) await registrarOrg();
-  }, [cliente, registrarOrg]);
-
-  const demoT2 = useCallback(async () => {
-    setRuta("denunciar");
-    if (cliente.instantanea().credenciales.length === 0) await registrarOrg();
-    if (!evidencia.current) {
-      await cargarMuestra(MUESTRA_ORIGINAL.ruta, MUESTRA_ORIGINAL.nombre);
-    }
-  }, [cargarMuestra, cliente, registrarOrg]);
-
-  const demoT4 = useCallback(async () => {
-    setRuta("revelar");
-    if (llave) return;
-    if (cliente.instantanea().credenciales.length === 0) await registrarOrg();
-    if (!evidencia.current) {
-      await cargarMuestra(MUESTRA_ORIGINAL.ruta, MUESTRA_ORIGINAL.nombre);
-    }
-    await denunciar();
-  }, [cargarMuestra, cliente, denunciar, llave, registrarOrg]);
-
   const reiniciar = useCallback(() => {
     almacen.vaciar();
+    // `vaciar` wipes the whole namespace, including the "welcome already seen"
+    // flag. Restarting the walkthrough is not the same as never having seen the
+    // app: without this, demo mode — which resets — would bring the entry card
+    // back on the next reload, mid-recording.
+    if (bienvenidaVista) almacen.escribir("bienvenidaVista", true);
     cliente.reemplazarLedger(ledgerVacio());
     evidencia.current = null;
-    setRuta("denunciar");
+    setRuta("emitir");
     setIdentidad(identidadDemo());
     setOrgRegistrada(false);
     setAlturaOrg(null);
     setHojasEmitidas(0);
+    setHayDenuncias(false);
     setArchivo(null);
     setFaseDenuncia("idle");
     setPasosDenuncia([]);
@@ -417,7 +442,7 @@ function useEstado() {
     setCopiado(false);
     setError(null);
     setLogs([...LOGS_INICIALES, { t: horaLog(new Date()), m: "estado local borrado" }]);
-  }, [cliente]);
+  }, [bienvenidaVista, cliente]);
 
   /**
    * Genera una identidad nueva. El Explorer NO va a reconocer las denuncias
@@ -440,9 +465,284 @@ function useEstado() {
     log("secret personal rotado · esta identidad no está en el índice de la demo");
   }, [log]);
 
+  // ── The guide ────────────────────────────────────────────────────────────
+
+  const recorrido: EstadoRecorrido = {
+    hojasEmitidas,
+    hayDenuncias,
+    tieneLlave: Boolean(llave),
+    llaveGuardada,
+    faseDenuncia,
+    faseRevelar,
+  };
+
+  /** Which screens are locked, and why. See `recorrido.ts`. */
+  const bloqueos = candados(recorrido);
+
+  /** The single navigation gate. If the step is locked, nothing moves. */
+  const irA = useCallback(
+    (destino: Ruta) => {
+      if (bloqueos[destino]) return;
+      setError(null);
+      setRuta(destino);
+    },
+    // The two reasons are the whole real dependency: `bloqueos.emitir` is
+    // always null. The callback is rebuilt exactly when a lock changes, so it
+    // never decides using a stale one.
+    [bloqueos.denunciar, bloqueos.revelar],
+  );
+
+  /** Which of the five steps the story stands on. See `recorrido.ts`. */
+  const paso = pasoActual(recorrido);
+
+  /**
+   * The one instruction on display: the one that applies to THIS screen at THIS
+   * moment. When the screen is not the current step's, it says so and offers
+   * the shortcut — previously a dead button with a hidden `title` was the whole
+   * explanation on offer.
+   */
+  const instruccion = ((): Instruccion => {
+    if (ruta === "emitir") {
+      if (!orgRegistrada)
+        return {
+          tono: "pulse",
+          titulo: "Publicá el ancla de ACME",
+          detalle:
+            "Es lo único que la empresa manda a la cadena: un número que resume a sus seis empleados. La lista de nombres no se publica nunca.",
+          accion: { texto: "Publicar ahora", hacer: () => void registrarOrg() },
+        };
+      return {
+        tono: "fin",
+        titulo: "Las credenciales ya están emitidas",
+        detalle:
+          "Paso 1 terminado. Ahora la empleada puede probar que trabaja acá sin decir cuál de los seis es.",
+        accion: { texto: "Ir al paso 2 →", hacer: () => irA("denunciar") },
+      };
+    }
+
+    if (ruta === "denunciar") {
+      if (hojasEmitidas === 0)
+        return {
+          tono: "alerta",
+          titulo: "Primero la empresa tiene que emitir las credenciales",
+          detalle:
+            "Sin credenciales no hay nada que probar, y el botón de firmar de abajo va a seguir apagado. Es el paso 1 y toma un click.",
+          accion: { texto: "Ir al paso 1", hacer: () => irA("emitir") },
+        };
+      if (!archivo)
+        return {
+          tono: "pulse",
+          titulo: "Elegí el archivo que querés denunciar",
+          detalle:
+            "Arrastralo al recuadro de abajo o usá el expediente de muestra. El archivo no se sube a ningún lado: acá sólo se calcula su huella digital.",
+          accion: {
+            texto: "Usar el expediente de muestra",
+            hacer: () => void cargarMuestra(MUESTRA_ORIGINAL.ruta, MUESTRA_ORIGINAL.nombre),
+          },
+        };
+      if (faseDenuncia === "probando")
+        return {
+          tono: "pulse",
+          titulo: "Generando la prueba en tu máquina…",
+          detalle:
+            "El proof server local está armando la prueba criptográfica. Nada de esto sale de tu computadora.",
+        };
+      if (faseDenuncia === "idle")
+        return {
+          tono: "pulse",
+          titulo: "Firmá la denuncia",
+          detalle:
+            "De acá salen exactamente dos números: la huella de la evidencia mezclada con tu secreto, y un anti-spam que no se puede vincular con vos.",
+          accion: { texto: "Sellar y denunciar", hacer: () => void denunciar() },
+        };
+      if (!llaveGuardada)
+        return {
+          tono: "alerta",
+          titulo: "Descargá tu llave de autoría antes de seguir",
+          detalle:
+            "Es lo único de todo el sistema que no se puede recuperar. Sin ese archivo la denuncia sigue en pie, pero no vas a poder probar nunca más que fue tuya.",
+          accion: { texto: "Descargar la llave", hacer: guardarLlave },
+        };
+      return {
+        tono: "fin",
+        titulo: "Denuncia sellada y llave guardada",
+        detalle: "Pasaron meses. Ahora decidís aparecer ante una autoridad — y sólo ante ella.",
+        accion: { texto: "Ir al paso 4 →", hacer: () => irA("revelar") },
+      };
+    }
+
+    // ruta === "revelar"
+    if (!llave)
+      return {
+        tono: "alerta",
+        titulo: "Necesitás tu llave de autoría",
+        detalle:
+          "Cargá abajo el archivo phantom-trace-autoria.key que descargaste al denunciar. Si todavía no denunciaste, ese es el paso 2.",
+        accion: { texto: "Ir al paso 2", hacer: () => irA("denunciar") },
+      };
+    if (faseRevelar === "probando")
+      return {
+        tono: "pulse",
+        titulo: "Generando la prueba de autoría…",
+        detalle: "Se está atando la prueba a la clave pública de quien elegiste.",
+      };
+    if (faseRevelar === "idle")
+      return {
+        tono: "pulse",
+        titulo: "Elegí ante quién querés aparecer y firmá",
+        detalle:
+          "La prueba queda atada a la clave de esa persona. Si cualquier otro la intercepta, no le prueba absolutamente nada.",
+        accion: { texto: "Generar prueba de autoría", hacer: () => void revelar() },
+      };
+    if (!copiado)
+      return {
+        tono: "pulse",
+        titulo: "Copiá el material para el verificador",
+        detalle:
+          "Es el único puente entre las dos aplicaciones: no comparten servidor, ni sesión, ni base de datos. Sólo el portapapeles.",
+        accion: { texto: "Copiar material", hacer: () => void copiarMaterial() },
+      };
+    return {
+      tono: "fin",
+      titulo: "Último paso, en la otra aplicación",
+      detalle:
+        "Abrí el Explorer, entrá en «Verificar autoría» y pegá el material en el primer recuadro. Probá también con la otra clave: no verifica.",
+      accion: {
+        texto: "Abrir el Explorer ↗",
+        hacer: () => window.open(URL_EXPLORER, "_blank", "noreferrer"),
+      },
+    };
+  })();
+
+  // ── The demo player ──────────────────────────────────────────────────────
+  //
+  // Runs the whole story unattended, to record it in one take. It simulates
+  // nothing: it calls the SAME functions the buttons call, with beats between
+  // scenes so the narration can be read without pausing the recording.
+
+  /**
+   * The actions, always in their latest version. The player lives inside one
+   * long `async`: were it to capture a single render's callbacks, by scene 4 it
+   * would be calling a `revelar()` that does not yet know about the key scene 3
+   * created.
+   */
+  const accionesRef = useRef({
+    registrarOrg,
+    cargarMuestra,
+    denunciar,
+    marcarLlaveGuardada,
+    revelar,
+    copiarMaterial,
+    reiniciar,
+    setRuta,
+  });
+  useEffect(() => {
+    accionesRef.current = {
+      registrarOrg,
+      cargarMuestra,
+      denunciar,
+      marcarLlaveGuardada,
+      revelar,
+      copiarMaterial,
+      reiniciar,
+      setRuta,
+    };
+  });
+
+  const mando = useRef({ pausada: false, cancelada: false, saltar: false });
+
+  /** A beat that respects pause / skip / exit. */
+  const compas = useCallback(async (ms: number) => {
+    const hasta = Date.now() + ms;
+    for (;;) {
+      if (mando.current.cancelada) throw new Error("demo:cancelada");
+      if (mando.current.saltar) {
+        mando.current.saltar = false;
+        return;
+      }
+      if (!mando.current.pausada && Date.now() >= hasta) return;
+      await new Promise((listo) => setTimeout(listo, 80));
+    }
+  }, []);
+
+  const ejecutarEscena = useCallback(async (accion: AccionDemo) => {
+    const a = accionesRef.current;
+    switch (accion) {
+      case "emitir":
+        a.setRuta("emitir");
+        await a.registrarOrg();
+        return;
+      case "cargarEvidencia":
+        a.setRuta("denunciar");
+        await a.cargarMuestra(MUESTRA_ORIGINAL.ruta, MUESTRA_ORIGINAL.nombre);
+        return;
+      case "denunciar":
+        await a.denunciar();
+        return;
+      case "guardarLlave":
+        a.marcarLlaveGuardada();
+        return;
+      case "revelar":
+        a.setRuta("revelar");
+        await a.revelar();
+        return;
+      case "copiarMaterial":
+        await a.copiarMaterial();
+        return;
+    }
+  }, []);
+
+  const reproducirDemo = useCallback(async () => {
+    mando.current = { pausada: false, cancelada: false, saltar: false };
+    setDemoPausada(false);
+    setDemoActiva(true);
+    setDemoEscena(0);
+    accionesRef.current.reiniciar();
+    // One tick so the reset lands before the first scene.
+    await new Promise((listo) => setTimeout(listo, 80));
+
+    try {
+      for (let i = 0; i < GUION.length; i++) {
+        setDemoEscena(i);
+        await compas(GUION[i].antesMs);
+        await ejecutarEscena(GUION[i].accion);
+        await compas(GUION[i].despuesMs);
+      }
+      setDemoEscena(GUION.length); // the closing card
+    } catch {
+      // Deliberate exit: `salirDemo` already left the app in a consistent state.
+    }
+  }, [compas, ejecutarEscena]);
+
+  const pausarDemo = useCallback(() => {
+    mando.current.pausada = !mando.current.pausada;
+    setDemoPausada(mando.current.pausada);
+  }, []);
+
+  const saltarEscena = useCallback(() => {
+    mando.current.saltar = true;
+  }, []);
+
+  const salirDemo = useCallback(() => {
+    mando.current.cancelada = true;
+    mando.current.pausada = false;
+    setDemoActiva(false);
+    setDemoPausada(false);
+  }, []);
+
+  const cerrarBienvenida = useCallback(() => {
+    almacen.escribir("bienvenidaVista", true);
+    setBienvenidaVista(true);
+  }, []);
+
   return {
     ruta,
-    setRuta,
+    irA,
+    bloqueos,
+    paso,
+    instruccion,
+    bienvenidaVista,
+    cerrarBienvenida,
     logs: logs.slice(-5),
     terminalAbierta,
     setTerminalAbierta,
@@ -487,9 +787,15 @@ function useEstado() {
     copiado,
     copiarMaterial,
 
-    demoT1,
-    demoT2,
-    demoT4,
+    demoActiva,
+    demoPausada,
+    demoEscena,
+    guion: GUION,
+    reproducirDemo,
+    pausarDemo,
+    saltarEscena,
+    salirDemo,
+
     reiniciar,
     nuevaIdentidad,
   };

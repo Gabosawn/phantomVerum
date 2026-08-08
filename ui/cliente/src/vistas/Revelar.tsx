@@ -11,6 +11,7 @@ import {
   Tarjeta,
 } from "@shared/componentes/base";
 import { Dropzone } from "@shared/componentes/Dropzone";
+import { Termino } from "@shared/componentes/Guia";
 import { URL_EXPLORER } from "@shared/demo";
 import { altura, completo, corto, medio } from "@shared/formato";
 
@@ -22,13 +23,14 @@ export function Revelar() {
   return (
     <>
       <Encabezado
-        kicker="Se ejecuta en tu computadora"
+        kicker="Paso 4 · meses después, en tu computadora"
         derecha="t4 · revealAuthorship"
         titulo="Revelar autoría"
       >
-        Meses después. Decidís aparecer ante{" "}
-        <em style={{ color: "var(--pv-text)", fontStyle: "normal" }}>una</em> autoridad. La prueba
-        queda ligada a su clave pública: si otro la intercepta, no le sirve para nada.
+        Decidís aparecer ante <em style={{ color: "var(--pv-text)", fontStyle: "normal" }}>una</em>{" "}
+        autoridad, la que vos elijas. La prueba queda ligada a su clave pública —{" "}
+        <Termino clave="designated verifier">designated verifier</Termino> — así que si cualquier
+        otro la intercepta, no le sirve para nada.
       </Encabezado>
 
       <Tarjeta titulo="1 · Tu llave de autoría">
