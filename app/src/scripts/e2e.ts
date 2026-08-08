@@ -85,13 +85,16 @@ console.log(`package fields : ${Object.keys(pkg).join(', ')} — no secret leave
 const vProsecutor = await api.verifyAuthorship(pkg, prosecutorPk);
 const vEmployer = await api.verifyAuthorship(pkg, employerPk);
 
+const label = (v: { verdict: string }): string =>
+  v.verdict === 'verified'
+    ? '✅ AUTHORSHIP VERIFIED'
+    : v.verdict === 'refuted'
+      ? '❌ DOES NOT VERIFY'
+      : '⚠️  NOT VERIFIABLE IN THIS BUILD';
+
 console.log('\n--- one package, two verifiers ---');
-console.log(
-  `PROSECUTOR : ${vProsecutor.ok && vProsecutor.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY'}`,
-);
-console.log(
-  `EMPLOYER   : ${vEmployer.ok && vEmployer.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY'} (${vEmployer.detail})`,
-);
+console.log(`PROSECUTOR : ${label(vProsecutor)}`);
+console.log(`EMPLOYER   : ${label(vEmployer)} (${vEmployer.detail})`);
 
 const ledger = await api.readLedgerState();
 console.log('\n=== final ledger state ===');
@@ -101,8 +104,14 @@ console.log(`reports sealed     : ${ledger.reports.length}`);
 console.log(`nullifiers burned  : ${ledger.nullifiers}`);
 console.log(`authorships        : ${ledger.authorships.length}`);
 
+// What ACT 4 actually demonstrates today: the employer is refuted from public
+// data, and the prosecutor is not handed a false positive. The prosecutor's
+// side stays `unavailable` until the proveAuthorship proof is verified — a ✅
+// there would be one the employer could mint for themselves.
 const ok =
-  vProsecutor.ok && vProsecutor.onLedger && !(vEmployer.ok && vEmployer.onLedger);
+  vProsecutor.verdict === 'unavailable' &&
+  vProsecutor.onLedger &&
+  vEmployer.verdict === 'refuted';
 console.log(ok ? '\nE2E: the 4 acts completed ✔' : '\nE2E: FAILED');
 await closeBackend(backend);
 process.exit(ok ? 0 : 1);

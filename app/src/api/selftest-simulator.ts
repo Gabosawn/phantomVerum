@@ -337,21 +337,27 @@ checkRejects(
 
 console.log('\n--- The 4 cases of the README table ---');
 
-// (1) The package reaches the prosecutor it was addressed to.
+// (1) The package reaches the prosecutor it was addressed to. This is NOT a
+//     pass: the report is sealed and the authorship is published for their
+//     key, but nothing in the package ties either to the author. See (5) —
+//     the employer can mint exactly this state for themselves.
 const v1 = await api.verifyAuthorship(prosecutorKey, prosecutorPk);
-check('REAL AUTHOR       -> ok && onLedger', v1.ok && v1.onLedger, v1.detail);
+check('REAL AUTHOR       -> unavailable, NOT verified', v1.verdict === 'unavailable', v1.detail);
+check('                     the records ARE on the ledger', v1.onLedger);
+check('                     no proof was verified, and none is claimed', v1.checks.proofVerified === null);
 
-// (2) Tampered package: the proof no longer matches what it claims to prove.
+// (2) Tampered package: the proof is not the one this build's format emits.
+//     Rejecting on attacker-supplied data is sound; accepting is not.
 const v2 = await api.verifyAuthorship(
   { ...prosecutorKey, proof: toHex(randomBytes32()) },
   prosecutorPk,
 );
-check('TAMPERED PROOF    -> !ok', !v2.ok, v2.detail);
-check('                     the failing check is the proof', !v2.checks.proofConsistent);
+check('TAMPERED PROOF    -> refuted', v2.verdict === 'refuted', v2.detail);
+check('                     the failing check is the proof', v2.checks.proofVerified === false);
 check('                     but the report itself IS still on the ledger', v2.checks.reportOnLedger);
 
 // (3) A report that was never sealed: the package is self-consistent but
-//     there is nothing on-chain to back it.
+//     there is nothing on-chain to back it. Self-consistency is not evidence.
 const ghostHash = toHex(randomBytes32());
 const ghostKey: AuthorshipKeyExport = {
   version: 2,
@@ -362,13 +368,13 @@ const ghostKey: AuthorshipKeyExport = {
   proof: ghostHash,
 };
 const v3 = await api.verifyAuthorship(ghostKey, prosecutorPk);
-check('NONEXISTENT REPORT -> ok but !onLedger', v3.ok && !v3.onLedger, v3.detail);
+check('NONEXISTENT REPORT -> refuted', v3.verdict === 'refuted', v3.detail);
 check('                     the report is not sealed', !v3.checks.reportOnLedger);
 
 // (4) THE VIDEO MOMENT: the SAME package, intercepted, read with another key.
 //     Nothing about the file changes — only who is asking.
 const v4 = await api.verifyAuthorship(prosecutorKey, employerPk);
-check('INTERCEPTED       -> !ok: it was addressed to another key', !v4.ok, v4.detail);
+check('INTERCEPTED       -> refuted: addressed to another key', v4.verdict === 'refuted', v4.detail);
 check('                     the failing check is the designation', !v4.checks.designatedToVerifier);
 check(
   '                     and the authorship IS on-chain — it just is not theirs',
@@ -379,9 +385,39 @@ check(
   api.exportKey(report1.reportId, employerPk).authorshipHash !== prosecutorKey.authorshipHash,
 );
 
-console.log('\n--- PROSECUTOR ✅ / EMPLOYER ❌ over the SAME bytes ---');
-check('PROSECUTOR -> AUTHORSHIP VERIFIED', v1.ok && v1.onLedger);
-check('EMPLOYER   -> DOES NOT VERIFY', !(v4.ok && v4.onLedger));
+// (5) THE ATTACK, reproduced. The employer never sees the package. They read
+//     `reportId` and `authorshipHash` off the PUBLIC ledger — both are
+//     published in the clear — and write their own key into `prosecutorPk`.
+//     Every field is theirs, every value is real, and the old code returned
+//     `ok: true` AND `onLedger: true` for this, which is a screenshot saying
+//     "the whistleblower named me". It must never verify.
+const forged: AuthorshipKeyExport = {
+  version: 2,
+  reportId: report1.reportId,            // scraped from the ledger
+  evidenceHash: toHex(randomBytes32()),  // not checked by anything on-chain
+  prosecutorPk: toHex(employerPk),       // the employer designates themselves
+  authorshipHash: reveal.authorshipHash, // scraped from the ledger
+  proof: reveal.authorshipHash,          // the stand-in this build emits
+};
+const v5 = await api.verifyAuthorship(forged, employerPk);
+check('FORGED FROM LEDGER -> never verified', v5.verdict !== 'verified', v5.detail);
+check('                     both scraped records really are on-chain', v5.onLedger);
+check('                     and it still passes the designation check', v5.checks.designatedToVerifier);
+
+// (6) Incrimination: the reportId of one report with the authorshipHash of
+//     another. Nothing binds the two, so both lookups succeed independently.
+const mixed: AuthorshipKeyExport = {
+  ...forged,
+  reportId: report2.reportId,
+};
+const v6 = await api.verifyAuthorship(mixed, employerPk);
+check('MIXED RECORDS      -> never verified', v6.verdict !== 'verified', v6.detail);
+
+console.log('\n--- PROSECUTOR ⚠️ / EMPLOYER ❌ over the SAME bytes ---');
+check('PROSECUTOR -> NOT VERIFIABLE IN THIS BUILD', v1.verdict === 'unavailable');
+check('EMPLOYER   -> DOES NOT VERIFY', v4.verdict === 'refuted');
+check('NOTHING in this build can reach `verified`',
+  [v1, v2, v3, v4, v5, v6].every((v) => v.verdict !== 'verified'));
 
 console.log('\n=== 11. B3.7 — final ledger state ===');
 const final = await api.readLedgerState();

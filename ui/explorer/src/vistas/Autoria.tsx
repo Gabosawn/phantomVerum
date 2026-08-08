@@ -95,6 +95,45 @@ export function Autoria() {
         </PanelVeredicto>
       )}
 
+      {e.veredictoAutoria === "parcial" && e.material && (
+        <PanelVeredicto
+          tono="parcial"
+          rotulo="No verificable en este build"
+          titulo="Los registros están en la cadena. El vínculo con el autor, no."
+          formula={
+            <>
+              denunciaId ∈ ledger.denuncias ✓
+              <br />
+              autoriaHash ∈ ledger.autorias ✓ · designada a su clave ✓
+              <br />
+              proof verificada contra la verifier key — no disponible
+            </>
+          }
+          pie={
+            <>
+              <div>
+                lo que sí está probado
+                <br />
+                que estos dos registros existen y son públicos
+              </div>
+              <div>
+                lo que falta
+                <br />
+                la proof ZK de proveAuthorship
+              </div>
+            </>
+          }
+        >
+          La denuncia está sellada y hay una autoría publicada para su clave. Pero el sobre trae
+          la <code style={{ font: `500 14px ${MONO}` }}>proof</code> como copia del{" "}
+          <code style={{ font: `500 14px ${MONO}` }}>autoriaHash</code>, y los dos campos los
+          aporta quien se lo entregó: cualquiera que haya leído esos dos valores del ledger
+          público —el Departamento Legal de {e.orgNombre}, sin ir más lejos— pudo armar un sobre
+          idéntico a este. Por eso acá no dice “probada”. Establecer la autoría exige verificar
+          la prueba ZK contra la verifier key del circuito.
+        </PanelVeredicto>
+      )}
+
       {e.veredictoAutoria === "fail" && e.material && (
         <PanelVeredicto
           tono="rechazo"

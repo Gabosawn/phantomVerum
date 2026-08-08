@@ -17,6 +17,7 @@ import type { Hex32 } from "../cripto";
 import type {
   EstadoLedger,
   ExportLlaveAutoria,
+  ResultadoVerificacion,
   TestigoClient,
   TxResult,
 } from "../tipos";
@@ -104,20 +105,25 @@ export class PreviewExplorerReader implements TestigoClient {
    * this parameter — as this reader used to — lets anyone who intercepts the
    * material self-designate, and the intruder verifies green.
    *
-   * Only the proof check is a mock: in production the ZK proof is verified
-   * against the `proveAuthorship` verifier key, which binds the verifier's key
-   * inside the circuit.
+   * FAIL-CLOSED: never returns `verificado`. This build does not verify the
+   * `proveAuthorship` ZK proof, and every other input to a positive verdict
+   * comes from whoever handed over the material. It can still refute, from
+   * public data alone. See `VeredictoAutoria`.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
     verificadorPk: Hex32,
-  ): Promise<{ ok: boolean; enLedger: boolean }> {
-    if (p.version !== 2) return { ok: false, enLedger: false };
+  ): Promise<ResultadoVerificacion> {
+    if (p.version !== 2) return { veredicto: "refutado", enLedger: false };
     await this.fetchStateHex();
-    const consistente = p.proof === p.autoriaHash;
-    const designadaAEstaClave = p.fiscalPk === verificadorPk;
     const enLedger = this.hexInState(p.autoriaHash);
-    return { ok: consistente && designadaAEstaClave, enLedger };
+    const proofMalformada = p.proof !== p.autoriaHash;
+    const designadaAEstaClave = p.fiscalPk === verificadorPk;
+
+    if (proofMalformada || !designadaAEstaClave || !enLedger) {
+      return { veredicto: "refutado", enLedger };
+    }
+    return { veredicto: "no-verificable", enLedger };
   }
 
   // ── Read-only: these circuits require a wallet + proof server ──────────

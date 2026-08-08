@@ -100,29 +100,64 @@ export interface AuthorshipKeyExport {
 }
 
 /**
+ * Verdict of `verifyAuthorship`. Three states, not a boolean.
+ *
+ * A boolean forces every "I cannot tell" into one of the two answers, and the
+ * safe-looking default is the wrong one. This build cannot check the ZK
+ * binding between an authorship hash and the secret behind it (see
+ * `VerificationResult.checks.proofVerified`), so the honest answer for a
+ * well-formed package is `unavailable` — not `verified`.
+ *
+ * - `verified`    — positively established. Never returned while
+ *                   `proofVerified` is `null`.
+ * - `refuted`     — positively disproved: addressed to another key, or the
+ *                   claimed records are not on the ledger. Both are decidable
+ *                   from public data, so this verdict is real evidence.
+ * - `unavailable` — nothing here contradicts the claim, and nothing here
+ *                   establishes it either.
+ */
+export type AuthorshipVerdict = 'verified' | 'refuted' | 'unavailable';
+
+/**
  * Result of `verifyAuthorship` (§3.1).
  *
  * The two headline fields are independent on purpose:
  *
- * - `ok`       — the package is internally consistent AND designated to the
- *                key of whoever is verifying. 100% local.
- * - `onLedger` — that `authorshipHash` is actually published on-chain.
+ * - `verdict`  — what can be concluded about the claim. See `AuthorshipVerdict`.
+ * - `onLedger` — whether that `authorshipHash` is actually published on-chain.
  *
- * A package can be `ok: true, onLedger: false` (consistent and addressed to
- * me, but the authorship was never published) and — the video's EMPLOYER ❌ —
- * `ok: false, onLedger: true`: the authorship IS on the chain, it is simply
- * not addressed to the employer's key. Collapsing them into a single boolean
- * would erase that distinction, which is the whole point of the scene.
+ * They are separate because "the authorship IS on the chain, it is simply not
+ * addressed to you" (the video's EMPLOYER ❌) is a different statement from
+ * "there is no such authorship". Collapsing them erases the distinction that
+ * carries the scene.
+ *
+ * ⚠️ SECURITY, and why `verdict` is not a boolean any more. The previous
+ * version computed `ok = proofConsistent && designatedToVerifier` BEFORE
+ * reading the ledger, and `proofConsistent` was `proof === authorshipHash` —
+ * a tautology, since both fields come from whoever handed over the file.
+ * Every input to that verdict was attacker-chosen, so an employer who scraped
+ * a `reportId` and an `authorshipHash` off the public ledger and wrote their
+ * own key into `prosecutorPk` got `ok: true` AND `onLedger: true`, and could
+ * screenshot it as proof that the whistleblower revealed authorship to them.
+ * Mixing the `reportId` of one report with the `authorshipHash` of another
+ * passed just as well, because nothing bound the two together.
  */
 export interface VerificationResult {
-  readonly ok: boolean;
+  readonly verdict: AuthorshipVerdict;
   readonly onLedger: boolean;
   /** Human-readable reason — what `verify-authorship.ts` (B4.5) prints. */
   readonly detail: string;
   /** Individual checks, for the UI panel. */
   readonly checks: {
-    /** The `proof` matches the declared `authorshipHash`. */
-    readonly proofConsistent: boolean;
+    /**
+     * Did the `proof` verify against the `proveAuthorship` verifier key?
+     *
+     * `null` — this build cannot answer. `exportKey` writes
+     * `proof = authorshipHash` as a stand-in, so comparing the two proves
+     * nothing about either. A real answer needs the proof bytes from the
+     * proof server checked against the circuit's verifier key.
+     */
+    readonly proofVerified: boolean | null;
     /** `prosecutorPk` is the key of whoever is running the verification. */
     readonly designatedToVerifier: boolean;
     /** The `reportId` is sealed on the ledger. */

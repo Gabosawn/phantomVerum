@@ -39,7 +39,13 @@ import type { ExportLlaveAutoria, TestigoClient } from "@shared/tipos";
 import { ALTURA_ACTUAL, AUTORIAS, DENUNCIAS } from "./ledgerFixture";
 
 export type Ruta = "ledger" | "sello" | "autoria";
-export type Veredicto = "ok" | "fail" | null;
+/**
+ * `null` = todavía no se preguntó. `parcial` = ni confirmado ni desmentido:
+ * lo que este build puede decir de una autoría bien formada. Ver
+ * `VeredictoAutoria` en `@shared/tipos` — pintarlo de verde sería exactamente
+ * el falso positivo que un empleador puede fabricarse solo.
+ */
+export type Veredicto = "ok" | "fail" | "parcial" | null;
 
 /** The instruction of the moment, same as in the Cliente. */
 export type Instruccion = {
@@ -229,7 +235,12 @@ function useEstado() {
     // Departamento Legal verificara igual que la Fiscalía — se auto-designaba.
     const r = await cliente.verificarAutoria(material, clave.pk);
     setAutoriaRecomputada(null);
-    setVeredictoAutoria(r.ok && r.enLedger ? "ok" : "fail");
+    // `no-verificable` NO es "ok". El sobre de la Fiscalía cae acá: la denuncia
+    // está sellada y la autoría publicada para su clave, pero nada en el
+    // material ata las dos cosas al autor mientras la proof ZK no se verifique.
+    setVeredictoAutoria(
+      r.veredicto === "verificado" ? "ok" : r.veredicto === "refutado" ? "fail" : "parcial",
+    );
   }, [cliente, clave.pk, material]);
 
   const elegirClave = useCallback((id: (typeof CLAVES)[number]["id"]) => {

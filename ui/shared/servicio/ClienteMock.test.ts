@@ -321,15 +321,19 @@ describe("T4 · revelar y verificar autoría", () => {
       proof: autoriaHash, // mock: proof == autoriaHash
     };
 
+    // La Fiscalía NO recibe un ✅. Todo lo comprobable da bien —la autoría
+    // está publicada para su clave— pero nada en el sobre la ata al autor
+    // mientras la proof ZK no se verifique, y un ✅ acá sería uno que el
+    // empleador puede fabricarse solo (ver el test de abajo).
     const comoFiscal = await c.verificarAutoria(material, PK_PIA);
-    expect(comoFiscal).toEqual({ ok: true, enLedger: true });
+    expect(comoFiscal).toEqual({ veredicto: "no-verificable", enLedger: true });
 
     // EL MISMO material, sin tocarle un byte, leído por el empleador. Esta es
     // la escena real: interceptar el sobre y verificarlo con la propia clave.
     // La versión anterior de este test cambiaba también la `proof`, así que
     // probaba una prueba corrupta y dejaba pasar el caso que importa.
     const comoEmpleador = await c.verificarAutoria(material, PK_ACME);
-    expect(comoEmpleador.ok).toBe(false);
+    expect(comoEmpleador.veredicto).toBe("refutado");
 
     // Y la denuncia SÍ está en la cadena: lo que falla es la designación, no
     // la existencia. Si se confundieran, el veredicto diría algo distinto.
@@ -337,34 +341,39 @@ describe("T4 · revelar y verificar autoría", () => {
   });
 
   /**
-   * El límite declarado del mock, fijado para que nadie lo confunda con una
-   * garantía.
+   * El ataque que motivó el veredicto de tres estados.
    *
-   * El ledger del mock guarda `autorias` como una lista de hashes pelados, sin
-   * la clave a la que cada uno fue designado. Con eso alcanza para el escenario
-   * de la demo —interceptar el sobre y verificarlo con la propia clave— pero no
-   * para uno donde el empleador EDITA el sobre y se auto-designa.
+   * El empleador nunca ve el sobre. Copia `denunciaId` y `autoriaHash` del
+   * ledger PÚBLICO —los dos se publican en claro— y se escribe su propia clave
+   * en `fiscalPk`. Cada campo es suyo y cada valor es real.
    *
-   * En el circuito real no es un problema: `autoriaHash = H(secret ‖ denunciaId
-   * ‖ fiscalPk)` queda en la cadena, así que cambiar `fiscalPk` produce un hash
-   * que no está registrado. Cerrar la brecha en el mock pide guardar el par
-   * (autoriaHash, fiscalPk) en el ledger.
+   * Antes esto devolvía `ok: true` y `enLedger: true`: un screenshot que dice
+   * "el denunciante me eligió a mí", fabricado con datos que cualquiera puede
+   * leer. Hoy devuelve `no-verificable`, que es la respuesta honesta — este
+   * build no puede distinguirlo del sobre real, y por eso no afirma ninguno de
+   * los dos.
+   *
+   * Lo que lo cierra de verdad es verificar la proof ZK de `proveAuthorship`,
+   * que ata la clave del verificador adentro del circuito. Cuando eso exista,
+   * este caso pasa a `refutado` y el test se actualiza — no se borra.
    */
-  it("LÍMITE DEL MOCK: un sobre editado sí pasa, y por eso no se afirma lo contrario", async () => {
+  it("un sobre fabricado desde el ledger público NUNCA verifica", async () => {
     const w = c.obtenerWitnesses()!;
     const { autoriaHash } = await c.revelarAutoria({ denunciaId, fiscalPk: PK_PIA });
 
     const falsificado = {
       version: 2 as const,
-      denunciaId,
+      denunciaId, //          copiado del ledger público
       evidenciaHash: w.evidenciaHash!,
-      fiscalPk: PK_ACME, // el empleador se auto-designa editando el JSON
-      autoriaHash,
+      fiscalPk: PK_ACME, //   el empleador se auto-designa editando el JSON
+      autoriaHash, //         copiado del ledger público
       proof: autoriaHash,
     };
 
-    // Documentado, no celebrado: si alguien hace que esto dé `false`, cerró la
-    // brecha y este test tiene que actualizarse — no borrarse.
-    expect((await c.verificarAutoria(falsificado, PK_ACME)).ok).toBe(true);
+    const r = await c.verificarAutoria(falsificado, PK_ACME);
+    expect(r.veredicto).not.toBe("verificado");
+    // Y los registros copiados SÍ están en la cadena: lo que falta no es el
+    // dato, es el vínculo entre el dato y su autor.
+    expect(r.enLedger).toBe(true);
   });
 });

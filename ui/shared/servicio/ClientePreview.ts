@@ -46,6 +46,7 @@ import {
   ReportDoesNotExistError,
   type EstadoLedger,
   type ExportLlaveAutoria,
+  type ResultadoVerificacion,
   type Progreso,
   type TestigoClient,
   type TxResult,
@@ -214,19 +215,27 @@ export class ClientePreview implements TestigoClient {
     );
   }
 
-  /** Verifica la proof ZK contra el ledger vía indexer. */
+  /**
+   * Lee el ledger vía indexer y compara contra la clave de quien pregunta.
+   *
+   * FAIL-CLOSED: nunca devuelve `verificado`. La proof ZK de `proveAuthorship`
+   * no se verifica en este build, y sin eso nada ata el `autoriaHash` a su
+   * autor. Refutar sí puede, con datos públicos. Ver `VeredictoAutoria`.
+   */
   async verificarAutoria(
     p: ExportLlaveAutoria,
     verificadorPk: Hex32,
-  ): Promise<{ ok: boolean; enLedger: boolean }> {
-    if (p.version !== 2) return { ok: false, enLedger: false };
+  ): Promise<ResultadoVerificacion> {
+    if (p.version !== 2) return { veredicto: "refutado", enLedger: false };
     const state = await leerEstadoHex(this.contractAddress);
-    // Mock proof check. Production: ZK proof verified by proof server /check.
-    // The designation test is NOT a mock: without it, whoever intercepts the
-    // material verifies as if they had been chosen.
-    const ok = p.proof === p.autoriaHash && p.fiscalPk === verificadorPk;
     const enLedger = hexInState(state, p.autoriaHash);
-    return { ok, enLedger };
+    const proofMalformada = p.proof !== p.autoriaHash;
+    const designadaAEstaClave = p.fiscalPk === verificadorPk;
+
+    if (proofMalformada || !designadaAEstaClave || !enLedger) {
+      return { veredicto: "refutado", enLedger };
+    }
+    return { veredicto: "no-verificable", enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

@@ -4,12 +4,17 @@ import { MONO, SG } from "./base";
 const PAPEL = "#F2F3F8";
 
 /**
- * El veredicto. Panel sólido a todo el ancho, verde o rojo, sin decoración.
+ * El veredicto. Panel sólido a todo el ancho, sin decoración.
  *
  * En el video el remate es cambiar la clave en el Explorer y ver el MISMO
- * material pasar de verde a rojo, así que esto tiene que leerse desde el
- * fondo de la sala y en un segundo. Por eso ocupa todo y no tiene bordes ni
- * íconos que compitan.
+ * material cambiar de veredicto, así que esto tiene que leerse desde el fondo
+ * de la sala y en un segundo. Por eso ocupa todo y no tiene bordes ni íconos
+ * que compitan.
+ *
+ * Tres tonos, no dos. `parcial` es ámbar y existe para que "no puedo
+ * establecerlo" tenga dónde caer: si el único par disponible fuera
+ * verde/rojo, ese caso terminaría pintado de verde, que es exactamente el
+ * falso positivo que el veredicto de tres estados vino a cerrar.
  */
 export function PanelVeredicto({
   tono,
@@ -20,7 +25,7 @@ export function PanelVeredicto({
   pie,
   remate,
 }: {
-  tono: "probado" | "rechazo";
+  tono: "probado" | "rechazo" | "parcial";
   rotulo: ReactNode;
   titulo: ReactNode;
   children?: ReactNode;
@@ -36,7 +41,7 @@ export function PanelVeredicto({
     <div
       role="status"
       style={{
-        background: tono === "probado" ? "var(--pv-probado)" : "var(--pv-rechazo)",
+        background: `var(--pv-${tono})`,
         padding: "34px 32px",
         display: "flex",
         flexDirection: "column",

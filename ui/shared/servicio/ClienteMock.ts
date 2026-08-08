@@ -35,6 +35,7 @@ import {
   ReportDoesNotExistError,
   type EstadoLedger,
   type ExportLlaveAutoria,
+  type ResultadoVerificacion,
   type Progreso,
   type TestigoClient,
   type TxResult,
@@ -277,7 +278,7 @@ export class ClienteMock implements TestigoClient {
   }
 
   /**
-   * 100 % off-chain: verifica la prueba de autoría.
+   * 100 % off-chain: lee el ledger y compara contra la clave de quien pregunta.
    *
    * `verificadorPk` es la clave DE QUIEN VERIFICA, y es un parámetro aparte a
    * propósito: el material trae la clave a la que el denunciante designó la
@@ -285,23 +286,30 @@ export class ClienteMock implements TestigoClient {
    * dejara que quien verifica escriba `p.fiscalPk`, cualquiera que intercepte
    * el material se auto-designaría y la prueba diría que sí.
    *
-   * En modo mock la proof = autoriaHash, así que verificar es: consistencia
-   * proof/autoriaHash + designación a esta clave + pertenencia al ledger. En
-   * producción (Preview) la proof es la proof ZK real del proof server y se
-   * verifica con la verifier key del circuito `proveAuthorship`, que ata la
-   * clave del verificador adentro del circuito.
+   * FAIL-CLOSED, y por eso nunca devuelve `verificado`. Este build no verifica
+   * la proof ZK de `proveAuthorship`: `proof` es una copia de `autoriaHash`, y
+   * los dos campos los aporta quien trae el sobre. Refutar sí puede — que el
+   * sobre esté dirigido a otra clave, o que lo que declara no esté en la
+   * cadena, se decide con datos públicos. Ver `VeredictoAutoria`.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
     verificadorPk: Hex32,
-  ): Promise<{ ok: boolean; enLedger: boolean }> {
+  ): Promise<ResultadoVerificacion> {
     if (p.version !== 2) {
-      return { ok: false, enLedger: false };
+      return { veredicto: "refutado", enLedger: false };
     }
-    const consistente = p.proof === p.autoriaHash;
-    const designadaAEstaClave = p.fiscalPk === verificadorPk;
     const enLedger = this.ledger.autorias.includes(p.autoriaHash);
-    return { ok: consistente && designadaAEstaClave, enLedger };
+    // Asimétrico a propósito: la igualdad no prueba nada (la escriben ambos
+    // lados quien trae el sobre), pero la desigualdad sí desmiente — el sobre
+    // no salió del formato que este build emite.
+    const proofMalformada = p.proof !== p.autoriaHash;
+    const designadaAEstaClave = p.fiscalPk === verificadorPk;
+
+    if (proofMalformada || !designadaAEstaClave || !enLedger) {
+      return { veredicto: "refutado", enLedger };
+    }
+    return { veredicto: "no-verificable", enLedger };
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {

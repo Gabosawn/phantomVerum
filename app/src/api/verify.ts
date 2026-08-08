@@ -26,7 +26,12 @@ import { getReport } from '../witnesses/secrets.js';
 import type { LedgerReader } from './executor.js';
 import { TestigoError } from './errors.js';
 import { createReadOnlyReader } from './ledger.js';
-import type { Bytes32Input, AuthorshipKeyExport, VerificationResult } from './types.js';
+import type {
+  Bytes32Input,
+  AuthorshipKeyExport,
+  AuthorshipVerdict,
+  VerificationResult,
+} from './types.js';
 
 /** The local store has no secrets for that report. */
 export class MissingReportSecretsError extends TestigoError {
@@ -148,17 +153,30 @@ export const parseKeyExport = (raw: unknown): AuthorshipKeyExport => {
  *
  * Two independent questions (see `VerificationResult`):
  *
- *  1. `ok`       — the `proof` matches the declared `authorshipHash`, and the
- *                  package is addressed to `verifierPk`. 100% local.
+ *  1. `verdict`  — what can be concluded: `verified`, `refuted` or
+ *                  `unavailable`. See `AuthorshipVerdict`.
  *  2. `onLedger` — are the declared `reportId` and `authorshipHash` on-chain?
  *
- * The lookups use the DECLARED values, because without the secret there is
- * nothing to recompute them from. The ledger is what keeps that from being a
- * repeater: an invented `authorshipHash` is not published, and a real one is
- * only published for the recipient the author actually chose. What this does
- * NOT catch is a replay — someone copying a genuine on-chain pair that was
- * addressed to them. Only the real ZK proof closes that; see
- * `AuthorshipKeyExport`.
+ * FAIL-CLOSED. Every check that feeds a POSITIVE verdict has to be something
+ * the verifier can establish without trusting the file. Right now none is:
+ * `proof` is a copy of `authorshipHash` in this build, so comparing them is a
+ * tautology over two attacker-supplied fields, and the ledger lookups use the
+ * DECLARED values because without the secret there is nothing to recompute
+ * them from. So this function can never return `verified` — it can only
+ * refute. Concretely, these two attacks used to come back green and now come
+ * back `refuted`/`unavailable`:
+ *
+ *  · An employer scrapes a `reportId` and an `authorshipHash` off the public
+ *    ledger, writes their own key into `prosecutorPk`, and gets a verdict
+ *    they can screenshot as "the whistleblower named me".
+ *  · Mixing the `reportId` of one report with the `authorshipHash` of another
+ *    passes every check, because nothing binds the two together.
+ *
+ * What closes this is the ZK binding: `proveAuthorship` attests that the
+ * authorship hash was derived from a secret satisfying
+ * `reportIdOf(evidenceHash, secret) == reportId`, with the prosecutor's key
+ * as a public input. Verifying it needs the proof bytes and the circuit's
+ * verifier key. Until that ships, `unavailable` is the honest ceiling.
  *
  * Without a `reader`, it queries the active network's indexer against the
  * `deployment.json` address. The simulator passes its own and exercises the
@@ -174,35 +192,59 @@ export const verifyAuthorship = async (
   const declaredId = asBytes32(pkg.reportId, 'reportId');
   const declaredAuthorship = asBytes32(pkg.authorshipHash, 'authorshipHash');
 
-  // Demo build: `proveAuthorship` returns the authorship hash, so consistency
-  // is an equality. Production: verify the proof bytes against the verifier
-  // key of the circuit — same boolean, real cryptography behind it.
-  const proofConsistent = pkg.proof === pkg.authorshipHash;
-
-  // Addressed to me, or to somebody else? This is the EMPLOYER ❌ of the video.
-  const designatedToVerifier = toHex(asBytes32(verifierPk, 'verifierPk')) === pkg.prosecutorPk;
-
-  const ok = proofConsistent && designatedToVerifier;
-
+  // Read the chain BEFORE deciding anything. The old order computed the
+  // verdict from the file alone and consulted the ledger afterwards, which
+  // meant the answer never depended on the chain at all.
   const source = reader ?? (await createReadOnlyReader());
   const ledger = await source.readLedger();
   const reportOnLedger = ledger.reports.member(declaredId);
   const authorshipOnLedger = ledger.authorships.member(declaredAuthorship);
   const onLedger = reportOnLedger && authorshipOnLedger;
 
-  const checks = { proofConsistent, designatedToVerifier, reportOnLedger, authorshipOnLedger };
-  return { ok, onLedger, detail: describe(checks), checks };
+  // Addressed to me, or to somebody else? This is the EMPLOYER ❌ of the
+  // video, and it is a genuine refutation: the hash on-chain was computed for
+  // some other key, so it is not addressed to whoever is asking.
+  const designatedToVerifier = toHex(asBytes32(verifierPk, 'verifierPk')) === pkg.prosecutorPk;
+
+  // Asymmetric on purpose, and the asymmetry IS the fail-closed principle.
+  // This build ships no verifier for `proveAuthorship`, so a proof can never
+  // be CONFIRMED here — `null`, never `true`. It can still be REJECTED:
+  // `exportKey` writes `proof = authorshipHash`, so a package where the two
+  // differ did not come from this build. Rejecting on attacker-supplied data
+  // is safe (nobody gains by malforming their own package); accepting the
+  // equality as evidence is not, since both fields come from whoever handed
+  // over the file — which is exactly the tautology this replaced.
+  const proofVerified: boolean | null = pkg.proof === pkg.authorshipHash ? null : false;
+
+  const checks = { proofVerified, designatedToVerifier, reportOnLedger, authorshipOnLedger };
+  return { verdict: decide(checks), onLedger, detail: describe(checks), checks };
+};
+
+/** The individual checks a verdict is derived from. */
+interface Checks {
+  readonly proofVerified: boolean | null;
+  readonly designatedToVerifier: boolean;
+  readonly reportOnLedger: boolean;
+  readonly authorshipOnLedger: boolean;
+}
+
+/**
+ * Maps the checks onto a verdict, fail-closed.
+ *
+ * `verified` requires `proofVerified === true`. Nothing else can produce it —
+ * in particular, the absence of a refutation cannot.
+ */
+const decide = (r: Checks): AuthorshipVerdict => {
+  if (r.proofVerified === false) return 'refuted';
+  if (!r.designatedToVerifier) return 'refuted';
+  if (!r.reportOnLedger || !r.authorshipOnLedger) return 'refuted';
+  return r.proofVerified === true ? 'verified' : 'unavailable';
 };
 
 /** Human-readable message. It is what `verify-authorship.ts` (B4.5) prints. */
-const describe = (r: {
-  proofConsistent: boolean;
-  designatedToVerifier: boolean;
-  reportOnLedger: boolean;
-  authorshipOnLedger: boolean;
-}): string => {
-  if (!r.proofConsistent) {
-    return 'the authorship proof does not match the declared authorshipHash: tampered package';
+const describe = (r: Checks): string => {
+  if (r.proofVerified === false) {
+    return 'the authorship proof does not verify against the circuit: tampered package';
   }
   if (!r.designatedToVerifier) {
     return (
@@ -211,13 +253,23 @@ const describe = (r: {
     );
   }
   if (!r.reportOnLedger) {
-    return 'the package is consistent and addressed to you, but that report is not sealed on the ledger';
+    return 'the package is addressed to you, but that report is not sealed on the ledger';
   }
   if (!r.authorshipOnLedger) {
     return (
-      'the package is consistent and addressed to you and the report exists, but the ' +
-      'authorship was never published on-chain for your key'
+      'the package is addressed to you and the report exists, but the authorship was ' +
+      'never published on-chain for your key'
     );
   }
-  return 'authorship verified: the package is addressed to you and the hash is published on-chain';
+  if (r.proofVerified === null) {
+    return (
+      'NOT VERIFIABLE IN THIS BUILD. The report is sealed on the ledger and an authorship ' +
+      'is published for the key this package names — but nothing here ties the two to the ' +
+      'author. The `proof` field is a copy of `authorshipHash`, and both come from whoever ' +
+      'handed you the file, so anyone who read those two values off the public ledger could ' +
+      'have produced this package. Establishing authorship needs the proveAuthorship proof ' +
+      'checked against the circuit verifier key.'
+    );
+  }
+  return 'authorship verified: the proof checks out and the hash is published on-chain';
 };

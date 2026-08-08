@@ -84,6 +84,38 @@ export type Verificador = {
   pk: Hex32;
 };
 
+/**
+ * Veredicto de `verificarAutoria`. Tres estados, no un booleano.
+ *
+ * Un booleano obliga a que todo "no puedo saberlo" caiga en una de las dos
+ * respuestas, y la que parece inofensiva es la equivocada.
+ *
+ * - `verificado`     — establecido positivamente.
+ * - `refutado`       — desmentido positivamente: el sobre está dirigido a otra
+ *                      clave, o lo que declara no está en el ledger. Ambas
+ *                      cosas se deciden con datos públicos, así que este
+ *                      veredicto sí es evidencia.
+ * - `no-verificable` — nada acá contradice lo que el sobre afirma, y nada lo
+ *                      establece tampoco.
+ *
+ * ⚠️ Por qué no es un booleano. La versión anterior devolvía
+ * `ok = (proof === autoriaHash) && (fiscalPk === verificadorPk)`. Los dos
+ * lados de la primera igualdad los aporta quien trae el sobre, y `fiscalPk`
+ * también, así que el empleador que copiaba `denunciaId` y `autoriaHash` del
+ * ledger PÚBLICO y se escribía su propia clave obtenía `ok: true` y
+ * `enLedger: true` — un screenshot que dice "el denunciante me eligió a mí".
+ * Lo que cierra esto es verificar la proof ZK de `proveAuthorship`, que ata la
+ * clave del verificador adentro del circuito. Hasta entonces el techo honesto
+ * es `no-verificable`.
+ */
+export type VeredictoAutoria = "verificado" | "refutado" | "no-verificable";
+
+export type ResultadoVerificacion = {
+  veredicto: VeredictoAutoria;
+  /** ¿El `autoriaHash` que declara el sobre está publicado en la cadena? */
+  enLedger: boolean;
+};
+
 // ── Errores que fallan en proof time, sin emitir transacción ──────────────
 // Each message is the VERBATIM assert string of `contracts/src/testigo.compact`
 // — what the proof server would report. The views wrap them in their own copy.
@@ -195,16 +227,17 @@ export interface TestigoClient {
     onPaso?: Progreso,
   ): Promise<{ autoriaHash: Hex32; tx: TxResult }>;
 
-  /** 100 % off-chain: recomputa con los pure circuits y lee el ledger. */
   /**
-   * `verificadorPk` va aparte del material: es la clave de quien verifica, no
-   * la que viene en el sobre. Comparar una contra otra es lo que hace que la
-   * prueba no sea transferible.
+   * 100 % off-chain: lee el ledger y compara contra la clave de quien pregunta.
+   *
+   * `verificadorPk` va aparte del material a propósito: es la clave de quien
+   * verifica, no la que viene en el sobre. Si se leyera del sobre, cualquiera
+   * que lo intercepte se auto-designa y el veredicto sale verde.
    */
   verificarAutoria(
     p: ExportLlaveAutoria,
     verificadorPk: Hex32,
-  ): Promise<{ ok: boolean; enLedger: boolean }>;
+  ): Promise<ResultadoVerificacion>;
 
   leerEstadoLedger(): Promise<EstadoLedger>;
 }

@@ -13,9 +13,16 @@
  *
  * Without a file, simulator mode runs the whole demo in-memory — register,
  * issue, report, reveal — and then hands ONE package to two different
- * verifiers: the prosecutor it was addressed to (✅) and the employer who
- * intercepted it (❌). Same bytes, two verdicts. That is the product's key
- * moment, with zero infrastructure.
+ * verifiers: the prosecutor it was addressed to and the employer who
+ * intercepted it. Same bytes, two verdicts.
+ *
+ * The employer gets a hard ❌: the authorship on-chain was computed for
+ * another key, and that is decidable from public data. The prosecutor gets
+ * ⚠️ NOT VERIFIABLE, not ✅ — this build ships no verifier for the
+ * `proveAuthorship` proof, and every other input to the verdict comes from
+ * whoever handed over the file. Saying ✅ there would mean the employer could
+ * mint the same ✅ for themselves out of two values read off the public
+ * ledger. See `api/verify.ts`.
  */
 import '../config/init.js';
 
@@ -39,11 +46,19 @@ const args = parseArgs();
 const backend = await createBackend(args);
 printMode(backend);
 
+/** One line per verdict. `unavailable` is NOT rendered as a pass. */
+const VERDICT_LABEL: Record<VerificationResult['verdict'], string> = {
+  verified: '✅ AUTHORSHIP VERIFIED',
+  refuted: '❌ DOES NOT VERIFY',
+  unavailable: '⚠️  NOT VERIFIABLE IN THIS BUILD',
+};
+
 const printVerdict = (label: string, v: VerificationResult): void => {
-  const verdict = v.ok && v.onLedger ? '✅ AUTHORSHIP VERIFIED' : '❌ DOES NOT VERIFY';
-  console.log(`${label}: ${verdict}`);
+  console.log(`${label}: ${VERDICT_LABEL[v.verdict]}`);
   console.log(`  addressed to me : ${v.checks.designatedToVerifier}`);
-  console.log(`  proof consistent: ${v.checks.proofConsistent}`);
+  console.log(
+    `  proof verified  : ${v.checks.proofVerified ?? 'n/a — this build ships no proof verifier'}`,
+  );
   console.log(`  on ledger       : ${v.onLedger}`);
   console.log(`  detail          : ${v.detail}`);
 };

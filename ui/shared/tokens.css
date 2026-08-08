@@ -29,6 +29,9 @@
 
   --pv-probado: #12876e;
   --pv-rechazo: #c4453a;
+  /* Ni probado ni refutado. Ámbar, no verde: un veredicto que no concluye no
+     puede leerse como uno que sí. Ver `VeredictoAutoria` en shared/tipos.ts. */
+  --pv-parcial: #9a6410;
 
   --pv-display: "Space Grotesk", system-ui, sans-serif;
   --pv-ui: "Inter", system-ui, sans-serif;
