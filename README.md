@@ -14,13 +14,13 @@ Built on [Midnight](https://midnight.network) (Compact + ZK).
 ## Deployed on Preview — check it yourself
 
 ```
-contract    00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978
-deploy tx   483250e7db915104551f6de5acd43edc750b559574279eb58f41f538039920b8
-block       324294
-compiler    0.31.1        deployed 2026-08-08T03:37:09Z
+contract    aeb44bb55ab8c2eff09889ee179d18b6877b74fdc3bb316aebe45eed46c12815
+deploy tx   47eb052b96091f90d87554049c00e737a5f14354270441de6c4b4ac3bbc991dd
+block       325503
+compiler    0.31.1        deployed 2026-08-08T06:07:14Z
 ```
 
-**[View the contract on the explorer →](https://preview.midnightexplorer.com/contracts/00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978)**
+**[View the contract on the explorer →](https://preview.midnightexplorer.com/contracts/aeb44bb55ab8c2eff09889ee179d18b6877b74fdc3bb316aebe45eed46c12815)**
 
 Or ask the indexer directly. No key, no account, CORS is open — paste this
 anywhere:
@@ -28,7 +28,7 @@ anywhere:
 ```bash
 curl -s https://indexer.preview.midnight.network/api/v4/graphql \
   -H 'Content-Type: application/json' \
-  -d '{"query":"{ contractAction(address:\"00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978\"){ address state transaction { hash block { height } } } }"}'
+  -d '{"query":"{ contractAction(address:\"aeb44bb55ab8c2eff09889ee179d18b6877b74fdc3bb316aebe45eed46c12815\"){ address state transaction { hash block { height } } } }"}'
 ```
 
 It answers with the address, the serialized contract state, the transaction
@@ -42,11 +42,18 @@ and its block.
 > one that 404s is.
 
 Two notes so nobody has to reconcile them later. `deployment.json` records
-`deployTxId` as `00bc487c…`, which is the identifier the deploy path returned;
-the hash above is what the indexer reports for the same action, and it is the
-one the explorer indexes. And the address lives in exactly one place —
+`deployTxId` as `006d8d08…`, the identifier the deploy path returns; the hash
+above is what the indexer reports for the same action, and it is the one the
+explorer indexes. And the address lives in exactly one place —
 `app/src/config/deployment.json` — which is what both the CLI and the browser
 read.
+
+**v1, superseded but still on chain:**
+[`00bb2fc3…`](https://preview.midnightexplorer.com/contracts/00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978)
+(block 324294, deployed 03:37Z). It is the pre-audit contract — orgId in the
+nullifier, depth-8 tree, the secret inside the authorship hash — and it is
+still queryable, which is the point: a deploy does not erase the one before it.
+The contract in the box above is the fixed one.
 
 ---
 

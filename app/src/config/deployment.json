@@ -1,7 +1,7 @@
 {
   "network": "preview",
-  "contractAddress": "00bb2fc3274cf02b0bd2a1f1d096a490a50da5308f5a7792b5dcf3733fca2978",
-  "deployTxId": "00bc487c7cf787729e27325666d7aadd9700689e774d62641aadae49b0aea4d187",
-  "deployedAt": "2026-08-08T03:37:09.986Z",
+  "contractAddress": "aeb44bb55ab8c2eff09889ee179d18b6877b74fdc3bb316aebe45eed46c12815",
+  "deployTxId": "006d8d08bf700c31524a89766aa1c84d375812807c6fe7b67d33af0fd5b2bc3dee",
+  "deployedAt": "2026-08-08T06:07:14.884Z",
   "compilerVersion": "0.31.1"
 }
