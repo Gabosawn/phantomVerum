@@ -57,7 +57,7 @@ export function App() {
         }
       >
         <DatoHeader titulo="block" color="var(--pv-text2)">
-          <span style={{ color: "var(--pv-dim)" }}>{altura(e.altura)}</span>
+          <span style={{ color: "var(--pv-dim)" }}>{e.altura ? altura(e.altura) : "—"}</span>
         </DatoHeader>
         <DatoHeader titulo="indexer" color="var(--pv-text2)">
           {e.modo === "preview" ? (
