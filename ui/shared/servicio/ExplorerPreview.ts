@@ -1,19 +1,31 @@
 /**
- * Explorer preview — reads the REAL Midnight Preview indexer via GraphQL.
+ * Explorer preview — reads the REAL Midnight Preview ledger via GraphQL.
  *
- * Zero wallet, zero proof server, zero seeds: the indexer is public.
+ * Zero wallet, zero proof server, zero seeds: the indexer is public and its
+ * CORS is open, so this is a plain `fetch` from the browser.
  *
- * When `PREVIEW_CONTRACT_ADDRESS` is null (contract not deployed yet),
- * the `conectar` factory returns null and the Explorer falls back to
+ * The state that comes back is DESERIALIZED with the compiler-generated
+ * module, exactly as `app/src/api/ledger.ts` does on the Node side:
+ * `ContractState.deserialize(bytes)` then `ledger(state.data)`. That gives
+ * the real typed sets — `reports`, `nullifiers`, `authorships` — instead of
+ * the substring probe this file used to run against the raw state hex.
+ *
+ * Why that mattered, and not only for tidiness: `hexInState` answered "is
+ * this 32-byte string somewhere in the blob", which is not the same question
+ * as "is it a member of `authorships`". It would say yes for a value that
+ * landed in some other field, and it could not tell an empty ledger from an
+ * unreachable one. `authorships.member()` is the question the verdict claims
+ * to be answering.
+ *
+ * When `PREVIEW_CONTRACT_ADDRESS` is null (nothing deployed yet), the
+ * `conectar` factory returns null and the Explorer falls back to
  * `ClienteMock`.
- *
- * State deserialization uses simple hex checking for `verificarAutoria()`
- * and raw data presence for `leerEstadoLedger()`. Full deserialization
- * requires the compiled contract module + WASM runtime; when that is
- * wired, a single dynamic import of `@contracts/contract/index.js`
- * replaces the hex checks below.
  */
-import { receiptOf, type Hex32 } from "../cripto";
+import { ContractState } from "@midnight-ntwrk/compact-runtime";
+
+import { ledger as leerLedger } from "@contracts/contract/index.js";
+
+import { aHex, deHex, receiptOf, type Hex32 } from "../cripto";
 import type {
   EstadoLedger,
   ExportLlaveAutoria,
@@ -21,37 +33,90 @@ import type {
   TestigoClient,
   TxResult,
 } from "../tipos";
-import {
-  PREVIEW_ENDPOINTS,
-  PREVIEW_CONTRACT_ADDRESS,
-} from "./previewConfig";
+import { PREVIEW_ENDPOINTS, PREVIEW_CONTRACT_ADDRESS } from "./previewConfig";
 
 type IndexerResponse = {
-  data?: { contractAction?: { state: string } | null };
+  data?: {
+    contractAction?: {
+      state: string;
+      transaction?: { block?: { height?: number } | null } | null;
+    } | null;
+  };
   errors?: Array<{ message: string }>;
 };
 
+/** The shape `ledger()` returns. Only the parts this reader touches. */
+type LedgerLeido = {
+  organizations: { size(): bigint };
+  credentials: { firstFree(): bigint };
+  reports: { size(): bigint; [Symbol.iterator](): Iterator<Uint8Array> };
+  nullifiers: { size(): bigint };
+  authorships: {
+    size(): bigint;
+    member(elem: Uint8Array): boolean;
+    [Symbol.iterator](): Iterator<Uint8Array>;
+  };
+};
+
+/** Every element of a ledger `Set`, as Hex32. Mirrors `asHexes` in app/. */
+function todos(set: { [Symbol.iterator](): Iterator<Uint8Array> }): Hex32[] {
+  const out: Hex32[] = [];
+  const it = set[Symbol.iterator]();
+  for (let r = it.next(); r.done !== true; r = it.next()) {
+    out.push(aHex(r.value));
+  }
+  return out;
+}
+
 export class PreviewExplorerReader implements TestigoClient {
-  private cachedState: string | null = null;
-  private lastFetch = 0;
-  private readonly TTL = 2; // minutes
+  private cache: { ledger: LedgerLeido; t: number } | null = null;
 
-  constructor(
-    readonly contractAddress: string,
-  ) {}
+  /**
+   * Block of the last action on the contract, straight from the indexer.
+   *
+   * The header used to print a hardcoded height next to a "✓ preview" badge —
+   * a fabricated number sitting beside a claim that the data is real. `0`
+   * means "not read yet", and the header shows a dash for it rather than
+   * inventing one.
+   */
+  private bloque = 0;
 
-  private async fetchStateHex(): Promise<string> {
-    const now = Date.now();
-    if (this.cachedState && (now - this.lastFetch) < this.TTL * 60_000) {
-      return this.cachedState;
+  ultimoBloque(): number {
+    return this.bloque;
+  }
+
+  /**
+   * Short on purpose. The old value was two MINUTES, which is longer than the
+   * gap between publishing an authorship and walking to the other window to
+   * verify it: the verdict would come back from a snapshot taken before the
+   * transaction existed, and read as a refutation.
+   */
+  private readonly TTL_MS = 5_000;
+
+  constructor(readonly contractAddress: string) {}
+
+  /**
+   * Fetches and deserializes the contract state.
+   *
+   * `refrescar` skips the cache. Verification always asks for fresh state:
+   * one HTTP round trip is cheaper than a wrong verdict.
+   */
+  private async leer(refrescar = false): Promise<LedgerLeido> {
+    const ahora = Date.now();
+    if (!refrescar && this.cache && ahora - this.cache.t < this.TTL_MS) {
+      return this.cache.ledger;
     }
+
     const res = await fetch(PREVIEW_ENDPOINTS.indexer, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         query: `
           query LATEST_STATE($address: HexEncoded!) {
-            contractAction(address: $address) { state }
+            contractAction(address: $address) {
+              state
+              transaction { block { height } }
+            }
           }
         `,
         variables: { address: this.contractAddress },
@@ -61,68 +126,60 @@ export class PreviewExplorerReader implements TestigoClient {
     if (payload.errors?.length) {
       throw new Error(payload.errors.map((e) => e.message).join("; "));
     }
-    const raw = payload.data?.contractAction?.state;
-    if (!raw) {
+    const accion = payload.data?.contractAction;
+    const crudo = accion?.state;
+    this.bloque = accion?.transaction?.block?.height ?? 0;
+    if (typeof crudo !== "string" || crudo === "") {
       throw new Error(
-        `No state for contract ${this.contractAddress} on Preview indexer. ` +
-        "Deploy the contract first: npm run deploy --workspace=app",
+        `El indexer no tiene estado para el contrato ${this.contractAddress}. ` +
+          "Deployá primero: npm run deploy --workspace=app",
       );
     }
-    this.cachedState = typeof raw === "string" ? raw : JSON.stringify(raw);
-    this.lastFetch = now;
-    return this.cachedState;
-  }
 
-  /**
-   * Simple hex check: is the hash in the serialized ledger blob?
-   *
-   * Not as robust as full deserialization, but works for the demo:
-   * the 32-byte hashes stored on-chain are visible in the state hex.
-   */
-  private hexInState(hash: Hex32): boolean {
-    if (!this.cachedState) return false;
-    const needle = hash.startsWith("0x") ? hash.slice(2).toLowerCase() : hash.toLowerCase();
-    return this.cachedState.toLowerCase().includes(needle);
+    // Same two steps as `ledgerFromState` in app/src/api/ledger.ts: the
+    // indexer answers hex, `.data` is the ChargedState the generated
+    // deserializer expects.
+    const estado = ContractState.deserialize(deHex(crudo as Hex32));
+    const ledger = leerLedger(estado.data) as unknown as LedgerLeido;
+    this.cache = { ledger, t: ahora };
+    return ledger;
   }
 
   async leerEstadoLedger(): Promise<EstadoLedger> {
-    await this.fetchStateHex();
-    // Full deserialization requires the compiled contract module.
-    // For now, return a minimal summary — the Explorers's fixture data
-    // serves as the visual demo; this confirms the connection is live.
+    const l = await this.leer();
     return {
-      organizaciones: 1,
-      denuncias: [],
-      nullifiers: 0,
-      autorias: [],
+      organizaciones: Number(l.organizations.size()),
+      denuncias: todos(l.reports),
+      nullifiers: Number(l.nullifiers.size()),
+      autorias: todos(l.authorships),
     };
   }
 
   /**
-   * `verificadorPk` is the key of WHOEVER IS VERIFYING and is a separate
-   * parameter on purpose: the material carries the key the reporter designated
-   * the proof to, and the question to answer is whether the two match. Dropping
-   * this parameter — as this reader used to — lets anyone who intercepts the
-   * material self-designate, and the intruder verifies green.
+   * `verificadorNonce` is the nonce of WHOEVER IS VERIFYING and is a separate
+   * parameter on purpose: the package carries the receipt the reporter bound
+   * the proof to, and the question is whether the two agree. Drop this
+   * parameter — as this reader once did — and anyone who intercepts the
+   * package can self-designate, and the intruder verifies green.
    *
-   * The verdict is a RECOMPUTATION, which is what makes it evidence: the value
-   * looked up on-chain is `receiptOf(reportId, myNonce)`, never the one
-   * declared in the package. An employer who scraped both values off the
-   * public ledger and asks with their own nonce gets a different receipt, and
-   * that one is published nowhere.
+   * The verdict is a RECOMPUTATION, which is what makes it evidence: what
+   * gets looked up on chain is `receiptOf(reportId, myNonce)`, never the
+   * value declared in the package. An employer who scraped both values off
+   * the public ledger and asks with their own nonce gets a different receipt,
+   * and that one was published nowhere.
    */
   async verificarAutoria(
     p: ExportLlaveAutoria,
     verificadorNonce: Hex32,
   ): Promise<ResultadoVerificacion> {
     if (p.version !== 3) return { ok: false, enLedger: false };
-    await this.fetchStateHex();
+    const l = await this.leer(true);
     const recomputado = receiptOf(p.denunciaId, verificadorNonce);
-    const enLedger = this.hexInState(recomputado);
+    const enLedger = l.authorships.member(deHex(recomputado));
     return { ok: recomputado === p.recibo && enLedger, enLedger };
   }
 
-  // ── Read-only: these circuits require a wallet + proof server ──────────
+  // ── Read-only: these circuits need a wallet + proof server ──────────────
 
   registrarOrganizacion(): Promise<TxResult> {
     throw new Error("El Explorer es read-only: no puede registrar organizaciones.");

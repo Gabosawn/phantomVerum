@@ -89,10 +89,10 @@ export function Ledger() {
                 width: 110,
                 flex: "none",
                 font: `500 11.5px/1.3 ${MONO}`,
-                color: "var(--pv-muted)",
+                color: d.nullifier ? "var(--pv-muted)" : "var(--pv-dim)",
               }}
             >
-              {corto(d.nullifier, 5)}
+              {d.nullifier ? corto(d.nullifier, 5) : "—"}
             </span>
             <span style={{ flex: 1, height: 16, background: "var(--pv-text)", minWidth: 60 }} />
             <span
@@ -103,7 +103,7 @@ export function Ledger() {
                 color: "var(--pv-dim)",
               }}
             >
-              {altura(d.bloque)}
+              {d.bloque ? altura(d.bloque) : "—"}
             </span>
           </div>
         ))}
@@ -112,6 +112,19 @@ export function Ledger() {
           La columna <em>autor</em> no está censurada por la interfaz: <strong>no existe</strong>.
           Una transacción de Midnight no tiene{" "}
           <code style={{ font: `500 12.5px ${MONO}` }}>msg.sender</code>.
+          {e.modo === "preview" && (
+            <>
+              {" "}
+              Los guiones de <em>nullifier</em> y <em>block</em> son del mismo orden: el estado del
+              contrato guarda denuncias y nullifiers en dos <code
+                style={{ font: `500 12.5px ${MONO}` }}
+              >
+                Set
+              </code>{" "}
+              separados, y no dice cuál entró con cuál. Aparearlos exigiría ir a leer la transacción;
+              el ledger solo no alcanza.
+            </>
+          )}
         </div>
       </Tarjeta>
 

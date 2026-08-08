@@ -145,23 +145,36 @@ function useEstado() {
 
   const [previewCliente, setPreviewCliente] = useState<PreviewExplorerReader | null>(null);
   const [denunciasPreview, setDenunciasPreview] = useState<typeof DENUNCIAS>(DENUNCIAS);
+  const [nullifiersPreview, setNullifiersPreview] = useState(0);
+  const [alturaPreview, setAlturaPreview] = useState(0);
 
   // Try to connect to the Preview indexer on mount. If it works, switch to "preview" mode.
   useEffect(() => {
     let cancelado = false;
     conectarExplorerPreview().then(async (reader) => {
       if (cancelado || !reader) return;
-      setPreviewCliente(reader);
-      setModo("preview");
       try {
         const estado = await reader.leerEstadoLedger();
-        if (!cancelado) {
-          setDenunciasPreview(
-            estado.denuncias.map((d) => ({ denunciaId: d, nullifier: "" as Hex32, bloque: 0 })),
-          );
-        }
+        if (cancelado) return;
+        setDenunciasPreview(
+          // `nullifier` and `bloque` stay empty on purpose: they are NOT
+          // derivable from ledger state. Reports and nullifiers are two
+          // separate sets, and nothing in the state says which nullifier came
+          // in with which report — you would have to go read the transaction
+          // that inserted them. The view renders the gap as "—" rather than
+          // inventing a pairing, because the pairing is exactly the
+          // correlation the design refuses to publish.
+          estado.denuncias.map((d) => ({ denunciaId: d, nullifier: "" as Hex32, bloque: 0 })),
+        );
+        setNullifiersPreview(estado.nullifiers);
+        setAlturaPreview(reader.ultimoBloque());
+        // The switch happens only AFTER a successful read. Flipping it first
+        // — as this did — left the app announcing "preview" while rendering
+        // whatever the failed read had not replaced.
+        setPreviewCliente(reader);
+        setModo("preview");
       } catch {
-        // Keep fixture data if the indexer read fails.
+        // Keep fixture data, and stay in mock mode, if the indexer read fails.
       }
     }).catch(() => {
       // Preview not available — stay in mock mode silently.
@@ -170,6 +183,7 @@ function useEstado() {
   }, []);
 
   const denuncias = modo === "preview" ? denunciasPreview : DENUNCIAS;
+  const nullifiers = modo === "preview" ? nullifiersPreview : DENUNCIAS.length;
 
   /** The active client: Preview reader if available, mock otherwise. */
   const cliente: TestigoClient = modo === "preview" && previewCliente
@@ -233,9 +247,14 @@ function useEstado() {
   const verificarSello = useCallback(async () => {
     if (!documento || !material) return;
     setSelloRecomputado(documento.hash);
-    const enCadena = DENUNCIAS.some((d) => d.denunciaId === material.denunciaId);
+    // Against the ACTIVE source, not the fixture. This read `DENUNCIAS`
+    // unconditionally, so once the Explorer was talking to Preview it kept
+    // answering from the demo fixture: a genuinely sealed report came back
+    // "not on chain", and a fixture id came back sealed when the chain had
+    // never seen it.
+    const enCadena = denuncias.some((d) => d.denunciaId === material.denunciaId);
     setVeredictoSello(enCadena ? "ok" : "fail");
-  }, [documento, material]);
+  }, [denuncias, documento, material]);
 
   const clave = CLAVES.find((c) => c.id === claveId) ?? CLAVES[0];
 
@@ -382,8 +401,11 @@ function useEstado() {
     orgNombre: ORG_NOMBRE,
     periodo: PERIODO,
     orgId: ORG_ID,
-    altura: ALTURA_ACTUAL,
+    // In preview the height is the indexer's, for the contract's last action.
+    // The fixture's is only used when the fixture's data is what is on screen.
+    altura: modo === "preview" ? alturaPreview : ALTURA_ACTUAL,
     denuncias,
+    nullifiers,
     modo,
 
     materialCrudo,
